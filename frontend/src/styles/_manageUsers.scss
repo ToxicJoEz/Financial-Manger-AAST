@@ -1,0 +1,137 @@
+.manage-users-container {
+  .mu-header {
+    margin-bottom: 2rem;
+    h1 { color: $text-main; font-weight: 800; font-size: 1.875rem; letter-spacing: -0.025em; }
+    .text-muted { color: $text-muted; font-weight: 500; }
+  }
+
+  .mu-table {
+    border-collapse: collapse;
+    width: 100%;
+    th {
+      padding: 1.25rem 1rem;
+      border-bottom: 2px solid $border-color;
+      color: $text-muted;
+      font-weight: 700;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      text-align: left;
+    }
+    td {
+      padding: 1.25rem 1rem;
+      border-bottom: 1px solid $border-color;
+      vertical-align: middle;
+      color: $text-main;
+      font-weight: 600;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background-color: #f8fafc;
+    }
+  }
+}
+
+.modal-overlay {
+  background-color: rgba(15, 23, 42, 0.4); // dark slate overlay
+  backdrop-filter: blur(4px);
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.modal-content {
+  @extend .card;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: $border-radius-lg;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  
+  &-admin {
+    background-color: #f3e8ff; // purple-100
+    color: #7e22ce;            // purple-700
+    border: 1px solid #e9d5ff; // purple-200
+  }
+  
+  &-mod {
+    background-color: #ffedd5; // orange-100
+    color: #c2410c;            // orange-700
+    border: 1px solid #fed7aa; // orange-200
+  }
+  
+  &-user {
+    background-color: #e0e7ff; // indigo-100
+    color: #4338ca;            // indigo-700
+    border: 1px solid #c7d2fe; // indigo-200
+  }
+  
+  &-success {
+    background-color: #d1fae5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+  }
+  
+  &-error {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+  }
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  border-radius: $border-radius-lg; // pill
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-outline {
+  background: $white;
+  border: 1px solid $border-color;
+  color: $text-main;
+  
+  &:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    box-shadow: $shadow-sm;
+  }
+}
+
+.btn-danger {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #ef4444;
+  
+  &:hover {
+    background: #fee2e2;
+    border-color: #f87171;
+  }
+}
+
+.role-select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid $border-color;
+  background: $white;
+  color: $text-main;
+  cursor: pointer;
+  outline: none;
+  font-weight: 600;
+  &:focus {
+    border-color: $primary-color;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  }
+}

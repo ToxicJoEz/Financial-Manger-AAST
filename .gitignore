@@ -1,0 +1,37 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+!**/.env.example
+# Dependencies and generated outputs
+node_modules/
+dist/
+build/
+.vercel/
+coverage/
+# Working databases; only the synthetic demo fixture is tracked
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+!backend/demo/demo.db
+# Logs and generated reports
+*.log
+*.xlsx
+*.pdf
+# Local experiments, backups, and unrelated embedded project
+/frontend/AAST App/
+/frontend/src_backup/
+/backend/seedMockData.mjs
+/backend/seed_new.cjs
+/fix.js
+/patch_*.js
+/revert_snippet.js
+/temp_*.jsx
+*.bak
+*.backup
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

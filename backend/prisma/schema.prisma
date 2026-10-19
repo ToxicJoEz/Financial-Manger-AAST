@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String?
+  role      String   @default("user") // 'user', 'mod', 'admin'
+  email     String?
+  firstName String?
+  lastName  String?
+  avatar    String?
+  isActive  Boolean  @default(true)
+  isBanned  Boolean  @default(false)
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  logs      SystemLog[] @relation("ActorLogs")
+  targetOf  SystemLog[] @relation("TargetLogs")
+
+  submittedAssignments PendingAssignment[] @relation("SubmittedAssignments")
+  resolvedAssignments  PendingAssignment[] @relation("ResolvedAssignments")
+  notifications        Notification[]
+}
+
+model SystemLog {
+  id             String   @id @default(uuid())
+  action         String
+  description    String
+  actorUsername  String
+  targetUsername String?
+  createdAt      DateTime @default(now())
+
+  actor          User     @relation("ActorLogs", fields: [actorUsername], references: [username], onDelete: Cascade)
+  target         User?    @relation("TargetLogs", fields: [targetUsername], references: [username], onDelete: SetNull)
+}
+
+model Instructor {
+  id         String   @id @default(uuid())
+  name       String
+  branches   String   // Stored as a comma-separated string (e.g., "MIAMI,FOUAD")
+  employeeId String?  // Employee ID
+  mobile     String?  // Mobile Number
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  courseAssignments  CourseInstructor[]
+  pendingAssignments PendingAssignment[]
+}
+
+model Course {
+  id           String   @id @default(uuid())
+  name         String
+  details      String?
+  branch       String
+  startDate    DateTime?
+  endDate      DateTime?
+  isFinished   Boolean  @default(false)
+  totalHours   Float?   // Set when course is created or finished
+  courseFee    Float    @default(0) // Standard tuition fee in EGP
+  payrollMonth String?  // e.g. "2026-09"
+  isPaid       Boolean  @default(false) 
+  archivedAt   DateTime?
+  archivedBy   String?
+  payrollRecord PayrollRecord?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  instructors  CourseInstructor[]
+  pendingAssignments PendingAssignment[]
+  enrollments  Enrollment[]
+
+  @@unique([name, branch])
+}
+
+model CourseInstructor {
+  id           String     @id @default(uuid())
+  courseId     String
+  instructorId String
+  hourlyRate   Float      // The specific rate for this instructor in this course
+  hoursTaught  Float?     // Filled when course is finished
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, instructorId])
+}
+
+model PendingAssignment {
+  id              String   @id @default(uuid())
+  courseId        String
+  instructorId    String?  // null if requesting removal
+  submittedById   String
+  status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  type            String   @default("ASSIGN")  // ASSIGN, REMOVE
+  replacedAssignmentId String?
+  replacedInstructorId String?
+  resolvedById    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  course          Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructor      Instructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  submittedBy     User        @relation("SubmittedAssignments", fields: [submittedById], references: [id], onDelete: Cascade)
+  resolvedBy      User?       @relation("ResolvedAssignments", fields: [resolvedById], references: [id], onDelete: SetNull)
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String   // Recipient
+  title       String
+  message     String
+  isRead      Boolean  @default(false)
+  isResolved  Boolean  @default(false)
+  resolvedBy  String?  // Name of the mod/admin who resolved it
+  type        String   // 'ASSIGNMENT_REQUEST', 'ASSIGNMENT_APPROVED', 'ASSIGNMENT_REJECTED'
+  relatedId   String?  // ID of the PendingAssignment
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BranchColor {
+  name  String @id
+  color String
+}
+
+model Student {
+  id                 String       @id @default(uuid())
+  name               String
+  registrationNumber String       @unique
+  mobile             String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  deletedAt          DateTime?
+  deletedBy          String?
+
+  enrollments        Enrollment[]
+}
+
+model Enrollment {
+  id         String   @id @default(uuid())
+  courseId   String
+  studentId  String
+  amountPaid Float    @default(0)
+  customFee  Float?   // If set, overrides course courseFee for this student (0 = exempt / scholarship)
+  enrolledAt DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  payments   PaymentEntry[]
+  deletedAt  DateTime?
+  deletedBy  String?
+  financialArchivedAt DateTime?
+
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, studentId])
+}
+
+// Completed payroll is retained independently from editable teaching assignments.
+model PayrollRecord {
+  id           String @id @default(uuid())
+  courseId     String @unique
+  course       Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  name         String
+  branch       String
+  totalHours   Float
+  payrollMonth String?
+  isPaid       Boolean @default(false)
+  instructors  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([payrollMonth])
+}
+
+// Immutable tuition ledger. Amounts are signed integer piasters, never floating-point cash.
+// Historical snapshots survive enrollment removal; correcting an entry adds another entry.
+model PaymentEntry {
+  id                String   @id @default(uuid())
+  enrollmentId      String?
+  enrollment        Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  courseId          String
+  studentId         String
+  courseName        String
+  studentName       String
+  amountMinor       BigInt
+  kind              String
+  note              String
+  recordedBy        String
+  recordedAt        DateTime @default(now())
+  occurredAt        DateTime @default(now())
+  idempotencyKey    String   @unique
+  reversalOfId      String?  @unique
+  reversalOf        PaymentEntry? @relation("PaymentReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal          PaymentEntry? @relation("PaymentReversal")
+
+  @@index([enrollmentId, recordedAt])
+  @@index([courseId, occurredAt])
+  @@index([studentId])
+}
+

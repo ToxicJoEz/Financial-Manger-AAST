@@ -1,0 +1,47 @@
+.instructor-header-banner {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 100%);
+  border: 1px solid #dbeafe;
+  border-radius: $border-radius-xl;
+  box-shadow: $shadow-sm;
+  padding: $spacing-6;
+}
+
+.instructor-icon-wrapper {
+  background-color: #dbeafe;
+  color: #2563eb;
+  border-radius: $border-radius-lg;
+  padding: $spacing-3;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15);
+}
+
+.instructor-title {
+  color: #1e3a8a;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.instructor-table-header th {
+  background-color: #f8fafc;
+  color: #475569;
+  border-top: 2px solid #bfdbfe;
+}
+
+.instructor-avatar {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: $border-radius-lg;
+}
+
+.instructor-submit-btn {
+  background-color: #2563eb;
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #1d4ed8;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  }
+}

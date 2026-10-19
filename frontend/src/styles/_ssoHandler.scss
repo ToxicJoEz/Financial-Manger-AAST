@@ -1,0 +1,76 @@
+
+.sso-page {
+  background-color: $color-gray-50;
+  font-family: $font-sans;
+  padding: $spacing-4;
+}
+.sso-card {
+  background-color: $color-white;
+  padding: $spacing-10;
+  border-radius: $border-radius-xl;
+  box-shadow: $shadow-sm;
+  border: 1px solid $color-gray-200;
+  text-align: center;
+  
+  h2 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: $color-gray-900;
+  }
+}
+.sso-subtitle {
+  color: $color-gray-500;
+  margin-top: $spacing-2;
+  font-size: 0.875rem;
+}
+.sso-loader {
+  width: 3rem;
+  height: 3rem;
+  color: $color-blue-600;
+  animation: spin 1s linear infinite;
+  margin-bottom: $spacing-6;
+}
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error-card {
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: $color-gray-900;
+    margin-bottom: $spacing-2;
+  }
+}
+.sso-error-icon {
+  width: 4rem;
+  height: 4rem;
+  color: #ef4444;
+  margin-bottom: $spacing-4;
+}
+.sso-error-msg {
+  color: $color-red-600;
+  background-color: $color-red-50;
+  padding: 0.75rem $spacing-4;
+  border-radius: $border-radius-xl;
+  font-weight: 500;
+  margin-bottom: $spacing-6;
+  font-size: 0.875rem;
+}
+.sso-button {
+  background-color: $color-blue-600;
+  color: $color-white;
+  border-radius: $border-radius-xl;
+  padding: 0.75rem;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  
+  &:hover {
+    background-color: $color-blue-700;
+  }
+}

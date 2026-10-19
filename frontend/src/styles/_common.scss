@@ -1,0 +1,179 @@
+body {
+  background-color: $bg-color;
+  background-image: radial-gradient(circle at 100% 0%, rgba(16, 185, 129, 0.05) 0%, transparent 40%),
+                    radial-gradient(circle at 0% 100%, rgba(59, 130, 246, 0.04) 0%, transparent 40%);
+  background-attachment: fixed;
+  font-family: $font-sans;
+  margin: 0;
+  padding: 0;
+  color: $text-main;
+  min-height: 100vh;
+}
+
+.card {
+  background: $white;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-md;
+  border: 1px solid rgba(0,0,0,0.04);
+  padding: $spacing-8;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  
+  &:hover {
+    box-shadow: $shadow-lg;
+    transform: translateY(-2px);
+  }
+}
+
+.btn-primary {
+  background: $primary-color;
+  color: $white;
+  border-radius: $border-radius-lg; // Pill shaped like SSO
+  padding: 0.75rem 1.75rem;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+  
+  &:hover {
+    background: $color-emerald-700;
+    transform: translateY(-1px);
+    box-shadow: $shadow-glow;
+  }
+  
+  &:active {
+    transform: translateY(1px);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+.btn-secondary {
+  background-color: $white;
+  color: $text-main;
+  border-radius: $border-radius-lg;
+  padding: 0.75rem 1.75rem;
+  border: 1px solid $border-color;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background-color: #f8fafc;
+    border-color: $color-border-hover;
+    box-shadow: $shadow-sm;
+  }
+}
+
+.alert-error {
+  background-color: $error-bg;
+  color: $error-text;
+  padding: 1rem;
+  border-radius: $border-radius-lg;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.alert-success {
+  background-color: $success-bg;
+  color: $success-text;
+  padding: 1rem;
+  border-radius: $border-radius-lg;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  background-color: #f8fafc;
+  color: $text-main;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  
+  &::placeholder {
+    color: #94a3b8;
+    font-weight: 400;
+  }
+  
+  &:focus {
+    background-color: $white;
+    border-color: $primary-color;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+  }
+}
+
+.input-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: $text-muted;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+// Dynamic Branch Pills (20 distinct colors, NOT so rounded)
+@each $color, $values in (
+  'red': (#fee2e2, #b91c1c, #fca5a5),
+  'orange': (#ffedd5, #c2410c, #fdba74),
+  'amber': (#fef3c7, #b45309, #fcd34d),
+  'yellow': (#fef9c3, #a16207, #fde047),
+  'lime': (#ecfccb, #4d7c0f, #bef264),
+  'green': (#dcfce7, #15803d, #86efac),
+  'emerald': (#d1fae5, #047857, #6ee7b7),
+  'teal': (#ccfbf1, #0f766e, #5eead4),
+  'cyan': (#cffafe, #0e7490, #67e8f9),
+  'sky': (#e0f2fe, #0369a1, #7dd3fc),
+  'blue': (#dbeafe, #1d4ed8, #93c5fd),
+  'indigo': (#e0e7ff, #4338ca, #a5b4fc),
+  'violet': (#ede9fe, #6d28d9, #c4b5fd),
+  'purple': (#f3e8ff, #7e22ce, #d8b4fe),
+  'fuchsia': (#fae8ff, #a21caf, #f0abfc),
+  'pink': (#fce7f3, #be185d, #f9a8d4),
+  'rose': (#ffe4e6, #be123c, #fda4af),
+  'slate': (#f1f5f9, #334155, #cbd5e1),
+  'gray': (#f3f4f6, #374151, #d1d5db),
+  'zinc': (#f4f4f5, #3f3f46, #d4d4d8)
+) {
+  .branch-pill-#{$color} {
+    background-color: nth($values, 1);
+    color: nth($values, 2);
+    border: 1px solid nth($values, 3);
+    border-radius: $border-radius-md; // NOT so rounded
+    padding: $spacing-1 $spacing-2;
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: inline-block;
+    text-transform: uppercase;
+  }
+}
+
+.branch-pill-default {
+  background-color: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: $border-radius-md;
+  padding: $spacing-1 $spacing-2;
+    font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-block;
+  text-transform: uppercase;
+}

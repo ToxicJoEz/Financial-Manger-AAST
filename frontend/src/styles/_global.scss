@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import 'variables';
+
+@import 'login';
+@import 'dashboardLayout';
+@import 'home';
+@import 'registerUser';
+@import 'ssoHandler';
+@import 'notFound';
+@import 'manageUsers';
+@import 'common';
+@import 'instructors';
+@import 'courses';
+@import 'students';
+@import 'workspace';
+
+@import 'studio';
+
+@import 'presentation';
+@import 'paymentHistory';

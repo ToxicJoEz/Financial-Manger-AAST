@@ -1,0 +1,16 @@
+**/node_modules
+**/.env
+**/.env.*
+!**/.env.example
+.git
+frontend/AAST App
+frontend/src_backup
+backend/prisma/*.db
+backend/prisma/*.db-*
+backend/seedMockData.mjs
+backend/seed_new.cjs
+temp_*.jsx
+patch_*.js
+fix.js
+revert_snippet.js
+**/*.log

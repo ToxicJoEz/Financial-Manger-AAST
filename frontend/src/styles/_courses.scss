@@ -1,0 +1,482 @@
+.course-header-banner {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+  border: 1px solid #dcfce7;
+  border-radius: $border-radius-xl;
+  box-shadow: $shadow-sm;
+  padding: $spacing-6;
+}
+
+.course-icon-wrapper {
+  background-color: #dcfce7;
+  color: #16a34a;
+  border-radius: $border-radius-lg;
+  padding: $spacing-3;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.15);
+}
+
+.course-title {
+  color: #14532d;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.course-table-header th {
+  background-color: #f8fafc;
+  color: #475569;
+  border-top: 2px solid #bbf7d0;
+}
+
+.course-badge-icon {
+  background-color: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  border-radius: $border-radius-lg;
+}
+
+.course-submit-btn {
+  background-color: #16a34a;
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.25);
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: #15803d;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
+  }
+}
+
+// Course Enrollment & Payment Styles - AAST Finance Manager
+.detail-subtabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid #e3e8e1;
+  margin-bottom: 1.25rem;
+
+  button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #737e79;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: all 0.15s ease;
+
+    &.active {
+      color: #265b49;
+      border-bottom-color: #265b49;
+    }
+
+    span {
+      font-size: 0.6875rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background-color: #edf2e6;
+      color: #4e6240;
+    }
+  }
+}
+
+.enrollment-summary-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background-color: #f7f9f4;
+  border: 1px solid #e3e8e1;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+
+  .summary-stats {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    font-size: 0.8125rem;
+    color: #4e6240;
+
+    strong {
+      color: #202e2b;
+    }
+  }
+}
+
+.enrollment-row-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #edf0e8;
+  font-size: 0.8125rem;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.enrollment-student-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  .student-avatar-mini {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background-color: #e7ede1;
+    color: #4e6240;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+
+  .student-info {
+    display: flex;
+    flex-direction: column;
+
+    strong {
+      color: #202e2b;
+      font-size: 0.8125rem;
+    }
+
+    small {
+      color: #737e79;
+      font-size: 0.6875rem;
+    }
+  }
+}
+
+.enrollment-financial-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.enrollment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  &.paid {
+    background-color: #edf5ea;
+    color: #265b49;
+    border: 1px solid #d4e5ce;
+  }
+
+  &.partial {
+    background-color: #fef7ed;
+    color: #9a6824;
+    border: 1px solid #fae3c6;
+  }
+
+  &.unpaid {
+    background-color: #fdf2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  &.exempt {
+    background-color: #f0f4f8;
+    color: #334e68;
+    border: 1px solid #d9e2ec;
+  }
+}
+
+// Custom Noticeable Payment Warning Popup
+.custom-warning-modal {
+  padding: 0.5rem 0;
+
+  .warning-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background-color: #fff7ed;
+    border: 2px solid #ea580c;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 4px 12px rgba(234, 88, 12, 0.15);
+
+    h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #9a3412;
+      margin: 0;
+    }
+
+    p {
+      font-size: 0.85rem;
+      color: #9a3412;
+      margin: 0.25rem 0 0 0;
+      line-height: 1.5;
+    }
+  }
+
+  .warning-details-box {
+    background-color: #fafbf8;
+    border: 1px solid #e3e8e1;
+    border-radius: 6px;
+    padding: 1rem;
+    margin-bottom: 1.25rem;
+
+    .warning-stat-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.35rem 0;
+      font-size: 0.875rem;
+
+      strong {
+        color: #202e2b;
+      }
+
+      &.highlight-paid {
+        font-weight: 700;
+        color: #ea580c;
+        border-top: 1px dashed #fdba74;
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        font-size: 1.05rem;
+      }
+    }
+  }
+
+  .warning-consequence-text {
+    font-size: 0.8125rem;
+    color: #737e79;
+    line-height: 1.5;
+    margin-bottom: 1.5rem;
+  }
+
+  .warning-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.75rem;
+  }
+
+  .btn-danger-confirm {
+    background-color: #dc2626;
+    color: #ffffff;
+    border: 1px solid #dc2626;
+    padding: 0.6rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background-color: #b91c1c;
+      border-color: #b91c1c;
+      box-shadow: 0 4px 10px rgba(185, 28, 28, 0.25);
+    }
+  }
+}
+
+// Student Integration & Tuition Meter Styles - Point 8
+.course-tile-students {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+  border-radius: 6px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: 0.6rem;
+
+  strong {
+    font-weight: 700;
+    color: #14532d;
+  }
+}
+
+.course-tile-fee-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #4b5563;
+  font-size: 0.7rem;
+  font-weight: 500;
+  background-color: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+}
+
+.course-tuition-meter {
+  margin-top: 0.75rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed #e5e7eb;
+
+  .tuition-meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.7rem;
+    margin-bottom: 0.35rem;
+
+    .tuition-meter-label {
+      color: #6b7280;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .tuition-meter-amount {
+      color: #374151;
+      font-weight: 600;
+
+      strong {
+        color: #15803d;
+      }
+    }
+  }
+
+  .tuition-meter-bar {
+    width: 100%;
+    height: 6px;
+    background-color: #f3f4f6;
+    border-radius: 9999px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+
+    .tuition-meter-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #16a34a 0%, #22c55e 100%);
+      border-radius: 9999px;
+      transition: width 0.4s ease;
+    }
+  }
+}
+
+.course-table-students {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background-color: #f0fdf4;
+  border: 1px solid #dcfce7;
+  color: #166534;
+  border-radius: 12px;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.course-student-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+
+  @media (min-width: 640px) {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .course-student-search-box {
+    position: relative;
+    flex: 1;
+    max-width: 280px;
+
+    .search-icon {
+      position: absolute;
+      left: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #9ca3af;
+      pointer-events: none;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.4rem 0.65rem 0.4rem 2rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      background-color: #ffffff;
+      color: #1f2937;
+      transition: border-color 0.15s ease;
+
+      &:focus {
+        outline: none;
+        border-color: #16a34a;
+        box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+      }
+    }
+  }
+
+  .course-student-filter-pills {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+
+    button {
+      border: 1px solid #e5e7eb;
+      background-color: #f9fafb;
+      color: #4b5563;
+      padding: 0.25rem 0.55rem;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background-color: #f3f4f6;
+        color: #111827;
+      }
+
+      &.active {
+        background-color: #16a34a;
+        border-color: #16a34a;
+        color: #ffffff;
+      }
+    }
+  }
+}
+
+.enroll-junior-note {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+
+.courses-page > .section-tabs {
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  button { flex-shrink: 0; white-space: nowrap; }
+}
+.courses-page > .payment-view-note {
+  color: var(--muted, #67758d);
+  font-size: .85rem;
+  line-height: 1.6;
+  margin: -8px 0 20px;
+}

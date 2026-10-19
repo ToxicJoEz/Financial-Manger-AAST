@@ -1,0 +1,123 @@
+// Aesthetic declarations extracted from JSX. Runtime style values are CSS variables only.
+.appearance-bg-gray-50{@apply bg-gray-50;}
+.appearance-text-gray-500{@apply text-gray-500;}
+.appearance-font-medium{@apply font-medium;}
+.appearance-bg-amber-600{@apply bg-amber-600;}
+.appearance-text-white{@apply text-white;}
+.appearance-hover-bg-amber-700{@apply hover:bg-amber-700;}
+.appearance-text-amber-700{@apply text-amber-700;}
+.appearance-bg-red-600{@apply bg-red-600;}
+.appearance-hover-bg-red-700{@apply hover:bg-red-700;}
+.appearance-text-red-700{@apply text-red-700;}
+.appearance-text-xl{@apply text-xl;}
+.appearance-font-bold{@apply font-bold;}
+.appearance-mb-4{@apply mb-4;}
+.appearance-text-emerald-900{@apply text-emerald-900;}
+.appearance-text-emerald-600{@apply text-emerald-600;}
+.appearance-border-gray-200{@apply border-gray-200;}
+.appearance-focus-border-emerald-500{@apply focus:border-emerald-500;}
+.appearance-mt-4{@apply mt-4;}
+.appearance-bg-emerald-600{@apply bg-emerald-600;}
+.appearance-hover-bg-emerald-700{@apply hover:bg-emerald-700;}
+.appearance-px-6{@apply px-6;}
+.appearance-py-2{@apply py-2;}
+.appearance-rounded-lg{@apply rounded-lg;}
+.appearance-transition-colors{@apply transition-colors;}
+.appearance-mb-2{@apply mb-2;}
+.appearance-text-emerald-700{@apply text-emerald-700;}
+.appearance-bg-emerald-50{@apply bg-emerald-50;}
+.appearance-p-4{@apply p-4;}
+.appearance-border{@apply border;}
+.appearance-border-emerald-100{@apply border-emerald-100;}
+.appearance-border-emerald-200{@apply border-emerald-200;}
+.appearance-mb-6{@apply mb-6;}
+.appearance-mb-3{@apply mb-3;}
+.appearance-text-sm{@apply text-sm;}
+.appearance-text-emerald-950{@apply text-emerald-950;}
+.appearance-bg-emerald-100{@apply bg-emerald-100;}
+.appearance-text-emerald-800{@apply text-emerald-800;}
+.appearance-bg-amber-100{@apply bg-amber-100;}
+.appearance-text-amber-800{@apply text-amber-800;}
+.appearance-text-xs{@apply text-xs;}
+.appearance-font-semibold{@apply font-semibold;}
+.appearance-px-2{@apply px-2;}
+.appearance-py-0-5{@apply py-0.5;}
+.appearance-rounded{@apply rounded;}
+.appearance-py-1{@apply py-1;}
+.appearance-px-4{@apply px-4;}
+.appearance-text-gray-600{@apply text-gray-600;}
+.appearance-p-6{@apply p-6;}
+.appearance-leading-relaxed{@apply leading-relaxed;}
+.appearance-pt-4{@apply pt-4;}
+.appearance-border-t{@apply border-t;}
+.appearance-border-gray-100{@apply border-gray-100;}
+.appearance-px-5{@apply px-5;}
+.appearance-shadow-sm{@apply shadow-sm;}
+.appearance-pb-4{@apply pb-4;}
+.appearance-border-b{@apply border-b;}
+.appearance-bg-red-100{@apply bg-red-100;}
+.appearance-p-2{@apply p-2;}
+.appearance-text-gray-900{@apply text-gray-900;}
+.appearance-rounded-xl{@apply rounded-xl;}
+.appearance-text-red-600{@apply text-red-600;}
+.appearance-text-lg{@apply text-lg;}
+.appearance-text-center{@apply text-center;}
+.appearance-text-10px{@apply text-[10px];}
+.appearance-uppercase{@apply uppercase;}
+.appearance-mb-1{@apply mb-1;}
+.appearance-text-gray-800{@apply text-gray-800;}
+.appearance-pr-12{@apply pr-12;}
+.appearance-pt-2{@apply pt-2;}
+.appearance-pb-2{@apply pb-2;}
+.appearance-mt-1{@apply mt-1;}
+.appearance-pt-3{@apply pt-3;}
+.appearance-p-3{@apply p-3;}
+.courses-presentation-1{background-color:#dc2626;border-color:#dc2626;}
+.courses-presentation-2{background:var(--runtime-background);}
+.courses-presentation-3{color:#9a6824;}
+.courses-presentation-4{padding:6px 12px;font-size:11px;}
+.courses-presentation-5{margin:4px 0;}
+.courses-presentation-6{text-align:right;}
+.courses-presentation-7{font-size:12px;font-weight:600;color:#202e2b;}
+.courses-presentation-8{font-size:10px;color:#737e79;}
+.courses-presentation-9{background:var(--runtime-background);}
+.courses-presentation-10{width:var(--runtime-width);}
+.finances-presentation-11{width:var(--runtime-width);}
+.home-presentation-12{width:var(--runtime-width);}
+.home-presentation-13{background:var(--runtime-background);}
+.home-presentation-14{width:var(--runtime-width);background:var(--runtime-background);}
+.appearance-p-8{@apply p-8;}
+.instructors-presentation-15{background:var(--runtime-background);}
+.appearance-text-blue-900{@apply text-blue-900;}
+.appearance-text-blue-800{@apply text-blue-800;}
+.appearance-border-blue-100{@apply border-blue-100;}
+.appearance-focus-border-blue-400{@apply focus:border-blue-400;}
+.appearance-bg-blue-600{@apply bg-blue-600;}
+.appearance-border-blue-600{@apply border-blue-600;}
+.appearance-hover-bg-gray-100{@apply hover:bg-gray-100;}
+.appearance-px-3{@apply px-3;}
+.appearance-py-1-5{@apply py-1.5;}
+.appearance-text-red-500{@apply text-red-500;}
+.appearance-text-left{@apply text-left;}
+.appearance-rounded-full{@apply rounded-full;}
+.appearance-bg-blue-100{@apply bg-blue-100;}
+.appearance-text-blue-600{@apply text-blue-600;}
+.manageusers-presentation-16{background:#f59e0b;color:#fff;border-color:#d97706;}
+.appearance-text-amber-600{@apply text-amber-600;}
+.appearance-border-amber-300{@apply border-amber-300;}
+.appearance-hover-bg-amber-50{@apply hover:bg-amber-50;}
+.appearance-ml-2{@apply ml-2;}
+.appearance-italic{@apply italic;}
+.appearance-pr-2{@apply pr-2;}
+.appearance-bg-white{@apply bg-white;}
+.profile-presentation-17{width:100%;height:100%;border-radius:20px;object-fit:cover;}
+.profile-presentation-18{margin-bottom:20px;}
+.profile-presentation-19{grid-column:1 / -1;}
+.profile-presentation-20{grid-column:1 / -1;}
+.appearance-mx-auto{@apply mx-auto;}
+.appearance-mt-10{@apply mt-10;}
+.registeruser-presentation-21{grid-template-columns:1fr;}
+.registeruser-presentation-22{margin-top:15px;}
+.registeruser-presentation-23{display:inline-flex;margin-top:20px;}
+.students-presentation-24{text-align:right;}
+.students-presentation-25{background-color:#a55448;border-color:#a55448;}

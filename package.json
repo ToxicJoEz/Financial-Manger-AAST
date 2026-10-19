@@ -1,0 +1,13 @@
+{
+  "name": "aast-finance-manager",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test backend/test/*.test.js",
+    "start": "npm --prefix backend start"
+  }
+}

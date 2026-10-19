@@ -1,0 +1,118 @@
+
+.register-denied {
+  background-color: $color-red-50;
+  color: $color-red-600;
+  padding: $spacing-8;
+  border-radius: $border-radius-xl;
+  border: 1px solid $color-red-100;
+  box-shadow: $shadow-sm;
+  
+  h2 {
+    font-weight: 700;
+    font-size: 1.25rem;
+    margin-bottom: $spacing-2;
+  }
+}
+.register-denied-link {
+  color: $color-blue-600;
+  font-weight: 600;
+  &:hover {
+    text-decoration: underline;
+  }
+}
+.register-container {
+  background-color: $color-white;
+  border-radius: $border-radius-xl;
+  box-shadow: $shadow-sm;
+  padding: $spacing-8;
+  border: 1px solid $color-gray-200;
+  margin-top: $spacing-4;
+  
+  @media (min-width: 640px) {
+    margin-top: $spacing-10;
+  }
+}
+.register-back-link {
+  font-size: 0.875rem;
+  color: $color-gray-500;
+  font-weight: 500;
+  margin-bottom: $spacing-6;
+  transition: color 0.2s;
+  
+  &:hover {
+    color: $color-gray-900;
+  }
+}
+.register-header {
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: $color-gray-900;
+  }
+  p {
+    color: $color-gray-500;
+    margin-top: $spacing-2;
+    font-size: 0.875rem;
+  }
+}
+.register-title-icon {
+  color: $color-blue-600;
+}
+.register-error {
+  background-color: $color-red-50;
+  color: $color-red-600;
+  padding: $spacing-4;
+  border-radius: $border-radius-xl;
+  margin-bottom: $spacing-6;
+  font-size: 0.875rem;
+  border: 1px solid $color-red-100;
+  font-weight: 500;
+}
+.register-success {
+  background-color: #f0fdf4; // green-50
+  color: #15803d; // green-700
+  padding: $spacing-4;
+  border-radius: $border-radius-xl;
+  margin-bottom: $spacing-6;
+  font-size: 0.875rem;
+  border: 1px solid #bbf7d0; // green-200
+  font-weight: 500;
+}
+.register-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: $color-gray-700;
+  margin-bottom: $spacing-2;
+}
+.register-input {
+  padding: 0.75rem $spacing-4;
+  background-color: $color-gray-50;
+  border: 1px solid $color-gray-200;
+  border-radius: $border-radius-lg;
+  transition: all 0.2s;
+  outline: none;
+  
+  &:focus {
+    background-color: $color-white;
+    border-color: $color-blue-500;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  }
+}
+.register-button {
+  padding: 0.875rem $spacing-4;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+  color: $color-white;
+  background-color: $color-blue-600;
+  font-weight: 600;
+  transition: all 0.2s;
+  
+  &:hover:not(:disabled) {
+    background-color: $color-blue-700;
+  }
+  
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+}
