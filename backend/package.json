@@ -9,7 +9,8 @@
     "seed:students": "node src/scripts/seedStudents.js",
     "test": "node --test test/*.test.js",
     "demo:generate": "node src/scripts/createDemoDatabase.js",
-    "password:hash": "node src/scripts/hashPassword.js"
+    "password:hash": "node src/scripts/hashPassword.js",
+    "build": "prisma generate"
   },
   "keywords": [],
   "author": "",

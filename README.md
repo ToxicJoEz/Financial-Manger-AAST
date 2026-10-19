@@ -4,7 +4,7 @@ React/Vite frontend and Express/Prisma backend in one repository. Tuition is ava
 
 ## Vercel: disposable demo
 
-Import this repository with **Root Directory set to the repository root**. Leave the framework preset as **Other**; `vercel.json` defines installation, build, output, API routing, and SPA refresh handling. Node.js 22 is required (use a current 22.x release).
+Import this repository with **Root Directory set to the repository root**. `vercel.json` explicitly declares the Vite frontend and Express backend as two services. Each service installs and builds in its own folder; API routing and SPA refresh handling are declared in that configuration. Node.js 22 is required (use a current 22.x release).
 
 Set these private Vercel environment variables for the deployment environments you intend to use:
 
@@ -49,7 +49,7 @@ Regenerate only the synthetic fixture from `backend` with `npm run demo:generate
 ### URL routing and SSO
 
 - `/`, `/courses`, `/students`, etc. serve React; direct links and refreshes work.
-- `/api/*` reaches Express through `api/index.js`. API responses disable caching.
+- `/api/*` reaches Express through the Express service entry `backend/src/vercel.js`. API responses disable caching.
 - `/api/health` verifies successful initialization. A 503 indicates missing/invalid deployment configuration or a missing fixture.
 - Frontend requests default to same-origin `/api`; local Vite development proxies those requests to port 5000.
 - CORS intentionally permits any origin, as requested. Bearer-token authentication and role checks still apply.

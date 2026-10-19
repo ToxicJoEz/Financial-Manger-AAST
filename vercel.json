@@ -1,13 +1,31 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "cd backend && npm ci && cd ../frontend && npm ci",
-  "buildCommand": "npm run build",
-  "outputDirectory": "frontend/dist",
-  "functions": {
-    "api/index.js": {
-      "includeFiles": "backend/{demo/demo.db,node_modules/.prisma/client/**}",
-      "maxDuration": 60
+  "services": {
+    "frontend": {
+      "root": "frontend",
+      "framework": "vite",
+      "installCommand": "npm ci",
+      "buildCommand": "npm run build",
+      "outputDirectory": "dist",
+      "rewrites": [
+        {
+          "source": "/(.*)",
+          "destination": "/index.html"
+        }
+      ]
+    },
+    "backend": {
+      "root": "backend",
+      "framework": "express",
+      "entrypoint": "src/vercel.js",
+      "installCommand": "npm ci",
+      "buildCommand": "npm run build",
+      "functions": {
+        "src/vercel.js": {
+          "includeFiles": "{demo/demo.db,node_modules/.prisma/client/**}",
+          "maxDuration": 60
+        }
+      }
     }
   },
   "env": {
@@ -16,12 +34,22 @@
   },
   "rewrites": [
     {
-      "source": "/api/:route*",
-      "destination": "/api/index?__route=:route*"
+      "source": "/api",
+      "destination": {
+        "service": "backend"
+      }
     },
     {
-      "source": "/((?!api(?:/|$)).*)",
-      "destination": "/index.html"
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
     }
   ],
   "headers": [
