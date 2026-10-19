@@ -1,11 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, readFileSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 
-// Generate synthetic data from an empty schema. Never read the working database.
+// Generate demo teaching data from an empty schema and the approved account snapshot. Never read the working database.
 const backend = fileURLToPath(new URL('../../', import.meta.url));
 const directory = join(backend, 'demo');
 mkdirSync(directory, { recursive: true });
@@ -18,11 +18,14 @@ const date = value => new Date(value + 'T12:00:00Z');
 try {
   for (const statement of sql.split(';').map(s => s.trim()).filter(Boolean)) await client.$executeRawUnsafe(statement);
   await client.$transaction(async tx => {
-    for (const [username, role] of [['main-admin','admin'], ['demo-mod','mod'], ['demo-user','user']]) await tx.user.create({ data: { id: 'demo-' + role, username, role, password: null, firstName: 'Demo', lastName: role, email: username + '@example.invalid' } });
+    const accounts = JSON.parse(readFileSync(join(directory, 'accounts.json'), 'utf8'));
+    for (const account of accounts) await tx.user.create({ data: { ...account, password: null, email: null, avatar: null, lastLogin: null } });
+    const teacherNames = ['أحمد حسن إبراهيم', 'سارة محمد علي', 'محمود عادل مصطفى'];
+    const studentNames = ['عمر أحمد حسن', 'سلمى محمود علي', 'يوسف محمد إبراهيم', 'مريم خالد حسن', 'علي مصطفى عادل', 'نور أحمد محمود', 'كريم حسن محمد', 'هنا وليد إبراهيم'];
     const teachers = [];
-    for (let n = 1; n <= 3; n++) teachers.push(await tx.instructor.create({ data: { id: 'demo-instructor-' + n, name: 'Demo Instructor ' + n, employeeId: 'DEMO-I' + n, branches: 'MIAMI,FOUAD', mobile: null } }));
+    for (let n = 1; n <= 3; n++) teachers.push(await tx.instructor.create({ data: { id: 'demo-instructor-' + n, name: teacherNames[n - 1], employeeId: 'DEMO-I' + n, branches: 'MIAMI,FOUAD', mobile: null } }));
     const students = [];
-    for (let n = 1; n <= 8; n++) students.push(await tx.student.create({ data: { id: 'demo-student-' + n, name: n % 2 ? 'Demo Student ' + n : 'طالب تجريبي ' + n, registrationNumber: 'DEMO-S' + String(n).padStart(3, '0'), mobile: null } }));
+    for (let n = 1; n <= 8; n++) students.push(await tx.student.create({ data: { id: 'demo-student-' + n, name: studentNames[n - 1], registrationNumber: 'DEMO-S' + String(n).padStart(3, '0'), mobile: null } }));
     const specs = [
       { id: 'demo-course-analysis', name: 'Demo · Data Analysis', branch: 'MIAMI', startDate: date('2026-10-01'), endDate: date('2026-10-15'), totalHours: 24, courseFee: 1000, isFinished: true, isPaid: false, payrollMonth: '2026-10', allocations: [[0,12,250],[1,12,300]], enrollments: [[0,1000,null],[1,400,null],[2,0,null],[3,0,0]] },
       { id: 'demo-course-business', name: 'Demo · Business English', branch: 'FOUAD', startDate: date('2026-10-02'), endDate: date('2026-10-16'), totalHours: 10, courseFee: 800, isFinished: true, isPaid: true, payrollMonth: '2026-10', allocations: [[2,10,150]], enrollments: [[4,800,null]] },
@@ -42,7 +45,7 @@ try {
         if (amountPaid) await tx.paymentEntry.create({ data: { enrollmentId: enrollment.id, courseId: course.id, studentId: students[index].id, courseName: course.name, studentName: students[index].name, amountMinor: BigInt(amountPaid * 100), kind: 'PAYMENT', note: 'Synthetic demo payment; no real money.', recordedBy: 'main-admin', occurredAt: date('2026-10-06'), idempotencyKey: 'demo-' + enrollment.id } });
       }
     }
-    await tx.systemLog.create({ data: { action: 'DEMO_FIXTURE', actorUsername: 'main-admin', description: 'Synthetic demo initialized. Contains no real personal information or login credentials.' } });
+    await tx.systemLog.create({ data: { action: 'DEMO_FIXTURE', actorUsername: 'main-admin', description: 'Local account identities retained; teaching data is synthetic. No password hashes or private contact details are bundled.' } });
   });
   const foreignKeys = await client.$queryRawUnsafe('PRAGMA foreign_key_check');
   if (foreignKeys.length) throw new Error('Demo fixture foreign key validation failed.');

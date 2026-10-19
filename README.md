@@ -11,13 +11,16 @@ Set these private Vercel environment variables for the deployment environments y
 | Variable | Purpose |
 | --- | --- |
 | `JWT_SECRET` | A private random value of at least 32 characters; generate 32 random bytes or more. |
-| `MAIN_ADMIN_PASSWORD_HASH` | Bcrypt hash of a new private demo password. Never use a publicly known default. |
+| `MAIN_ADMIN_PASSWORD_HASH` | Bcrypt hash for the separate local recovery admin. Never use a publicly known default. |
+| `DEMO_USER_PASSWORD_HASHES` | Private JSON object mapping existing local usernames to their bcrypt hashes; restores their existing passwords in each demo instance. |
 | `SSO_JWT_SECRET` | Optional; copy the portal's shared SSO signing key. Must differ from `JWT_SECRET`. Without it, local login works and SSO reports unavailable. |
 | `SSO_AUDIENCE` | Optional recipient validation. Enable only after the portal issues tokens with the matching audience. |
 
 `VERCEL_SQLITE_DEMO=1` is explicitly set in `vercel.json`. Do **not** point `DATABASE_URL` to a working database on Vercel. The application selects its temporary database automatically. Redeploy after changing environment variables.
 
-Three synthetic accounts are bundled: `main-admin` (admin), `demo-mod` (mod), and `demo-user` (junior). Their password fields are empty in Git. During instance initialization they receive the privately configured bootstrap password hash. All three demo accounts therefore use the password whose hash you supplied. This behavior applies only to the Vercel demo and does not reset local passwords.
+The fixture retains the approved local account identities from `backend/demo/accounts.json`, including `Joe`, `Joe-admin`, and `main-admin`, with their IDs, roles, and account status. Passwords, email addresses, avatars, and login history are excluded from the bundled database.
+
+Set `DEMO_USER_PASSWORD_HASHES` privately in Vercel to restore the existing non-root password hashes. The local export file `backend/.env.vercel-users.local` contains the assignment; paste **only the JSON value after `=`** into the Vercel variable. That file is ignored by Git and Vercel uploads. Accounts that previously used only SSO remain SSO-only unless explicitly assigned a password hash. `main-admin` continues using `MAIN_ADMIN_PASSWORD_HASH`; this separate setting is not overridden by the user map. No existing local passwords are reset.
 
 ### Generate private values
 
@@ -40,7 +43,7 @@ Paste the resulting hash into `MAIN_ADMIN_PASSWORD_HASH`. Do not add secrets to 
 
 ### Database behavior
 
-`backend/demo/demo.db` is an intentionally tracked **synthetic** fixture generated from an empty schema. It contains no real personal data, credentials, or imported working records. It includes four courses, eight students, completed paid/unpaid payroll, active tuition, partial payments, and exemption. Use October **2026** to exercise reports.
+`backend/demo/demo.db` is an intentionally tracked demo fixture generated from an empty schema and the approved local account snapshot. It retains the requested account identities but excludes usable credentials and private contact details. Teaching and financial demo records are synthetic, and all student and instructor names are Arabic. It includes four courses, eight students, completed paid/unpaid payroll, active tuition, partial payments, and exemption. Use October **2026** to exercise reports.
 
 On each Vercel process's first initialization, the fixture is copied once to an isolated temporary writable directory. Repeated requests in that process reuse the same copy. Different instances do not share writes, and replacements start again from the fixture. **Changes may disappear between requests, not only after redeployment.** This is not persistent database hosting or production support for SQLite on Vercel. In-memory lockouts and SSO replay tracking are also instance-local.
 
@@ -80,4 +83,4 @@ Actual Vercel function packaging, Linux execution, and deployed routing must add
 4. Run `npm run dev` in `backend`, then in `frontend` (ports 5000 and 5175 by default). If the backend port changes, update the Vite development proxy.
 5. On a VM, keep the SQLite file on persistent storage and do not set `VERCEL=1`. Serve the built frontend with your web server and proxy `/api` to Express. The relative frontend API paths remain unchanged.
 
-No Docker, Railway, or external database is required by this repository. The working `.env`, local databases, backups, temporary scripts, and unrelated embedded frontend project are excluded from Git. Only the synthetic fixture is intentionally included.
+No Docker, Railway, or external database is required by this repository. The working `.env`, local databases, backups, temporary scripts, and unrelated embedded frontend project are excluded from Git. Only the demo fixture and approved account-identity snapshot are intentionally included; password hashes are supplied privately at runtime.

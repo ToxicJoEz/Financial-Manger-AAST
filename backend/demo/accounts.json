@@ -1,0 +1,65 @@
+[
+  {
+    "id": "18637550-d82a-4233-ab1b-64fa7f9f4f8e",
+    "username": "Joe",
+    "role": "user",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  },
+  {
+    "id": "0303f06b-f60d-4929-be8b-4a084e45ade2",
+    "username": "Joe-admin",
+    "role": "admin",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  },
+  {
+    "id": "e380d52b-66cb-4a2d-ac45-dea7ffa021f1",
+    "username": "Joe2",
+    "role": "user",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  },
+  {
+    "id": "bb7173a6-e87e-466b-a572-903a6c30af32",
+    "username": "Youssef Wael",
+    "role": "mod",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  },
+  {
+    "id": "4e5211b0-2258-4803-acd6-96a6c734b855",
+    "username": "Youssef Wael Atia",
+    "role": "mod",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  },
+  {
+    "id": "e15e09f9-bc55-4aff-9061-2d30a492f700",
+    "username": "main-admin",
+    "role": "admin",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": "Root",
+    "lastName": "Administrator"
+  },
+  {
+    "id": "4f2df785-e61c-448c-8205-9e9ef3625630",
+    "username": "test",
+    "role": "user",
+    "isActive": true,
+    "isBanned": false,
+    "firstName": null,
+    "lastName": null
+  }
+]
