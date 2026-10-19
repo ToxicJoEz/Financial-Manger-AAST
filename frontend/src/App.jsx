@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import CourseCatalog from './pages/CourseCatalog';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import { useContext } from 'react';
 import Login from './pages/Login';
@@ -45,6 +46,7 @@ const PublicRoute = ({
   return children;
 };
 import { Toaster } from 'react-hot-toast';
+const CycleRoute = () => { const { courseId } = useParams(); return <Courses key={courseId || 'all'} />; };
 const App = () => {
   return <WorkspaceMotion><AuthProvider>
       <Toaster position="top-right" toastOptions={{
@@ -74,7 +76,9 @@ const App = () => {
             <Route path="/profile" element={<Profile />} />
             <Route path="/users" element={<ManageUsers />} />
             <Route path="/instructors" element={<Instructors />} />
-            <Route path="/courses" element={<Courses />} />
+            <Route path="/courses" element={<CourseCatalog />} />
+            <Route path="/courses/cycles" element={<CycleRoute />} />
+            <Route path="/courses/:courseId" element={<CycleRoute />} />
             <Route path="/students" element={<Students />} />
             <Route path="/finances" element={<Finances />} />
           </Route>

@@ -1,6 +1,9 @@
 export const EXPORT_COLUMNS = {
   courses: {
-    course: 'Course',
+    course: 'Cycle',
+    courseName: 'Course',
+    courseCode: 'Course code',
+    cycleNumber: 'Cycle number',
     branch: 'Branch',
     startDate: 'Start date',
     endDate: 'End date',
@@ -14,7 +17,10 @@ export const EXPORT_COLUMNS = {
   tuition: {
     student: 'Student',
     registration: 'Registration number',
-    course: 'Course',
+    course: 'Cycle',
+    courseName: 'Course',
+    courseCode: 'Course code',
+    cycleNumber: 'Cycle number',
     branch: 'Branch',
     enrolledAt: 'Enrolled on',
     fee: 'Applicable fee (EGP)',
@@ -24,7 +30,10 @@ export const EXPORT_COLUMNS = {
     recordStatus: 'Record status'
   },
   payroll: {
-    course: 'Course',
+    course: 'Cycle',
+    courseName: 'Course',
+    courseCode: 'Course code',
+    cycleNumber: 'Cycle number',
     branch: 'Branch',
     instructor: 'Instructor',
     employeeId: 'Employee ID',
@@ -55,6 +64,7 @@ export function buildExport(courses, user, selection, filters) {
     payroll: []
   };
   for (const c of courses) {
+    if (filters.parentCourseId && c.parentCourseId !== filters.parentCourseId) continue;
     if (!filters.includeArchived && c.archivedAt || filters.courseId && c.id !== filters.courseId) continue;
     const financial = c.enrollments.filter(e => !e.financialArchivedAt);
     const visible = e => manager || !e.student.deletedAt && !e.deletedAt && !e.financialArchivedAt;
@@ -62,7 +72,7 @@ export function buildExport(courses, user, selection, filters) {
     const collected = money(financial.reduce((sum, e) => sum + e.amountPaid, 0));
     const remaining = money(financial.reduce((sum, e) => sum + Math.max(0, money((e.customFee ?? c.courseFee) - e.amountPaid)), 0));
     if ((!filters.branch || c.branch === filters.branch) && within(c.startDate || c.createdAt, filters) && (!filters.tuitionStatus || financial.some(e => visible(e) && tuitionStatus(e.customFee ?? c.courseFee, e.amountPaid) === filters.tuitionStatus))) rows.courses.push({
-      course: c.name,
+      course: c.name, courseName: c.parentCourse?.name || c.name, courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
       branch: c.branch,
       startDate: day(c.startDate),
       endDate: day(c.endDate),
@@ -81,7 +91,7 @@ export function buildExport(courses, user, selection, filters) {
       rows.tuition.push({
         student: e.student.name,
         registration: e.student.registrationNumber,
-        course: c.name,
+        course: c.name, courseName: c.parentCourse?.name || c.name, courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
         branch: c.branch,
         enrolledAt: day(e.enrolledAt),
         fee,
@@ -94,7 +104,7 @@ export function buildExport(courses, user, selection, filters) {
     const record = c.payrollRecord;
     if (manager && record && (!filters.branch || record.branch === filters.branch) && within(record.payrollMonth, filters, true) && (!filters.payrollStatus || (record.isPaid ? 'PAID' : 'UNPAID') === filters.payrollStatus)) {
       for (const i of JSON.parse(record.instructors)) rows.payroll.push({
-        course: record.name,
+        course: record.name, courseName: c.parentCourse?.name || '', courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
         branch: record.branch,
         instructor: i.instructor?.name || 'Unknown',
         employeeId: i.instructor?.employeeId || '',

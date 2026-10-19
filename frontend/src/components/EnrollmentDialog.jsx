@@ -13,7 +13,7 @@ export default function EnrollmentDialog({ course, students, manager, onClose, o
     if (!studentId) return setError('Choose a student.');
     if (paid && !exempt && Number(amount) > effectiveFee) return setError(`The tuition fee is ${effectiveFee.toLocaleString()} EGP. You cannot record ${Number(amount).toLocaleString()} EGP paid.`);
     setBusy(true);
-    try { await axios.post(`/courses/${course.id}/enrollments`, { studentId, recordPayment: paid && !exempt, exempt: paid && exempt, amountPaid: paid && !exempt ? amount : undefined, customFee: manager && fee !== '' && !exempt ? fee : undefined }); onSaved(); onClose(); }
+    try { await axios.post(`/cycles/${course.id}/enrollments`, { studentId, recordPayment: paid && !exempt, exempt: paid && exempt, amountPaid: paid && !exempt ? amount : undefined, customFee: manager && fee !== '' && !exempt ? fee : undefined }); onSaved(); onClose(); }
     catch (e) { setError(e.response?.data?.error || e.response?.data?.message || 'Enrollment could not be saved.'); }
     finally { setBusy(false); }
   };

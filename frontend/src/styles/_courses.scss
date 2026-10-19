@@ -480,3 +480,31 @@
   line-height: 1.6;
   margin: -8px 0 20px;
 }
+
+/* Course umbrellas and nested operational cycles share the studio palette. */
+.catalog-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:18px; margin-bottom:26px; .search-field{flex:1;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:12px;} }
+.catalog-card { overflow:hidden; padding:0!important; --catalog-accent:#6079e9; --catalog-tint:#edf0ff; }
+.catalog-tone-1 { --catalog-accent:#319f90;--catalog-tint:#e4f5f0; }
+.catalog-tone-2 { --catalog-accent:#be834e;--catalog-tint:#fbefdf; }
+.catalog-card-link { display:block; padding:25px; color:inherit;text-decoration:none; }
+.catalog-card-top,.catalog-title-row,.catalog-stat-row,.catalog-card-footer,.catalog-branches { display:flex;align-items:center; }
+.catalog-card-top { justify-content:space-between;margin-bottom:24px;.course-tile-icon{background:var(--catalog-tint);color:var(--catalog-accent);} }
+.catalog-code { font-size:11px;letter-spacing:1px;font-weight:700;color:var(--muted); }
+.catalog-title-row { justify-content:space-between;h2{font-size:30px;letter-spacing:-1px;color:var(--ink);}svg{color:var(--catalog-accent);} }
+.catalog-description { color:var(--muted);font-size:12px;margin:10px 0 24px; }
+.catalog-stat-row { gap:22px;font-size:12px;color:var(--muted);span{display:flex;gap:6px;align-items:center;}strong{color:var(--ink);font-size:16px;} }
+.catalog-branches { gap:6px;margin-top:20px;font-size:10px;color:var(--muted);min-height:18px; }
+.catalog-card-footer { padding:14px 24px;border-top:1px solid var(--line);justify-content:space-between;background:var(--catalog-tint);>a{display:flex;gap:8px;align-items:center;font-size:12px;font-weight:700;color:var(--ink);} >div{display:flex;gap:4px;} }
+.catalog-editor { width:min(460px,calc(100vw - 28px));h3{margin-bottom:10px;}p{line-height:1.7;margin-bottom:18px;}form{display:grid;gap:10px;}label{font-size:12px;font-weight:600;} }
+.course-breadcrumb { display:flex;gap:9px;align-items:center;color:var(--muted);font-size:12px;margin-bottom:18px;a{color:var(--green);} }
+.cycles-page .course-tile { border-top:3px solid #8da1f0;background:linear-gradient(145deg,#f7f9ff 0%,var(--surface) 38%); }
+.cycles-page .course-tile-top .course-tile-icon { border-radius:10px;background:#eef1fa; }
+.cycles-page .course-tile-title { font-size:24px!important; }
+@media(max-width:600px){.catalog-toolbar{gap:12px;}.catalog-card-link{padding:21px;}.catalog-title-row h2{font-size:27px;}.catalog-card-footer{padding:12px 20px;}.course-breadcrumb{margin-top:4px;} }
+
+.catalog-title-row h2 { font-weight:800; }
+.cycles-page .course-tile > .flex.items-center.justify-between { padding:0 20px; }
+.cycles-page .course-tuition-meter { margin:18px 20px 0; padding-top:14px; }
+.cycles-page .tile-pending { margin:10px 20px 0; }
+
+.catalog-stat-row { flex-wrap:wrap;row-gap:10px; }

@@ -1,3 +1,5 @@
+> Historical upgrades below apply only to the pre-cycle schema. The course/cycle rebuild replaces operational data while preserving User rows, after an external backup. Do not run these historical upgrades against the current cycle schema. See the root README and `scripts/reset-local-cycles.py` for the explicit local reset procedure.
+
 # Student soft deletion and tuition payment history
 
 This additive upgrade preserves existing students, enrollments, and collected totals.

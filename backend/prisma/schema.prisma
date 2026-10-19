@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output = "../generated/client"
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
@@ -56,7 +57,23 @@ model Instructor {
   pendingAssignments PendingAssignment[]
 }
 
+// Umbrella: no branch, teaching defaults, enrollment, or financial state.
 model Course {
+  id String @id @default(uuid())
+  name String
+  code String @unique
+  archivedAt DateTime?
+  archivedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cycles Cycle[]
+}
+
+model Cycle {
+  parentCourseId String
+  parentCourse Course @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
+  cycleNumber Int
+
   id           String   @id @default(uuid())
   name         String
   details      String?
@@ -78,7 +95,8 @@ model Course {
   pendingAssignments PendingAssignment[]
   enrollments  Enrollment[]
 
-  @@unique([name, branch])
+  @@unique([parentCourseId, cycleNumber])
+  @@index([parentCourseId, archivedAt])
 }
 
 model CourseInstructor {
@@ -90,7 +108,7 @@ model CourseInstructor {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course       Cycle     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, instructorId])
@@ -109,7 +127,7 @@ model PendingAssignment {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  course          Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course          Cycle      @relation(fields: [courseId], references: [id], onDelete: Cascade)
   instructor      Instructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   submittedBy     User        @relation("SubmittedAssignments", fields: [submittedById], references: [id], onDelete: Cascade)
   resolvedBy      User?       @relation("ResolvedAssignments", fields: [resolvedById], references: [id], onDelete: SetNull)
@@ -161,7 +179,7 @@ model Enrollment {
   deletedBy  String?
   financialArchivedAt DateTime?
 
-  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course     Cycle   @relation(fields: [courseId], references: [id], onDelete: Cascade)
   student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([courseId, studentId])
@@ -171,7 +189,7 @@ model Enrollment {
 model PayrollRecord {
   id           String @id @default(uuid())
   courseId     String @unique
-  course       Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  course       Cycle @relation(fields: [courseId], references: [id], onDelete: Restrict)
   name         String
   branch       String
   totalHours   Float

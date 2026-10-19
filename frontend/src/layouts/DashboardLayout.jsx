@@ -69,13 +69,13 @@ export default function DashboardLayout() {
       try { await axios.put(`/notifications/${n.id}/read`); setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)); }
       catch { toast.error('Could not mark notification as read'); }
     }
-    navigate('/courses', { state: { openReviewId: n.type === 'ASSIGNMENT_REQUEST' && !n.isResolved ? n.relatedId : null } });
+    navigate('/courses/cycles', { state: { openReviewId: n.type === 'ASSIGNMENT_REQUEST' && !n.isResolved ? n.relatedId : null } });
     setShowNotifications(false);
   };
   const searchCourses = e => {
     e.preventDefault();
     if (!search.trim()) return;
-    navigate('/courses', { state: { search: search.trim() } });
+    navigate('/courses/cycles', { state: { search: search.trim() } });
     setSearch('');
   };
 
@@ -94,8 +94,8 @@ export default function DashboardLayout() {
     </aside>
     <div className="workspace-body">
       <header className="topbar">
-        <div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={14} /><strong>{pageNames[location.pathname] || 'Finance'}</strong></div>
-        <form className="global-search" onSubmit={searchCourses}><Search size={17} /><input ref={searchRef} aria-label="Search workspace courses" placeholder="Find a course…" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd></form>
+        <div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={14} /><strong>{pageNames[location.pathname] || (location.pathname.startsWith('/courses/') ? 'Cycles' : 'Finance')}</strong></div>
+        <form className="global-search" onSubmit={searchCourses}><Search size={17} /><input ref={searchRef} aria-label="Search workspace courses" placeholder="Find a cycle…" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd></form>
         <div className="topbar-right"><div className="notification-anchor" ref={notificationRef}>
           <button className={`icon-button notification-trigger ${showNotifications ? 'selected' : ''}`} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={showNotifications} onClick={() => setShowNotifications(!showNotifications)}><Bell size={20} strokeWidth={1.8} />{unread > 0 && <span className="unread-dot" />}</button>
           <AnimatePresence>{showNotifications && <MotionSurface key="notifications" exit={{ opacity: 0, y: -3 }} className="notification-panel" aria-label="Notifications"><div className="panel-heading"><h3>Your updates {unread > 0 && <span className="count-chip">{unread}</span>}</h3><button className="icon-button" aria-label="Close notifications" onClick={() => setShowNotifications(false)}><X size={17} /></button></div>{unread > 0 && <button className="text-button mark-read" onClick={async () => { try { await axios.put('/notifications/read-all'); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))); } catch { toast.error('Could not update notifications'); } }}><Check size={15} />Mark all as read</button>}<div className="notification-list">{notifications.length ? notifications.map(n => <button key={n.id} className={`notification-item ${!n.isRead ? 'unread' : ''}`} onClick={() => openNotification(n)}><strong>{n.title}</strong><p>{plainText(n.message)}</p><small>{n.isResolved ? `Resolved by ${n.resolvedBy}` : new Date(n.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</small></button>) : <div className="empty-state"><span className="empty-icon"><Bell size={28} /></span><h3>You're all caught up</h3><p>New assignment updates will land here.</p></div>}</div></MotionSurface>}</AnimatePresence>

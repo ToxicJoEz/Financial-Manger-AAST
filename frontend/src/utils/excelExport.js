@@ -5,7 +5,7 @@ export async function createExcelBuffer(report) {
   book.creator = 'AAST Finance';
   book.created = new Date(report.generatedAt);
   const names = {
-    courses: 'Courses',
+    courses: 'Cycles',
     tuition: 'Student Tuition',
     payroll: 'Instructor Payroll'
   };

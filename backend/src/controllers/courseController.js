@@ -10,9 +10,10 @@ import { logAction } from '../utils/logger.js';
 export const getCourses = async (req, res) => {
   try {
     const isJunior = req.user.role === 'user';
-    const courses = await prisma.course.findMany({
-      where: isManager(req.user) ? {} : { archivedAt: null },
+    const courses = await prisma.cycle.findMany({
+      where: { ...(!isManager(req.user) ? { archivedAt: null, parentCourse: { archivedAt: null } } : {}), ...(req.query.parentCourseId ? { parentCourseId: req.query.parentCourseId } : {}) },
       include: {
+        parentCourse: true,
         instructors: {
           include: { instructor: true }
         },
@@ -38,8 +39,8 @@ export const getCourses = async (req, res) => {
         }
       },
       orderBy: [
-        { branch: 'asc' },
-        { name: 'asc' }
+        { parentCourse: { name: 'asc' } },
+        { cycleNumber: 'asc' }
       ]
     });
 
@@ -51,82 +52,49 @@ export const getCourses = async (req, res) => {
   }
 };
 
-export const createCourse = atomic(async (req, res) => {
+export const createCourse = atomic(async (req, res, next) => {
   try {
-    let { name, details, branch, startDate, endDate, isFinished, totalHours, courseFee } = req.body;
-    
-    name = name ? name.toUpperCase() : name;
-    branch = branch ? branch.toUpperCase() : branch;
-    
-    const existing = await prisma.course.findUnique({
-      where: { name_branch: { name, branch } }
-    });
-    if (existing) {
-      return res.status(400).json({ error: 'This course already exists in this branch.' });
-    }
-
-    let parsedTotalHours = null;
-    if (totalHours !== undefined && totalHours !== null && totalHours !== '') {
-      parsedTotalHours = numberValue(totalHours);
-      if (isNaN(parsedTotalHours) || !isFinite(parsedTotalHours) || parsedTotalHours < 0) {
-        return res.status(400).json({ error: 'Course total hours must be a finite non-negative number.' });
-      }
-    }
-
-    let parsedCourseFee = 0;
-    if (courseFee !== undefined && courseFee !== null && courseFee !== '') {
-      parsedCourseFee = numberValue(courseFee);
-      if (isNaN(parsedCourseFee) || !isFinite(parsedCourseFee) || parsedCourseFee < 0) {
-        return res.status(400).json({ error: 'Course fee must be a finite non-negative number.' });
-      }
-    }
-
-    moneyMinor(parsedCourseFee, 'Course fee');
-    const course = await prisma.course.create({
-      data: { 
-        name, 
-        details, 
-        branch,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        isFinished: isFinished || false,
-        totalHours: parsedTotalHours,
-        courseFee: parsedCourseFee
-      }
-    });
-    await logAction('CREATE_COURSE', `Created course ${name} (${branch}) - Fee: ${parsedCourseFee} EGP`, req.user.username);
-    res.status(201).json(course);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+    const { parentCourseId, cycleNumber, details, branch, startDate, endDate, totalHours, courseFee } = req.body;
+    const parent = await prisma.course.findUnique({ where: { id: parentCourseId || '' } });
+    if (!parent || parent.archivedAt) return res.status(400).json({ error: 'Choose an available parent course.' });
+    const number = Number(cycleNumber);
+    if (!['number','string'].includes(typeof cycleNumber) || !Number.isInteger(number) || number < 1 || number > 2147483647) return res.status(400).json({ error: 'Cycle number must be a whole number between 1 and 2,147,483,647.' });
+    if (typeof branch !== 'string' || !branch.trim()) return res.status(400).json({ error: 'Branch is required.' });
+    const start = startDate ? new Date(startDate) : null, end = endDate ? new Date(endDate) : null;
+    if ((start && !Number.isFinite(start.getTime())) || (end && !Number.isFinite(end.getTime())) || (start && end && end < start)) return res.status(400).json({ error: 'Choose valid dates; end date cannot precede start date.' });
+    const duplicate = await prisma.cycle.findUnique({ where: { parentCourseId_cycleNumber: { parentCourseId, cycleNumber: number } } });
+    if (duplicate) return res.status(409).json({ error: 'This cycle number is already used in this course, including archived cycles. Choose another number.' });
+    const cycle = await prisma.cycle.create({ data: { parentCourseId, cycleNumber: number, name: `${parent.name} ${number}`, details, branch: branch.trim().toUpperCase(), startDate: start, endDate: end, totalHours: totalHours === undefined || totalHours === null || totalHours === '' ? null : numberValue(totalHours, 'Cycle hours'), courseFee: Number(moneyMinor(courseFee || 0, 'Tuition fee')) / 100 }, include: { parentCourse: true } });
+    await logAction('CREATE_CYCLE', `Created ${cycle.name} (${cycle.branch}) under ${parent.code}`, req.user.username);
+    res.status(201).json(hidePayroll(cycle, req.user));
+  } catch (error) { if (error.status) return res.status(error.status).json({ error: error.message }); next(error); }
 });
 
 export const updateCourse = atomic(async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.id }, include: { enrollments: true } });
-    if (!course) return res.status(404).json({ error: 'Course not found.' });
+    const cycle = await prisma.cycle.findUnique({ where: { id: req.params.id }, include: { enrollments: true, parentCourse: true } });
+    if (!cycle) return res.status(404).json({ error: 'Cycle not found.' });
     const body = req.body;
-    if ((body.isFinished !== undefined && body.isFinished !== course.isFinished) || (body.isPaid !== undefined && body.isPaid !== course.isPaid) || (body.payrollMonth !== undefined && body.payrollMonth !== course.payrollMonth)) return res.status(400).json({ error: 'Use the dedicated complete, reopen, or payroll payment action to change accounting state.' });
+    if (body.parentCourseId !== undefined && body.parentCourseId !== cycle.parentCourseId) return res.status(400).json({ error: 'Cycles cannot be moved to another course.' });
+    if ((body.isFinished !== undefined && body.isFinished !== cycle.isFinished) || (body.isPaid !== undefined && body.isPaid !== cycle.isPaid) || (body.payrollMonth !== undefined && body.payrollMonth !== cycle.payrollMonth)) return res.status(400).json({ error: 'Use the dedicated completion or payment action to change accounting state.' });
     const data = {};
-    for (const key of ['name', 'branch']) if (body[key] !== undefined) {
-      if (typeof body[key] !== 'string' || !body[key].trim()) return res.status(400).json({ error: `${key} is required.` });
-      data[key] = body[key].trim().toUpperCase();
+    if (body.cycleNumber !== undefined) {
+      const number = Number(body.cycleNumber);
+      if (!['number','string'].includes(typeof body.cycleNumber) || !Number.isInteger(number) || number < 1 || number > 2147483647) return res.status(400).json({ error: 'Cycle number must be a whole number between 1 and 2,147,483,647.' });
+      const duplicate = await prisma.cycle.findUnique({ where: { parentCourseId_cycleNumber: { parentCourseId: cycle.parentCourseId, cycleNumber: number } } });
+      if (duplicate && duplicate.id !== cycle.id) return res.status(409).json({ error: 'That cycle number already belongs to this course, including archived cycles.' });
+      data.cycleNumber = number; data.name = `${cycle.parentCourse.name} ${number}`;
     }
+    if (body.branch !== undefined) { if (typeof body.branch !== 'string' || !body.branch.trim()) return res.status(400).json({ error: 'Branch is required.' }); data.branch = body.branch.trim().toUpperCase(); }
     if (body.details !== undefined) data.details = body.details;
-    for (const key of ['startDate', 'endDate']) if (body[key] !== undefined) {
-      data[key] = body[key] ? new Date(body[key]) : null;
-      if (data[key] && !Number.isFinite(data[key].getTime())) return res.status(400).json({ error: `Invalid ${key}.` });
-    }
-    if (body.totalHours !== undefined) data.totalHours = body.totalHours === null || body.totalHours === '' ? null : numberValue(body.totalHours, 'Course hours');
-    if (body.courseFee !== undefined) {
-      data.courseFee = Number(moneyMinor(body.courseFee === null || body.courseFee === '' ? 0 : body.courseFee, 'Course fee')) / 100;
-      for (const enrollment of course.enrollments) if (enrollment.customFee === null) assertWithinFee(enrollment.amountPaid, data.courseFee);
-    }
-    const duplicate = await prisma.course.findUnique({ where: { name_branch: { name: data.name ?? course.name, branch: data.branch ?? course.branch } } });
-    if (duplicate && duplicate.id !== course.id) return res.status(400).json({ error: 'Another course already has this name in this branch.' });
-    const updated = await prisma.course.update({ where: { id: course.id }, data });
-    await logAction('UPDATE_COURSE', `Updated details of ${updated.name}; completion and financial records preserved.`, req.user.username);
-    res.json(updated);
+    for (const key of ['startDate','endDate']) if (body[key] !== undefined) { data[key] = body[key] ? new Date(body[key]) : null; if (data[key] && !Number.isFinite(data[key].getTime())) return res.status(400).json({ error: 'Choose valid dates.' }); }
+    const start = data.startDate === undefined ? cycle.startDate : data.startDate, end = data.endDate === undefined ? cycle.endDate : data.endDate;
+    if (start && end && end < start) return res.status(400).json({ error: 'End date cannot precede start date.' });
+    if (body.totalHours !== undefined) data.totalHours = body.totalHours === null || body.totalHours === '' ? null : numberValue(body.totalHours, 'Cycle hours');
+    if (body.courseFee !== undefined) { data.courseFee = Number(moneyMinor(body.courseFee || 0, 'Tuition fee')) / 100; for (const enrollment of cycle.enrollments) if (enrollment.customFee === null) assertWithinFee(enrollment.amountPaid, data.courseFee); }
+    const updated = await prisma.cycle.update({ where: { id: cycle.id }, data, include: { parentCourse: true } });
+    await logAction('UPDATE_CYCLE', `Updated ${updated.name}; financial snapshots retained.`, req.user.username);
+    res.json(hidePayroll(updated, req.user));
   } catch (error) { if (error.status) return res.status(error.status).json({ error: error.message }); next(error); }
 });
 
@@ -135,11 +103,11 @@ export const togglePaymentStatus = atomic(async (req, res) => {
     const { id } = req.params;
     const { isPaid } = req.body;
     if (typeof isPaid !== 'boolean') return res.status(400).json({ error: 'Payment status must be true or false.' });
-    const existing = await prisma.course.findUnique({ where: { id } });
+    const existing = await prisma.cycle.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Course not found.' });
     if (isPaid && !existing.isFinished) return res.status(400).json({ error: 'Complete the course before marking its instructor payroll as paid.' });
 
-    const course = await prisma.course.update({
+    const course = await prisma.cycle.update({
       where: { id },
       data: { isPaid }
     });
@@ -154,9 +122,9 @@ export const togglePaymentStatus = atomic(async (req, res) => {
 
 export const deleteCourse = atomic(async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.id } });
+    const course = await prisma.cycle.findUnique({ where: { id: req.params.id } });
     if (!course) return res.status(404).json({ error: 'Course not found.' });
-    await prisma.course.update({ where: { id: course.id }, data: { archivedAt: course.archivedAt || new Date(), archivedBy: course.archivedBy || req.user.username } });
+    await prisma.cycle.update({ where: { id: course.id }, data: { archivedAt: course.archivedAt || new Date(), archivedBy: course.archivedBy || req.user.username } });
     await logAction('ARCHIVE_COURSE', `Archived ${course.name}; tuition and payroll records retained.`, req.user.username);
     res.json({ message: 'Course archived. Tuition and payroll history have been preserved.' });
   } catch (error) { next(error); }
@@ -167,7 +135,7 @@ export const assignInstructor = atomic(async (req, res) => {
     const { id } = req.params;
     const { instructorId, hourlyRate } = req.body;
 
-    const course = await prisma.course.findUnique({ where: { id } });
+    const course = await prisma.cycle.findUnique({ where: { id } });
     if (!course) return res.status(404).json({ error: 'Course not found' });
     if (course.archivedAt || course.isFinished) return res.status(409).json({ error: 'Reopen an unarchived course before changing its teaching team.' });
     if (!instructorId) return res.status(400).json({ error: 'Instructor is required.' });
@@ -252,7 +220,7 @@ export const removeInstructor = atomic(async (req, res) => {
   try {
     const { id, courseInstructorId } = req.params;
 
-    const course = await prisma.course.findUnique({ where: { id } });
+    const course = await prisma.cycle.findUnique({ where: { id } });
     if (!course) return res.status(404).json({ error: 'Course not found' });
     if (course.archivedAt || course.isFinished) return res.status(409).json({ error: 'Reopen an unarchived course before changing its teaching team.' });
 
@@ -324,7 +292,7 @@ export const markFinished = atomic(async (req, res) => {
     const { id } = req.params;
     const { totalHours, instructorHours, payrollMonth } = req.body;
     
-    const course = await prisma.course.findUnique({
+    const course = await prisma.cycle.findUnique({
       where: { id },
       include: {
         instructors: {
@@ -415,7 +383,7 @@ export const markFinished = atomic(async (req, res) => {
 
     // Atomic transaction for completion and hour allocation
     await prisma.$transaction(async (tx) => {
-      await tx.course.update({
+      await tx.cycle.update({
         where: { id },
         data: {
           totalHours: total,
@@ -447,10 +415,10 @@ export const markFinished = atomic(async (req, res) => {
 
 export const revertFinish = atomic(async (req, res, next) => {
   try {
-    const course = await prisma.course.findUnique({ where: { id: req.params.id } });
+    const course = await prisma.cycle.findUnique({ where: { id: req.params.id } });
     if (!course) return res.status(404).json({ error: 'Course not found.' });
     if (course.archivedAt) return res.status(409).json({ error: 'Restore the archived course before reopening it.' });
-    await prisma.course.update({ where: { id: course.id }, data: { isFinished: false } });
+    await prisma.cycle.update({ where: { id: course.id }, data: { isFinished: false } });
     await logAction('REOPEN_COURSE', `Reopened ${course.name}; recorded teaching hours, payroll month, payment state, and student payments retained.`, req.user.username);
     res.json({ message: 'Course reopened. All existing financial records have been preserved.' });
   } catch (error) { next(error); }
@@ -460,7 +428,7 @@ export const getCourseEnrollments = async (req, res, next) => {
   try {
     const isJunior = req.user.role === 'user';
     const { id } = req.params;
-    const course = await prisma.course.findUnique({
+    const course = await prisma.cycle.findUnique({
       where: { id },
       include: {
         enrollments: {
@@ -497,7 +465,7 @@ export const enrollStudent = atomic(async (req, res, next) => {
       return res.status(400).json({ error: 'Student ID is required.' });
     }
 
-    const course = await prisma.course.findUnique({ where: { id } });
+    const course = await prisma.cycle.findUnique({ where: { id } });
     if (!course) {
       return res.status(404).json({ error: 'Course not found.' });
     }
@@ -685,7 +653,10 @@ export const removeEnrollment = atomic(async (req, res, next) => {
 
 export const restoreCourse = atomic(async (req, res, next) => {
   try {
-    const course = await prisma.course.update({ where: { id: req.params.id }, data: { archivedAt: null, archivedBy: null } });
+    const existing = await prisma.cycle.findUnique({ where: { id: req.params.id }, include: { parentCourse: true } });
+    if (!existing) return res.status(404).json({ error: 'Cycle not found.' });
+    if (existing.parentCourse.archivedAt) return res.status(409).json({ error: 'Restore the parent course first.' });
+    const course = await prisma.cycle.update({ where: { id: req.params.id }, data: { archivedAt: null, archivedBy: null } });
     await logAction('RESTORE_COURSE', `Restored archived course ${course.name}.`, req.user.username);
     res.json(course);
   } catch (error) { next(error); }
@@ -694,7 +665,7 @@ export const restoreCourse = atomic(async (req, res, next) => {
 export const replaceInstructor = atomic(async (req, res, next) => {
   try {
     const { id, courseInstructorId } = req.params;
-    const course = await prisma.course.findUnique({ where: { id } });
+    const course = await prisma.cycle.findUnique({ where: { id } });
     const old = await prisma.courseInstructor.findFirst({ where: { id: courseInstructorId, courseId: id }, include: { instructor: true } });
     const replacement = typeof req.body.instructorId === 'string' ? await prisma.instructor.findUnique({ where: { id: req.body.instructorId } }) : null;
     if (!course || !old || !replacement) return res.status(404).json({ error: 'Course, current assignment, or replacement instructor not found.' });

@@ -1,14 +1,14 @@
 # Customizable Excel exports
 
-The Courses page offers Export Excel to every authenticated staff member. Payroll also offers it to managers, prefilled to the selected payroll month. Existing PDF export is unchanged.
+The nested Cycles page offers Export Excel to every authenticated staff member. Payroll also offers it to managers, prefilled to the selected payroll month. Existing PDF export is unchanged.
 
-Choose columns in Courses, Student Tuition, and (admins/mods only) Instructor Payroll. Clearing every column removes a worksheet. Filters include branch, course, inclusive dates, tuition status, payroll status, and manager-only inclusion of archives. Empty results show a message instead of downloading an empty report.
+Choose columns in Cycles, Student Tuition, and (admins/mods only) Instructor Payroll. Clearing every column removes a worksheet. Filters include branch, course, inclusive dates, tuition status, payroll status, and manager-only inclusion of archives. Empty results show a message instead of downloading an empty report.
 
 ## Dates and totals
 
-- Courses use start date, falling back to creation date when no start date is set; tuition uses enrollment date. The displayed start date remains blank when unset. Records with neither applicable date are excluded when a date range is supplied.
+- Cycles use start date, falling back to creation date when no start date is set; tuition uses enrollment date. The displayed start date remains blank when unset. Records with neither applicable date are excluded when a date range is supplied.
 - Payroll uses inclusive payroll months, from saved completed-payroll snapshots; reopened courses remain represented. Snapshot branch, instructor name, rate, and hours are preserved.
-- Tuition status filters enrollment rows. On the Courses sheet, a course must have at least one matching visible enrollment, but its displayed totals still represent the entire course.
+- Tuition status filters enrollment rows. On the Cycles sheet, a course must have at least one matching visible enrollment, but its displayed totals still represent the entire course.
 - Removed students/enrollments with retained finances remain in course totals. Juniors cannot export their individual identities. Managers can see these labelled rows.
 - Archived finances never count in course totals. Managers can explicitly include their labelled history rows. Do not sum those rows as current revenue.
 - Payroll earned values and the existing course-level paid flag are exported. Interim payments are outside this feature.
@@ -27,3 +27,5 @@ No database migrations, new packages, environment changes, or SSO changes are re
 From backend: `node --test test/exportData.test.js`.
 
 The tests cover junior privacy, selected-field projection, deleted/archived record accounting, snapshot payroll, date boundaries, status filters, and archive opt-in. The proposal was also exercised through authenticated API requests and a desktop/mobile browser with an isolated copied database. The generated workbook was read back with ExcelJS to verify sheet contents, numeric values, Arabic text, and formula-like string safety.
+
+Exports include separate parent course name/code and cycle number columns. Exports launched inside a course remain scoped to that parent, including when archived records are enabled.

@@ -1,6 +1,6 @@
 import prisma from '../db/prisma.js';
 export async function savePayrollRecord(courseId) {
-  const course = await prisma.course.findUnique({ where: { id: courseId }, include: { instructors: { include: { instructor: true } } } });
+  const course = await prisma.cycle.findUnique({ where: { id: courseId }, include: { instructors: { include: { instructor: true } } } });
   const existing = await prisma.payrollRecord.findUnique({ where: { courseId } });
   const instructors = JSON.stringify(course.instructors);
   if (existing?.isPaid) {

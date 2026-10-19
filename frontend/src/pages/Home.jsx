@@ -24,7 +24,7 @@ export default function Home() {
       error: false
     }));
     try {
-      const [courses, finances] = await Promise.all([axios.get('/courses'), manager ? axios.get(`/finances?month=${month}`) : Promise.resolve(null)]);
+      const [courses, finances] = await Promise.all([axios.get('/cycles'), manager ? axios.get(`/finances?month=${month}`) : Promise.resolve(null)]);
       setState({
         courses: courses.data.filter(course => !course.archivedAt),
         finances: finances?.data,
@@ -76,7 +76,7 @@ export default function Home() {
   return <div className="overview-page">
     <PageHeading eyebrow="Your day, at a glance" title={`Welcome back, ${firstName}.`} description="Here’s what’s happening with your courses and payroll.">
       <span className="date-label"><CalendarDays size={16} />{dateLabel}</span>
-      {manager && <Link className="btn-primary" to="/courses" state={{
+      {manager && <Link className="btn-primary" to="/courses/cycles" state={{
         create: true
       }}><Plus size={17} />New course</Link>}
     </PageHeading>
@@ -84,7 +84,7 @@ export default function Home() {
       <div className="home-summary">
         <section className="balance-card">
           <div className="balance-top"><span><Wallet size={17} />{manager ? 'Payroll snapshot' : 'Course snapshot'}</span><span className="balance-period">{manager ? monthLabel : 'All branches'}</span></div>
-          <div className="balance-body"><div><div className="balance-label">{manager ? 'Total monthly payroll' : 'Courses across the academy'}</div><div className="balance-amount">{manager ? money(total) : courses.length}<span>{manager ? 'EGP' : 'courses'}</span></div><Link to={manager ? '/finances' : '/courses'} className="balance-link">{manager ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
+          <div className="balance-body"><div><div className="balance-label">{manager ? 'Total monthly payroll' : 'Cycles across the academy'}</div><div className="balance-amount">{manager ? money(total) : courses.length}<span>{manager ? 'EGP' : 'cycles'}</span></div><Link to={manager ? '/finances' : '/courses'} className="balance-link">{manager ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
             <div className="payroll-ring" style={{
               '--progress': `${manager ? percent : courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}%`
             }} aria-label={manager ? `${percent}% of payroll paid` : 'Course completion'}><div><strong>{manager ? percent : courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}<small>%</small></strong><span>{manager ? 'paid' : 'completed'}</span></div></div>
@@ -93,36 +93,36 @@ export default function Home() {
         </section>
         <Metric tone="blue" icon={BookOpen} label="Active courses" value={String(active.length).padStart(2, '0')} detail={`${courses.length} courses in your workspace`}><div className="metric-footer"><span className="micro-bar"><i style={{
                 "--runtime-width": `${courses.length ? active.length / courses.length * 100 : 0}%`
-              }} className="home-presentation-12" /></span><Link to="/courses" state={{
+              }} className="home-presentation-12" /></span><Link to="/courses/cycles" state={{
               status: 'active'
             }} aria-label="View active courses"><ArrowUpRight size={17} /></Link></div></Metric>
         <Metric tone="peach" icon={Users} label="Teaching team" value={String(instructors.size).padStart(2, '0')} detail="Instructors assigned to courses"><div className="metric-footer"><div className="avatar-stack">{[...new Map(courses.flatMap(c => c.instructors.map(i => [i.instructorId, i.instructor.name]))).values()].slice(0, 3).map((name, index) => <span key={name} style={{
                 '--avatar-color': ['#dee5fe', '#ffdfca', '#d3efea'][index]
               }} title={name}>{name.slice(0, 1)}</span>)}</div><Link to={manager ? '/instructors' : '/courses'} aria-label="View teaching team"><ArrowUpRight size={17} /></Link></div></Metric>
       </div>
-      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${manager ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an instructor` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses" state={pending.length ? {
+      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${manager ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an instructor` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses/cycles" state={pending.length ? {
           status: 'pending',
           openReviewId: manager ? pending[0].id : null
         } : unassigned.length ? {
           status: 'unassigned'
         } : null}>{pending.length ? 'View requests' : 'View courses'}<ArrowRight size={16} /></Link></div>
       <div className="overview-columns">
-        <section className="panel course-overview"><div className="panel-heading"><div><h2>Course activity</h2><p>The latest across your teaching team</p></div><Link className="subtle-button" to="/courses">View all<ArrowUpRight size={15} /></Link></div>
-          {recent.length ? <div className="activity-list">{recent.map((c, index) => <Link key={c.id} className="activity-course" to="/courses" state={{
+        <section className="panel course-overview"><div className="panel-heading"><div><h2>Cycle activity</h2><p>The latest across your teaching team</p></div><Link className="subtle-button" to="/courses">View all<ArrowUpRight size={15} /></Link></div>
+          {recent.length ? <div className="activity-list">{recent.map((c, index) => <Link key={c.id} className="activity-course" to={`/courses/${c.parentCourseId}`} state={{
               search: c.name
             }}><span className={`course-glyph glyph-${index % 4}`}><BookOpen size={21} strokeWidth={1.7} /></span><div className="activity-course-main"><strong>{c.name}</strong><span>{c.branch.replaceAll('-', ' ')}<i />{c.totalHours || '—'} hours<span className="activity-team"> · {c.instructors.length ? c.instructors.map(i => i.instructor.name).join(', ') : 'Unassigned'}</span></span></div><Status complete={c.isFinished}>{c.isFinished ? 'Completed' : 'In progress'}</Status><ArrowUpRight className="activity-arrow" size={17} /></Link>)}</div> : <EmptyState title="Your next course starts here" description="Create a course, add your teaching team, and keep everything connected."><Link to="/courses" className="btn-primary">Go to courses<ArrowRight size={16} /></Link></EmptyState>}
-          <div className="panel-footnote"><span className="status-dot" />{courses.length} courses · {branches.length} branches<span>Updated from your workspace</span></div>
+          <div className="panel-footnote"><span className="status-dot" />{courses.length} cycles · {branches.length} branches<span>Updated from your workspace</span></div>
         </section>
-        <section className="panel campus-panel"><div className="panel-heading"><div><h2>Across the academy</h2><p>Course distribution by branch</p></div><span className="panel-icon"><Building2 size={19} /></span></div><div className="campus-total"><strong>{branches.length}</strong><span>connected<br />branches</span><div className="campus-pattern" aria-hidden="true"><i /><i /><i /><i /></div></div><div className="campus-bars">{branches.length ? branches.map(([branch, count]) => <Link to="/courses" state={{
+        <section className="panel campus-panel"><div className="panel-heading"><div><h2>Across the academy</h2><p>Cycle distribution by branch</p></div><span className="panel-icon"><Building2 size={19} /></span></div><div className="campus-total"><strong>{branches.length}</strong><span>connected<br />branches</span><div className="campus-pattern" aria-hidden="true"><i /><i /><i /><i /></div></div><div className="campus-bars">{branches.length ? branches.map(([branch, count]) => <Link to="/courses/cycles" state={{
               branch
             }} className="campus-row" key={branch}><div><span><i style={{
                     "--runtime-background": getBranchColor(branch)
-                  }} className="home-presentation-13" />{branch.replaceAll('-', ' ')}</span><strong>{count}<small> courses</small></strong></div><div className="campus-track"><span style={{
+                  }} className="home-presentation-13" />{branch.replaceAll('-', ' ')}</span><strong>{count}<small> cycles</small></strong></div><div className="campus-track"><span style={{
                   "--runtime-width": `${count / courses.length * 100}%`,
                   "--runtime-background": getBranchColor(branch)
                 }} className="home-presentation-14" /></div></Link>) : <p className="muted">Your branches will appear as courses are added.</p>}</div><div className="campus-footer"><span>One academy. A shared view.</span><ArrowUpRight size={16} /></div></section>
       </div>
-      <div className="overview-links"><Link to="/courses" state={manager ? {
+      <div className="overview-links"><Link to={manager ? "/courses" : "/courses/cycles"} state={manager ? {
           create: true
         } : {
           status: 'unassigned'

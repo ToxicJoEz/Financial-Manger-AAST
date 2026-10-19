@@ -17,3 +17,11 @@ test('Vercel API uses an isolated writable copy; a new instance restores the fix
     assert.match(output, /PASS:/);
   }
 });
+
+test('Course/cycle workflows preserve financial and access invariants', async () => {
+  const hash = await bcrypt.hash('IsolatedDemoTest!123', 10);
+  const accounts = JSON.parse(readFileSync(new URL('../demo/accounts.json', import.meta.url), 'utf8'));
+  const passwordMap = JSON.stringify(Object.fromEntries(accounts.filter(account => account.username !== 'main-admin').map(account => [account.username, hash])));
+  const output=execFileSync(process.execPath,[fileURLToPath(new URL('./fixtures/cycleWorkflow.js',import.meta.url))],{encoding:'utf8',timeout:45000,env:{...process.env,VERCEL:'1',VERCEL_SQLITE_DEMO:'1',JWT_SECRET:'isolated-cycle-jwt-'.repeat(4),SSO_JWT_SECRET:'isolated-cycle-sso-'.repeat(4),MAIN_ADMIN_PASSWORD_HASH:hash,DEMO_USER_PASSWORD_HASHES:passwordMap,NODE_ENV:'production'}});
+  assert.match(output,/PASS:/);
+});

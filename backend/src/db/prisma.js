@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
-import pkg from '@prisma/client';
+import pkg from '../../generated/client/index.js';
 import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-const auditedModels = new Set(['user', 'course', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord']);
+const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord']);
 
 // Controllers use the same client inside atomic(), including their existing transaction callbacks.
 const prisma = new Proxy(base, {

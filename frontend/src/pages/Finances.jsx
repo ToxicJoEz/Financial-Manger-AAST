@@ -60,7 +60,7 @@ const Finances = () => {
   const handleTogglePaid = async (courseId, currentStatus) => {
     setUpdating(courseId);
     try {
-      await axios.put(`/courses/${courseId}/payment`, {
+      await axios.put(`/cycles/${courseId}/payment`, {
         isPaid: !currentStatus
       });
       toast.success(currentStatus ? 'Marked as unpaid' : 'Marked as paid');
@@ -164,7 +164,7 @@ const Finances = () => {
           <Metric tone="violet" label="Teaching team" value={String(data.instructors.length).padStart(2, '0')} detail={data.branches.length + ' branches represented'} />
         </div>
         <div className="section-tabs" aria-label="Payroll breakdown">
-          {[['instructors', 'Instructor payroll', data.instructors.length], ['branches', 'Branch expenses', data.branches.length], ['courses', 'Course breakdown', data.courses.length]].map(([value, label, count]) => <MotionTab key={value} active={activeTab === value} onClick={() => setActiveTab(value)}>{label}<span>{count}</span></MotionTab>)}
+          {[['instructors', 'Instructor payroll', data.instructors.length], ['branches', 'Branch expenses', data.branches.length], ['courses', 'Cycle breakdown', data.courses.length]].map(([value, label, count]) => <MotionTab key={value} active={activeTab === value} onClick={() => setActiveTab(value)}>{label}<span>{count}</span></MotionTab>)}
         </div>
         <MotionRegion transitionKey={activeTab} className="panel">
           {activeTab === 'courses' ? <div className="filter-toolbar"><div className="search-field"><Search size={16} /><input aria-label="Filter payroll courses" placeholder="Search courses…" value={filterCourse} onChange={e => setFilterCourse(e.target.value)} /></div><div className="filter-select"><CustomFilterDropdown value={filterPaymentStatus} onChange={val => setFilterPaymentStatus(val || 'All')} placeholder="All payment statuses" options={[{
@@ -181,13 +181,13 @@ const Finances = () => {
               label: b
             }))} /></div></div> : <div className="payroll-caption"><h2>{activeTab === 'instructors' ? 'Instructor earnings' : 'Expenses by branch'}</h2><span>All amounts in Egyptian pounds · EGP</span></div>}
           <div className="table-scroll"><table className="data-table payroll-table">
-            <thead>{activeTab === 'instructors' ? <tr><th>Instructor</th><th>Courses</th><th>Hours</th><th className="number">Outstanding</th><th className="number">Paid</th><th className="number">Total earnings</th></tr> : activeTab === 'branches' ? <tr><th>Branch</th><th>Share of payroll</th><th className="number">Outstanding</th><th className="number">Paid</th><th className="number">Total expense</th></tr> : <tr><th>Course / branch</th><th>Teaching hours</th><th className="number">Course payout</th><th>Payment</th></tr>}</thead>
+            <thead>{activeTab === 'instructors' ? <tr><th>Instructor</th><th>Courses</th><th>Hours</th><th className="number">Outstanding</th><th className="number">Paid</th><th className="number">Total earnings</th></tr> : activeTab === 'branches' ? <tr><th>Branch</th><th>Share of payroll</th><th className="number">Outstanding</th><th className="number">Paid</th><th className="number">Total expense</th></tr> : <tr><th>Cycle / branch</th><th>Teaching hours</th><th className="number">Cycle payout</th><th>Payment</th></tr>}</thead>
             <tbody>
               {activeTab === 'instructors' && data.instructors.map(i => <tr key={i.id}><td><div className="instructor-name"><span className="mini-avatar">{i.name.slice(0, 1)}</span><span><strong>{i.name}</strong><small>{i.employeeId || 'No employee ID'}</small></span></div></td><td>{i.coursesTaught}</td><td className="tabular">{i.totalHours}<span className="muted"> h</span></td><td className="number">{i.totalUnpaid ? money(i.totalUnpaid) : <span className="muted-number">—</span>}</td><td className="number">{i.totalPaid ? money(i.totalPaid) : <span className="muted-number">—</span>}</td><td className="number currency">{money(i.totalPayout)}</td></tr>)}
               {activeTab === 'branches' && data.branches.map(b => <tr key={b.name}><td><strong className="table-title">{b.name}</strong></td><td><span className="muted">{data.summary.totalPayroll ? Math.round(b.totalPayout / data.summary.totalPayroll * 100) : 0}%</span><div className="branch-share"><span style={{
                       "--runtime-width": (data.summary.totalPayroll ? b.totalPayout / data.summary.totalPayroll * 100 : 0) + '%'
                     }} className="finances-presentation-11" /></div></td><td className="number">{b.totalUnpaid ? money(b.totalUnpaid) : <span className="muted-number">—</span>}</td><td className="number">{b.totalPaid ? money(b.totalPaid) : <span className="muted-number">—</span>}</td><td className="number currency">{money(b.totalPayout)}</td></tr>)}
-              {activeTab === 'courses' && filteredCourses.map(c => <tr key={c.id}><td><strong className="table-title">{c.name}</strong><small>{c.branch}</small></td><td>{c.instructors.map((i, index) => <div key={index}>{i.name}<small>{i.hoursTaught || 0} h × {money(i.hourlyRate)} EGP</small></div>)}</td><td className="number currency">{money(c.totalPayout)}</td><td><button className={'payment-toggle ' + (c.isPaid ? 'paid' : '')} disabled={updating !== null} onClick={() => handleTogglePaid(c.id, c.isPaid)} title={c.isPaid ? 'Mark this course as unpaid' : 'Mark this course as paid'}>{updating === c.id ? 'Updating…' : c.isPaid ? 'Paid · Undo' : 'Mark as paid'}</button></td></tr>)}
+              {activeTab === 'courses' && filteredCourses.map(c => <tr key={c.id}><td><strong className="table-title">{c.name}</strong><small>{c.courseCode ? c.courseCode + ' · ' : ''}{c.branch}</small></td><td>{c.instructors.map((i, index) => <div key={index}>{i.name}<small>{i.hoursTaught || 0} h × {money(i.hourlyRate)} EGP</small></div>)}</td><td className="number currency">{money(c.totalPayout)}</td><td><button className={'payment-toggle ' + (c.isPaid ? 'paid' : '')} disabled={updating !== null} onClick={() => handleTogglePaid(c.id, c.isPaid)} title={c.isPaid ? 'Mark this course as unpaid' : 'Mark this course as paid'}>{updating === c.id ? 'Updating…' : c.isPaid ? 'Paid · Undo' : 'Mark as paid'}</button></td></tr>)}
             </tbody>
           </table></div>
           {activeTab === 'courses' && !filteredCourses.length && <div className="empty-state"><h3>No matching courses</h3><p>Adjust the filters to find the courses you're looking for.</p><button className="btn-secondary" onClick={() => {

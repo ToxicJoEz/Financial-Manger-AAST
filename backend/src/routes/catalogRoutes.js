@@ -1,0 +1,12 @@
+import express from 'express';
+import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { listCourses, getCourse, createCourse, editCourse, archiveCourse, restoreCourse } from '../controllers/catalogController.js';
+const router = express.Router();
+router.use(protect);
+router.get('/', listCourses);
+router.get('/:id', getCourse);
+router.post('/', modOrAbove, createCourse);
+router.put('/:id', modOrAbove, editCourse);
+router.delete('/:id', modOrAbove, archiveCourse);
+router.post('/:id/restore', modOrAbove, restoreCourse);
+export default router;

@@ -22,7 +22,7 @@ export function courseView(course, user) {
   const counted = all.filter(entry => !entry.financialArchivedAt);
   const totalExpectedRevenue = counted.reduce((sum, row) => sum + row.effectiveFee, 0);
   const totalCollectedRevenue = counted.reduce((sum, row) => sum + row.amountPaid, 0);
-  return hidePayroll({ ...course, enrollments: visible, totalEnrolled: visible.filter(entry => !entry.deletedAt).length, totalExpectedRevenue, totalCollectedRevenue,
+  return hidePayroll({ ...course, enrollments: visible, totalEnrolled: visible.filter(entry => !entry.deletedAt && !entry.student?.deletedAt && !entry.financialArchivedAt).length, totalExpectedRevenue, totalCollectedRevenue,
     // Sum each student's debt separately; historical credits never offset another student's debt.
     totalRemainingBalance: counted.reduce((sum, row) => sum + row.remainingBalance, 0) }, user);
 }

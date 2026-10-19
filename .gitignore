@@ -35,3 +35,5 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+/backend/generated/

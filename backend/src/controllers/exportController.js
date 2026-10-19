@@ -3,12 +3,13 @@ import { allowedSheets, buildExport, managerRole } from '../utils/exportData.js'
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 export const exportOptions = async (req, res, next) => {
   try {
-    const courses = await prisma.course.findMany({
+    const courses = await prisma.cycle.findMany({
       where: managerRole(req.user) ? {} : {
         archivedAt: null
       },
       select: {
         id: true,
+        parentCourseId: true,
         name: true,
         branch: true,
         archivedAt: true
@@ -54,7 +55,7 @@ export const prepareExport = async (req, res, next) => {
         error: 'Select valid, unique columns for each worksheet.'
       });
     }
-    if (Object.keys(filters).some(key => !['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus', 'includeArchived'].includes(key)) || ['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus'].some(key => filters[key] !== undefined && typeof filters[key] !== 'string') || filters.includeArchived !== undefined && typeof filters.includeArchived !== 'boolean') return res.status(400).json({
+    if (Object.keys(filters).some(key => !['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus', 'includeArchived','parentCourseId'].includes(key)) || ['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus','parentCourseId'].some(key => filters[key] !== undefined && typeof filters[key] !== 'string') || filters.includeArchived !== undefined && typeof filters.includeArchived !== 'boolean') return res.status(400).json({
       error: 'Invalid export filters.'
     });
     if (filters.includeArchived && !managerRole(req.user)) return res.status(403).json({
@@ -68,6 +69,7 @@ export const prepareExport = async (req, res, next) => {
     });
     const result = await prisma.$transaction(async tx => {
       const where = {
+        ...(filters.parentCourseId ? { parentCourseId: filters.parentCourseId } : {}),
         ...(!filters.includeArchived ? {
           archivedAt: null
         } : {}),
@@ -88,7 +90,7 @@ export const prepareExport = async (req, res, next) => {
           id: filters.courseId
         } : {})
       };
-      const count = await tx.course.count({
+      const count = await tx.cycle.count({
         where
       });
       const enrollmentCount = await tx.enrollment.count({
@@ -99,9 +101,10 @@ export const prepareExport = async (req, res, next) => {
       if (count > 10000 || enrollmentCount > 20000) throw Object.assign(new Error('Export is too large. Choose a course or branch to narrow the selection.'), {
         status: 413
       });
-      const courses = await tx.course.findMany({
+      const courses = await tx.cycle.findMany({
         where,
         include: {
+          parentCourse: true,
           enrollments: {
             include: {
               student: true

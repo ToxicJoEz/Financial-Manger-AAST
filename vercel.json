@@ -22,7 +22,7 @@
       "buildCommand": "npm run build",
       "functions": {
         "src/vercel.js": {
-          "includeFiles": "{demo/demo.db,node_modules/.prisma/client/**}",
+          "includeFiles": "{demo/demo.db,generated/client/**}",
           "maxDuration": 60
         }
       }

@@ -12,7 +12,7 @@ export const getFinances = async (req, res) => {
       return res.status(400).json({ error: 'Month parameter must be in YYYY-MM format (e.g. 2026-09)' });
     }
 
-    const records = await prisma.payrollRecord.findMany({ where: { payrollMonth: month } });
+    const records = await prisma.payrollRecord.findMany({ where: { payrollMonth: month }, include: { course: { include: { parentCourse: true } } } });
     const finishedCourses = records.map(record => ({ ...record, id: record.courseId, instructors: JSON.parse(record.instructors) }));
 
     let totalPayroll = 0;
@@ -89,6 +89,10 @@ export const getFinances = async (req, res) => {
 
       coursesData.push({
         id: course.id,
+        parentCourseId: course.course?.parentCourseId,
+        courseCode: course.course?.parentCourse?.code,
+        courseName: course.course?.parentCourse?.name,
+        cycleNumber: course.course?.cycleNumber,
         name: course.name,
         branch: course.branch,
         instructorNames: instructorNames.join(', '),

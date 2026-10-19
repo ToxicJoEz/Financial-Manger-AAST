@@ -8,7 +8,7 @@ import { MotionRegion, MotionTab } from '../components/WorkspaceMotion';
 import Dialog from '../components/Dialog';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { ChevronDown, ArrowUpRight, Clock3, LayoutGrid, List, CalendarDays, Users, ChevronRight, AlertTriangle, GraduationCap, DollarSign } from 'lucide-react';
 import { PageHeading, EmptyState, Status, initials } from '../components/WorkspaceUI';
 import { Plus, Edit2, RotateCcw, Trash2, BookOpen, X, CheckCircle, Search, Filter, ClipboardCheck } from 'lucide-react';
@@ -21,6 +21,10 @@ const Courses = () => {
   const {
     user
   } = useContext(AuthContext);
+  const { courseId: parentId } = useParams();
+  const [parentCourse, setParentCourse] = useState(null);
+  const filterKey = 'aast-cycle-filters:' + (parentId || 'all');
+  const savedFilters = (() => { try { return JSON.parse(sessionStorage.getItem(filterKey)) || {}; } catch { return {}; } })();
   const location = useLocation();
   const navigate = useNavigate();
   const [expandedCourse, setExpandedCourse] = useState(null);
@@ -57,9 +61,9 @@ const Courses = () => {
 
   // Filter states
 
-  const [filterName, setFilterName] = useState('');
-  const [filterBranch, setFilterBranch] = useState('');
-  const [filterStatus, setFilterStatus] = useState(''); // '', 'active', 'finished'
+  const [filterName, setFilterName] = useState(savedFilters.search || '');
+  const [filterBranch, setFilterBranch] = useState(savedFilters.branch || '');
+  const [filterStatus, setFilterStatus] = useState(savedFilters.status || ''); // '', 'active', 'finished'
 
   // Enrollment State
 
@@ -94,17 +98,20 @@ const Courses = () => {
   const [instructorHours, setInstructorHours] = useState({});
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [parentId]);
+  useEffect(() => { sessionStorage.setItem(filterKey, JSON.stringify({ search: filterName, branch: filterBranch, status: filterStatus })); }, [filterName, filterBranch, filterStatus, filterKey]);
   const fetchData = async () => {
     setLoadError(false);
     try {
-      const [coursesRes, instructorsRes, studentsRes] = await Promise.all([axios.get('/courses'), axios.get('/instructors'), axios.get('/students')]);
+      const [coursesRes, instructorsRes, studentsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: parentId ? { parentCourseId: parentId } : {} }), axios.get('/instructors'), axios.get('/students'), parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
+      setParentCourse(parentRes.data);
+      if (parentRes.data?.archivedAt && !savedFilters.status) setFilterStatus('archived');
       setCourses(coursesRes.data);
       setInstructorsList(instructorsRes.data);
       setStudentsList(studentsRes.data);
     } catch (error) {
       setLoadError(true);
-      toast.error('Could not load courses. Please try again.');
+      toast.error('Could not load cycles. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -112,8 +119,8 @@ const Courses = () => {
   const handleAddSubmit = async e => {
     e.preventDefault();
     try {
-      await axios.post('/courses', {
-        name,
+      await axios.post('/cycles', {
+        parentCourseId: parentId, cycleNumber: name,
         branch,
         details,
         startDate: startDate || null,
@@ -121,7 +128,7 @@ const Courses = () => {
         totalHours: totalHours || null,
         courseFee: courseFee || 0
       });
-      toast.success('Course created');
+      toast.success('Cycle created');
       setIsAddModalOpen(false);
       resetForm();
       fetchData();
@@ -132,8 +139,8 @@ const Courses = () => {
   const handleEditSubmit = async e => {
     e.preventDefault();
     try {
-      await axios.put(`/courses/${editingCourse.id}`, {
-        name: editingCourse.name,
+      await axios.put(`/cycles/${editingCourse.id}`, {
+        cycleNumber: editingCourse.cycleNumber,
         branch: editingCourse.branch,
         details: editingCourse.details,
         startDate: editingCourse.startDate || null,
@@ -143,7 +150,7 @@ const Courses = () => {
         totalHours: editingCourse.totalHours || null,
         courseFee: editingCourse.courseFee || 0
       });
-      toast.success('Course updated');
+      toast.success('Cycle updated');
       setEditingCourse(null);
       fetchData();
     } catch (error) {
@@ -152,8 +159,8 @@ const Courses = () => {
   };
   const confirmDelete = async () => {
     try {
-      await axios.delete(`/courses/${deleteId}`);
-      toast.success('Course archived');
+      await axios.delete(`/cycles/${deleteId}`);
+      toast.success('Cycle archived');
       setDeleteId(null);
       fetchData();
     } catch (error) {
@@ -223,7 +230,7 @@ const Courses = () => {
       titleColor: "appearance-text-amber-700",
       action: async () => {
         try {
-          await axios.post(`/courses/${courseId}/revert`);
+          await axios.post(`/cycles/${courseId}/revert`);
           toast.success('Course reverted to active');
           fetchData();
         } catch (error) {
@@ -242,7 +249,7 @@ const Courses = () => {
       titleColor: "appearance-text-red-700",
       action: async () => {
         try {
-          const res = await axios.delete(`/courses/${courseId}/instructors/${courseInstructorId}`);
+          const res = await axios.delete(`/cycles/${courseId}/instructors/${courseInstructorId}`);
           toast.success(res.data?.message || 'Instructor removed');
           fetchData();
         } catch (error) {
@@ -258,7 +265,7 @@ const Courses = () => {
         courseInstructorId: id,
         hoursTaught: instructorHours[id]
       }));
-      await axios.post(`/courses/${finishingCourse.id}/finish`, {
+      await axios.post(`/cycles/${finishingCourse.id}/finish`, {
         totalHours: finishTotalHours,
         payrollMonth: finishPayrollMonth,
         instructorHours: ih
@@ -302,7 +309,7 @@ const Courses = () => {
     try {
       let customFeePayload = null;
       if (editFeeType === 'waive') customFeePayload = 0;else if (editFeeType === 'custom') customFeePayload = editCustomFee ? parseFloat(editCustomFee) : null;
-      await axios.put(`/courses/${editingEnrollment.courseId}/enrollments/${editingEnrollment.enrollment.id}`, {
+      await axios.put(`/cycles/${editingEnrollment.courseId}/enrollments/${editingEnrollment.enrollment.id}`, {
         customFee: customFeePayload
       });
       toast.success('Enrollment payment updated');
@@ -328,7 +335,7 @@ const Courses = () => {
         courseId,
         enrollment
       } = removingEnrollment;
-      await axios.delete(`/courses/${courseId}/enrollments/${enrollment.id}`, {
+      await axios.delete(`/cycles/${courseId}/enrollments/${enrollment.id}`, {
         data: {
           keepFinancialRecords: keepEnrollmentFinancials,
           confirm: confirmEnrollmentRemoval
@@ -376,7 +383,7 @@ const Courses = () => {
     if (requestedBranch) setFilterBranch(requestedBranch);
     if (search) setFilterName(search);
     if (status) setFilterStatus(status);
-    if (create && user.role !== 'user') setIsAddModalOpen(true);
+    if (create && user.role !== 'user') { if (!parentId) { navigate('/courses', { state: { create: true }, replace: true }); return; } setName(String(parentCourse?.nextCycleNumber || '')); setIsAddModalOpen(true); }
     if (openReviewId && user.role !== 'user') {
       const course = courses.find(c => c.pendingAssignments?.some(p => p.id === openReviewId));
       if (course) {
@@ -389,20 +396,21 @@ const Courses = () => {
       state: null
     });
   }, [loading, location.state, courses, navigate, location.pathname, user.role]);
-  if (loading) return <div className="loading-state"><span className="loading-spinner" />Loading your courses…</div>;
+  if (loading) return <div className="loading-state"><span className="loading-spinner" />Loading cycles…</div>;
   if (loadError) return <section className="panel"><EmptyState title="Courses couldn’t be loaded" description="Check your connection and try again."><button className="btn-primary" onClick={fetchData}>Try again</button></EmptyState></section>;
-  return <div className="courses-page">
+  return <div className="courses-page cycles-page">
 
-      <PageHeading eyebrow="Learning in motion" title="Courses" description="Great courses start with a great team. Bring yours together.">
+      <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} /><span>{parentCourse?.name || 'All cycles'}</span></nav>
+      <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
 
-        <ExcelExportButton />
-        {user.role !== 'user' && <button className="btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={16} />New course</button>}
+        <ExcelExportButton parentCourseId={parentId} />
+        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
 
       </PageHeading>
 
       <div className="section-tabs" aria-label="Course status">
 
-        {[['', 'All courses', courses.filter(c => !c.archivedAt).length], ['active', 'Active', courses.filter(c => !c.archivedAt && !c.isFinished).length], ['finished', 'Completed', courses.filter(c => !c.archivedAt && c.isFinished).length], ['tuition-due', 'Tuition outstanding', courses.filter(tuitionOutstanding).length], ...(user.role !== 'user' ? [['payroll-due', 'Instructor payments due', courses.filter(c => instructorPaymentOutstanding(c, user.role)).length]] : []), ['pending', 'Pending approval', courses.filter(c => !c.archivedAt && c.pendingAssignments?.length).length], ...(user.role !== 'user' ? [['archived', 'Archived', courses.filter(c => c.archivedAt).length]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
+        {[['', 'All cycles', courses.filter(c => !c.archivedAt).length], ['active', 'Active', courses.filter(c => !c.archivedAt && !c.isFinished).length], ['finished', 'Completed', courses.filter(c => !c.archivedAt && c.isFinished).length], ['tuition-due', 'Tuition outstanding', courses.filter(tuitionOutstanding).length], ...(user.role !== 'user' ? [['payroll-due', 'Instructor payments due', courses.filter(c => instructorPaymentOutstanding(c, user.role)).length]] : []), ['pending', 'Pending approval', courses.filter(c => !c.archivedAt && c.pendingAssignments?.length).length], ...(user.role !== 'user' ? [['archived', 'Archived', courses.filter(c => c.archivedAt).length]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
 
       </div>
 
@@ -412,13 +420,13 @@ const Courses = () => {
 
         <div className="filter-toolbar">
 
-          <div className="search-field"><Search size={17} /><input aria-label="Search courses" placeholder="Search courses, instructors, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
+          <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, instructors, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
 
           <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={BRANCH_OPTIONS} placeholder="All branches" /></div>
 
           {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}
 
-          <span className="result-count">{filteredCourses.length} courses</span><div className="view-switch" aria-label="Course view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
+          <span className="result-count">{filteredCourses.length} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
             setView('grid');
             localStorage.setItem('aast-course-view', 'grid');
           }}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => {
@@ -438,7 +446,7 @@ const Courses = () => {
             setExpandedCourse(null);
             setIsAssignModalOpen(true);
           }} onRestore={async () => {
-            await axios.post(`/courses/${course.id}/restore`);
+            await axios.post(`/cycles/${course.id}/restore`);
             fetchData();
           }} onExpand={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)} onAssign={() => {
             setReplacementAssignmentId(null);
@@ -463,7 +471,7 @@ const Courses = () => {
                 setExpandedCourse(null);
                 setIsAssignModalOpen(true);
               }} onRestore={async () => {
-                await axios.post(`/courses/${course.id}/restore`);
+                await axios.post(`/cycles/${course.id}/restore`);
                 fetchData();
               }} onExpand={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)} onAssign={() => {
                 setReplacementAssignmentId(null);
@@ -482,11 +490,11 @@ const Courses = () => {
                 setInstructorHours(ih);
               }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</tbody></table></div>}
 
-        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{courses.length ? 'No matching courses' : 'A fresh start for your courses'}</h3><p>{courses.length ? 'Try a different search or reset your filters.' : 'Create your first course to start building the teaching team.'}</p>{courses.length > 0 && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
+        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{courses.length ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{courses.length ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{courses.length > 0 && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
 
         </MotionRegion>
 
-        <div className="panel-footnote">Showing {filteredCourses.length} of {courses.length} courses<span>Expand a course to manage its details</span></div>
+        <div className="panel-footnote">Showing {filteredCourses.length} of {courses.length} cycles<span>Expand a cycle to manage its details</span></div>
 
       </section>
 
@@ -494,13 +502,13 @@ const Courses = () => {
 
       {/* Add Course Modal */}
 
-      <AnimatePresence>{isAddModalOpen && <Dialog title="Create course" onClose={() => setIsAddModalOpen(false)}>
+      <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
 
           <div className="modal-content card max-w-lg w-full relative">
 
             <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
 
-              <Plus size={20} className="appearance-text-emerald-600" /> Create Course
+              <Plus size={20} className="appearance-text-emerald-600" /> Create Cycle
 
             </h3>
 
@@ -508,9 +516,9 @@ const Courses = () => {
 
               <div>
 
-                <label className="input-label appearance-text-emerald-900">Course Name</label>
+                <label className="input-label appearance-text-emerald-900">Cycle number</label>
 
-                <input type="text" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required />
+                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required /><small className="muted">Suggested next number. You can enter another unused number; numbering is shared across branches.</small>
 
               </div>
 
@@ -554,7 +562,7 @@ const Courses = () => {
 
                 <div className="flex-1">
 
-                  <label className="input-label appearance-text-emerald-900">Total Course Hours</label>
+                  <label className="input-label appearance-text-emerald-900">Total Cycle Hours</label>
 
                   <input type="number" step="0.5" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={totalHours} onChange={e => setTotalHours(e.target.value)} />
 
@@ -586,15 +594,15 @@ const Courses = () => {
 
 
 
-      {/* Edit Course Modal */}
+      {/* Edit Cycle Modal */}
 
-      <AnimatePresence>{editingCourse && <Dialog title="Edit course" onClose={() => setEditingCourse(null)}>
+      <AnimatePresence>{editingCourse && <Dialog title="Edit cycle" onClose={() => setEditingCourse(null)}>
 
           <div className="modal-content card max-w-lg w-full relative">
 
             <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
 
-              <Edit2 size={18} className="appearance-text-emerald-600" /> Edit Course
+              <Edit2 size={18} className="appearance-text-emerald-600" /> Edit Cycle
 
             </h3>
 
@@ -602,11 +610,11 @@ const Courses = () => {
 
               <div>
 
-                <label className="input-label appearance-text-emerald-900">Course Name</label>
+                <label className="input-label appearance-text-emerald-900">Cycle number</label>
 
-                <input type="text" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.name} onChange={e => setEditingCourse({
+                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.cycleNumber} onChange={e => setEditingCourse({
                 ...editingCourse,
-                name: e.target.value
+                cycleNumber: e.target.value
               })} required />
 
               </div>
@@ -663,7 +671,7 @@ const Courses = () => {
 
                 <div className="flex-1">
 
-                  <label className="input-label appearance-text-emerald-900">Total Course Hours</label>
+                  <label className="input-label appearance-text-emerald-900">Total Cycle Hours</label>
 
                   <input type="number" step="0.5" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.totalHours || ''} onChange={e => setEditingCourse({
                   ...editingCourse,
@@ -755,7 +763,7 @@ const Courses = () => {
 
       {/* Finish Course Modal */}
 
-      <AnimatePresence>{finishingCourse && <Dialog title="Complete course" onClose={() => setFinishingCourse(null)}>
+      <AnimatePresence>{finishingCourse && <Dialog title="Complete cycle" onClose={() => setFinishingCourse(null)}>
 
           <div className="modal-content card max-w-md w-full relative">
 
@@ -771,7 +779,7 @@ const Courses = () => {
 
                 <div>
 
-                  <label className="input-label appearance-text-emerald-900">Total Course Hours</label>
+                  <label className="input-label appearance-text-emerald-900">Total Cycle Hours</label>
 
                   <input type="number" step="0.5" min="0.5" className="input-field appearance-border-emerald-200 appearance-focus-border-emerald-500" value={finishTotalHours} onChange={e => setFinishTotalHours(e.target.value)} required />
 
@@ -836,7 +844,7 @@ const Courses = () => {
 
       {/* Delete Confirmation Modal */}
 
-      <AnimatePresence>{deleteId && <Dialog title="Archive course" onClose={() => setDeleteId(null)}>
+      <AnimatePresence>{deleteId && <Dialog title="Archive cycle" onClose={() => setDeleteId(null)}>
 
           <div className="modal-content card max-w-sm w-full relative">
 
@@ -1236,7 +1244,7 @@ function CourseDetail({
 
       <div>
 
-        <div className="eyebrow">COURSE DETAILS</div>
+        <div className="eyebrow">CYCLE DETAILS</div>
 
         <h3>{course.name}</h3>
 
@@ -1254,11 +1262,11 @@ function CourseDetail({
 
         </div>
 
-        {manager && (course.archivedAt ? <div className="detail-actions"><span className="deleted-tag">Archived course · financial records retained</span><button className="btn-secondary" onClick={onRestore}>Restore course</button></div> : <div className="detail-actions">
+        {manager && (course.archivedAt ? <div className="detail-actions"><span className="deleted-tag">Archived cycle · financial records retained</span><button className="btn-secondary" onClick={onRestore}>Restore cycle</button></div> : <div className="detail-actions">
 
             <button className="btn-secondary" onClick={onEdit}><Edit2 size={14} />Edit details</button>
 
-            {!course.isFinished ? <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={14} />Complete course</button> : <button className="btn-secondary" onClick={onRevert}><RotateCcw size={14} />Reopen course</button>}
+            {!course.isFinished ? <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={14} />Complete cycle</button> : <button className="btn-secondary" onClick={onRevert}><RotateCcw size={14} />Reopen cycle</button>}
 
             <button className="icon-button danger" aria-label={'Archive ' + course.name} onClick={onDelete}><Trash2 size={16} /></button>
 
@@ -1298,7 +1306,7 @@ function CourseDetail({
 
                   <small>
 
-                    {manager ? `${ci.hourlyRate ? ci.hourlyRate + ' EGP / hour' : ''}${ci.hoursTaught != null ? (ci.hourlyRate ? ' · ' : '') + ci.hoursTaught + ' hours taught' : ''}` : ci.hoursTaught != null ? `${ci.hoursTaught} hours taught` : 'Course instructor'}
+                    {manager ? `${ci.hourlyRate ? ci.hourlyRate + ' EGP / hour' : ''}${ci.hoursTaught != null ? (ci.hourlyRate ? ' · ' : '') + ci.hoursTaught + ' hours taught' : ''}` : ci.hoursTaught != null ? `${ci.hoursTaught} hours taught` : 'Cycle instructor'}
 
                   </small>
 
@@ -1538,7 +1546,7 @@ function CourseTile(props) {
 
   <div className="course-tile-team">{course.instructors.length ? <><div className="avatar-stack">{course.instructors.slice(0, 3).map((ci, index) => <span key={ci.id} style={{
             '--avatar-color': ['#e5eaff', '#dcf3ef', '#ffeadc'][index]
-          }} title={ci.instructor.name}>{initials(ci.instructor.name)}</span>)}</div><div><strong>{course.instructors[0].instructor.name}</strong><small>{course.instructors.length > 1 ? '+' + (course.instructors.length - 1) + ' co-instructor' : 'Course instructor'}</small></div></> : <><span className="unassigned-avatar"><Users size={18} /></span><div><strong>Room for a great instructor</strong><small>Ready to assign</small></div></>}</div>
+          }} title={ci.instructor.name}>{initials(ci.instructor.name)}</span>)}</div><div><strong>{course.instructors[0].instructor.name}</strong><small>{course.instructors.length > 1 ? '+' + (course.instructors.length - 1) + ' co-instructor' : 'Cycle instructor'}</small></div></> : <><span className="unassigned-avatar"><Users size={18} /></span><div><strong>Room for a great instructor</strong><small>Ready to assign</small></div></>}</div>
 
   
 
@@ -1590,9 +1598,9 @@ function CourseTile(props) {
 
   {course.pendingAssignments?.length > 0 && <div className="tile-pending"><Clock3 size={13} />{course.pendingAssignments.length} pending approval</div>}
 
-  <div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Course details'}<ChevronRight size={16} /></button></div>
+  <div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Cycle details'}<ChevronRight size={16} /></button></div>
 
-  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>Course details</h2></div><button className="icon-button" aria-label="Close course details" onClick={onExpand}><X size={20} /></button></div><CourseDetail {...props} onEdit={() => {
+  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>Cycle details</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div><CourseDetail {...props} onEdit={() => {
             onExpand();
             props.onEdit();
           }} onDelete={() => {

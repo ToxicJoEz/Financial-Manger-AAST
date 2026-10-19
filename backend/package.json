@@ -10,7 +10,8 @@
     "test": "node --test test/*.test.js",
     "demo:generate": "node src/scripts/createDemoDatabase.js",
     "password:hash": "node src/scripts/hashPassword.js",
-    "build": "prisma generate"
+    "build": "prisma generate",
+    "postinstall": "prisma generate"
   },
   "keywords": [],
   "author": "",

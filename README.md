@@ -43,7 +43,7 @@ Paste the resulting hash into `MAIN_ADMIN_PASSWORD_HASH`. Do not add secrets to 
 
 ### Database behavior
 
-`backend/demo/demo.db` is an intentionally tracked demo fixture generated from an empty schema and the approved local account snapshot. It retains the requested account identities but excludes usable credentials and private contact details. Teaching and financial demo records are synthetic, and all student and instructor names are Arabic. It includes four courses, eight students, completed paid/unpaid payroll, active tuition, partial payments, and exemption. Use October **2026** to exercise reports.
+`backend/demo/demo.db` is an intentionally tracked demo fixture generated from an empty schema and the approved local account snapshot. It retains the requested account identities but excludes usable credentials and private contact details. Teaching and financial demo records are synthetic, and all student and instructor names are Arabic. It includes three umbrella courses, seven cycles, eight students, completed paid/unpaid payroll, active tuition, partial payments, and exemption. Use October **2026** to exercise reports.
 
 On each Vercel process's first initialization, the fixture is copied once to an isolated temporary writable directory. Repeated requests in that process reuse the same copy. Different instances do not share writes, and replacements start again from the fixture. **Changes may disappear between requests, not only after redeployment.** This is not persistent database hosting or production support for SQLite on Vercel. In-memory lockouts and SSO replay tracking are also instance-local.
 
@@ -84,3 +84,9 @@ Actual Vercel function packaging, Linux execution, and deployed routing must add
 5. On a VM, keep the SQLite file on persistent storage and do not set `VERCEL=1`. Serve the built frontend with your web server and proxy `/api` to Express. The relative frontend API paths remain unchanged.
 
 No Docker, Railway, or external database is required by this repository. The working `.env`, local databases, backups, temporary scripts, and unrelated embedded frontend project are excluded from Git. Only the demo fixture and approved account-identity snapshot are intentionally included; password hashes are supplied privately at runtime.
+
+## Courses and cycles
+
+`Course` stores the umbrella name and unique code. `Cycle` owns branch, dates, tuition, instructors, enrollments, and payroll. Cycle numbers are positive integers (up to 2,147,483,647), unique per parent across branches, including archived cycles. Suggestions use the highest reserved number plus one and remain editable. `/api/courses` manages umbrellas; `/api/cycles` manages operations, optionally filtered by `parentCourseId`. Existing operational relation fields named `courseId` refer to cycle IDs for compatibility; `Cycle.parentCourseId` always refers to the umbrella. Financial snapshots keep their original names when current course/cycle labels change.
+
+The October 2026 fixture includes KET, PET, and IELTS with Arabic student/instructor names. The local reset preserves complete User rows and requires an external backup. It is not an automatic startup migration and must never run as part of Vercel deployment.

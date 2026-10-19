@@ -5,7 +5,7 @@ import Dialog from './Dialog';
 import { AuthContext } from '../context/AuthContext';
 import '../styles/_excelExport.scss';
 const titles = {
-  courses: 'Courses',
+  courses: 'Cycles',
   tuition: 'Student tuition',
   payroll: 'Instructor payroll'
 };
@@ -53,7 +53,7 @@ function ExportSelect({
 }
 function ExportDialog({
   onClose,
-  initialMonth
+  initialMonth, parentCourseId
 }) {
   const {
       user
@@ -64,6 +64,7 @@ function ExportDialog({
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const [filters, setFilters] = useState({
+    parentCourseId: parentCourseId || '',
     branch: '',
     courseId: '',
     from: initialMonth ? `${initialMonth}-01` : '',
@@ -135,7 +136,7 @@ function ExportDialog({
               value,
               label: value
             }))]} />
-          <ExportSelect label="Course" value={filters.courseId} onChange={v => change('courseId', v)} options={[...all, ...options.courses.filter(c => (!filters.branch || c.branch === filters.branch) && (filters.includeArchived || !c.archivedAt)).map(c => ({
+          <ExportSelect label="Cycle" value={filters.courseId} onChange={v => change('courseId', v)} options={[...all, ...options.courses.filter(c => (!parentCourseId || c.parentCourseId === parentCourseId) && (!filters.branch || c.branch === filters.branch) && (filters.includeArchived || !c.archivedAt)).map(c => ({
               value: c.id,
               label: `${c.name} · ${c.branch}${c.archivedAt ? ' (archived)' : ''}`
             }))]} />
@@ -165,8 +166,8 @@ function ExportDialog({
     </form></div></Dialog>;
 }
 export default function ExcelExportButton({
-  initialMonth
+  initialMonth, parentCourseId
 }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className="btn-secondary" onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
+  return <><button type="button" className="btn-secondary" onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog parentCourseId={parentCourseId} initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
 }
