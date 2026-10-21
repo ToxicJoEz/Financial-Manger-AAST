@@ -5,7 +5,7 @@ import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord']);
+const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment']);
 
 // Controllers use the same client inside atomic(), including their existing transaction callbacks.
 const prisma = new Proxy(base, {
@@ -41,7 +41,7 @@ const prisma = new Proxy(base, {
   }
 });
 
-export function atomic(handler) {
+export function atomic(handler, { timeout = 20000 } = {}) {
   return async (req, res, next) => {
     let response;
     const buffered = Object.create(res);
@@ -53,7 +53,7 @@ export function atomic(handler) {
         await handler(req, buffered, error => { throw error; });
         if (!response) throw new Error('Mutation handler did not produce a response.');
         if (response.status >= 400) throw Object.assign(new Error('Request rejected'), { bufferedResponse: response });
-      }), { maxWait: 10000, timeout: 20000 });
+      }), { maxWait: 10000, timeout, isolationLevel: 'Serializable' });
       res.status(response.status).json(response.body);
     } catch (error) {
       if (error.bufferedResponse) return res.status(error.bufferedResponse.status).json(error.bufferedResponse.body);

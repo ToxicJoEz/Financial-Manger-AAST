@@ -7,7 +7,7 @@ import '../styles/_excelExport.scss';
 const titles = {
   courses: 'Cycles',
   tuition: 'Student tuition',
-  payroll: 'Instructor payroll'
+  payroll: "Employee payroll"
 };
 function ExportSelect({
   label,
@@ -53,7 +53,7 @@ function ExportSelect({
 }
 function ExportDialog({
   onClose,
-  initialMonth, parentCourseId
+  initialMonth, parentCourseId, salaryMonth
 }) {
   const {
       user
@@ -64,22 +64,24 @@ function ExportDialog({
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const [filters, setFilters] = useState({
+    ...(salaryMonth ? { salaryMonth } : {}),
     parentCourseId: parentCourseId || '',
     branch: '',
     courseId: '',
     from: initialMonth ? `${initialMonth}-01` : '',
     to: initialMonth ? new Date(Date.UTC(Number(initialMonth.slice(0, 4)), Number(initialMonth.slice(5, 7)), 0)).toISOString().slice(0, 10) : '',
     tuitionStatus: '',
-    payrollStatus: '',
-    includeArchived: false
+    payrollStatus: salaryMonth ? 'PAID' : '',
+    payrollDateBasis: initialMonth ? 'actualPaymentDate' : 'recordedAt',
+    includeArchived: Boolean(salaryMonth)
   });
   useEffect(() => {
     const controller = new AbortController();
     axios.get('/exports/options', {
       signal: controller.signal
-    }).then(({
-      data
-    }) => {
+    }).then(({ data: responseData }) => {
+      let data = responseData;
+      if (salaryMonth) data = { ...data, sheets: { payroll: data.sheets.payroll } };
       setOptions(data);
       setSelected(Object.fromEntries(Object.entries(data.sheets).map(([key, cols]) => [key, Object.keys(cols)])));
     }).catch(e => {
@@ -128,7 +130,7 @@ function ExportDialog({
     value: '',
     label: 'All'
   }];
-  return <Dialog title="Export Excel workbook" onClose={busy ? () => {} : onClose}><div className="modal-content card excel-export-dialog"><h3>Make the report yours.</h3><p className="muted">Choose worksheets, columns, and the records you need.</p>
+  return <Dialog title="Export Excel workbook" onClose={busy ? () => {} : onClose}><div className="modal-content card excel-export-dialog"><h3>Make the report yours.</h3><p className="muted">{salaryMonth ? `Salary paid in ${salaryMonth} · actual payment date only. Archived cycles are included to match the monthly total.` : 'Choose worksheets, columns, and the records you need.'}</p>
     <form onSubmit={submit} aria-busy={busy}>
       {!options ? <p role="status">{error || 'Loading export options…'}</p> : <fieldset disabled={busy} className="export-controls">
         <div className="export-filter-grid">
@@ -140,19 +142,20 @@ function ExportDialog({
               value: c.id,
               label: `${c.name} · ${c.branch}${c.archivedAt ? ' (archived)' : ''}`
             }))]} />
-          <label>From date<input className="input-field" type="date" value={filters.from} onChange={e => change('from', e.target.value)} /></label>
+          {!salaryMonth && <><label>From date<input className="input-field" type="date" value={filters.from} onChange={e => change('from', e.target.value)} /></label>
           <label>Through date<input className="input-field" type="date" value={filters.to} onChange={e => change('to', e.target.value)} /></label>
           <ExportSelect label="Student payment status" value={filters.tuitionStatus} onChange={v => change('tuitionStatus', v)} options={[...all, ...['PAID', 'PARTIAL', 'UNPAID', 'EXEMPT'].map(value => ({
               value,
               label: value
             }))]} />
-          {manager && <ExportSelect label="Instructor payment status" value={filters.payrollStatus} onChange={v => change('payrollStatus', v)} options={[...all, ...['PAID', 'UNPAID'].map(value => ({
+          {manager && <ExportSelect label="Employee payment status" value={filters.payrollStatus} onChange={v => change('payrollStatus', v)} options={[...all, ...['PAID', 'PROCESSING', 'UNPAID'].map(value => ({
               value,
               label: value
-            }))]} />}
+            }))]} />}</>}
         </div>
-        <p className="export-help">Dates use course start date (creation date when unset), enrollment date, or payroll month for each worksheet. Payroll includes the entire selected months. Payment filters apply to their corresponding data; course totals always show the full course.</p>
-        {manager && <label className="export-check"><input type="checkbox" checked={filters.includeArchived} onChange={e => change('includeArchived', e.target.checked)} />Include archived courses and financial records</label>}
+        {manager && !salaryMonth && <ExportSelect label="Payroll date basis" value={filters.payrollDateBasis} onChange={v => change('payrollDateBasis', v)} options={[{ value: 'recordedAt', label: 'Earnings recorded date' }, { value: 'initiatedDate', label: 'Payment initiation date' }, { value: 'actualPaymentDate', label: 'Actual payment date' }]} />}
+        {!salaryMonth && <p className="export-help">Dates use cycle start date (creation date when unset), enrollment date, or your selected payroll date basis. Payments without a recorded date are excluded when filtering by that date. Payment filters apply to their corresponding data; course totals always show the full course.</p>}
+        {manager && !salaryMonth && <label className="export-check"><input type="checkbox" checked={filters.includeArchived} onChange={e => change('includeArchived', e.target.checked)} />Include archived courses and financial records</label>}
         <div className="export-worksheets">{Object.entries(options.sheets).map(([sheet, columns]) => <fieldset key={sheet} className="export-sheet"><legend>{titles[sheet]}</legend><button type="button" className="btn-secondary" onClick={() => setSelected(prev => ({
                 ...prev,
                 [sheet]: prev[sheet]?.length ? [] : Object.keys(columns)
@@ -166,8 +169,8 @@ function ExportDialog({
     </form></div></Dialog>;
 }
 export default function ExcelExportButton({
-  initialMonth, parentCourseId
+  initialMonth, parentCourseId, salaryMonth
 }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className="btn-secondary" onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog parentCourseId={parentCourseId} initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
+  return <><button type="button" className={`btn-secondary${salaryMonth ? " export-format-excel" : ""}`} onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog salaryMonth={salaryMonth} parentCourseId={parentCourseId} initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
 }

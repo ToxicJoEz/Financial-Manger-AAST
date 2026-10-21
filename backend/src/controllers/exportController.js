@@ -22,7 +22,7 @@ export const exportOptions = async (req, res, next) => {
     if (courses.length > 10000) return res.status(413).json({
       error: 'Too many courses for an interactive export.'
     });
-    const snapshots = managerRole(req.user) ? await prisma.payrollRecord.findMany({
+    const snapshots = managerRole(req.user) ? await prisma.payrollEarning.findMany({
       distinct: ['branch'],
       select: {
         branch: true
@@ -55,16 +55,25 @@ export const prepareExport = async (req, res, next) => {
         error: 'Select valid, unique columns for each worksheet.'
       });
     }
-    if (Object.keys(filters).some(key => !['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus', 'includeArchived','parentCourseId'].includes(key)) || ['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus','parentCourseId'].some(key => filters[key] !== undefined && typeof filters[key] !== 'string') || filters.includeArchived !== undefined && typeof filters.includeArchived !== 'boolean') return res.status(400).json({
+    if (Object.keys(filters).some(key => !['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus', 'includeArchived','parentCourseId','payrollDateBasis','salaryMonth'].includes(key)) || ['branch', 'courseId', 'from', 'to', 'tuitionStatus', 'payrollStatus','parentCourseId','payrollDateBasis','salaryMonth'].some(key => filters[key] !== undefined && typeof filters[key] !== 'string') || filters.includeArchived !== undefined && typeof filters.includeArchived !== 'boolean') return res.status(400).json({
       error: 'Invalid export filters.'
     });
+    if (filters.salaryMonth !== undefined) {
+      if (!managerRole(req.user)) return res.status(403).json({ error: 'Only managers can export salary reports.' });
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(filters.salaryMonth) || Number(filters.salaryMonth.slice(0,4)) < 1900 || Number(filters.salaryMonth.slice(0,4)) > 9998 || Object.keys(sheets).length !== 1 || !sheets.payroll) return res.status(400).json({ error: 'Choose a valid month and the salary worksheet only.' });
+      filters.from = filters.salaryMonth + '-01';
+      filters.to = new Date(Date.UTC(Number(filters.salaryMonth.slice(0,4)), Number(filters.salaryMonth.slice(5,7)), 0)).toISOString().slice(0,10);
+      filters.payrollDateBasis = 'actualPaymentDate';
+      filters.payrollStatus = 'PAID';
+      filters.includeArchived = true;
+    }
     if (filters.includeArchived && !managerRole(req.user)) return res.status(403).json({
       error: 'Only managers can export archived records.'
     });
     if (filters.from && !validDate(filters.from) || filters.to && !validDate(filters.to) || filters.from && filters.to && filters.from > filters.to) return res.status(400).json({
       error: 'Choose a valid date range.'
     });
-    if (filters.tuitionStatus && !['PAID', 'PARTIAL', 'UNPAID', 'EXEMPT'].includes(filters.tuitionStatus) || filters.payrollStatus && !['PAID', 'UNPAID'].includes(filters.payrollStatus)) return res.status(400).json({
+    if (filters.tuitionStatus && !['PAID', 'PARTIAL', 'UNPAID', 'EXEMPT'].includes(filters.tuitionStatus) || filters.payrollStatus && !['PAID', 'PROCESSING', 'UNPAID'].includes(filters.payrollStatus) || filters.payrollDateBasis && !['recordedAt', 'initiatedDate', 'actualPaymentDate'].includes(filters.payrollDateBasis)) return res.status(400).json({
       error: 'Invalid payment status.'
     });
     const result = await prisma.$transaction(async tx => {
@@ -77,8 +86,8 @@ export const prepareExport = async (req, res, next) => {
           OR: [{
             branch: filters.branch
           }, {
-            payrollRecord: {
-              is: {
+            payrollEarnings: {
+              some: {
                 branch: filters.branch
               }
             }
@@ -107,14 +116,16 @@ export const prepareExport = async (req, res, next) => {
           parentCourse: true,
           enrollments: {
             include: {
-              student: true
+              student: true,
+              bookPayments: { where: { reversedAt: null } },
+              payments: { include: { reversal: { select: { id: true } } } }
             },
             orderBy: {
               enrolledAt: 'asc'
             }
           },
           ...(managerRole(req.user) && Object.hasOwn(sheets, 'payroll') ? {
-            payrollRecord: true
+            payrollEarnings: { include: { batch: true } }
           } : {})
         },
         orderBy: [{

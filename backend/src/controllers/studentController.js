@@ -1,3 +1,7 @@
+import { activeBookInclude } from '../utils/bookPayments.js';
+import { enrollmentView, hidePayroll } from '../utils/courseView.js';
+import { queueStudentRequest } from '../utils/studentRequests.js';
+import { profileFields } from '../utils/studentProfile.js';
 import { financialChoice } from '../utils/tuition.js';
 import { isManager } from '../utils/courseView.js';
 import prisma, { atomic } from '../db/prisma.js';
@@ -8,6 +12,20 @@ import { logAction } from '../utils/logger.js';
 // @access  Private (All authenticated users)
 export const getStudents = async (req, res, next) => {
   try {
+    if (req.query.pickerCourseId !== undefined) {
+      const courseId = req.query.pickerCourseId;
+      if (typeof courseId !== 'string' || !courseId || (req.query.search !== undefined && typeof req.query.search !== 'string') || (req.query.cursor !== undefined && typeof req.query.cursor !== 'string')) return res.status(400).json({error:'Invalid student search.'});
+      const cycle = await prisma.cycle.findUnique({where:{id:courseId},select:{archivedAt:true,parentCourse:{select:{archivedAt:true}}}});
+      if (!cycle || (!isManager(req.user) && (cycle.archivedAt || cycle.parentCourse.archivedAt))) return res.status(404).json({error:'Cycle not found.'});
+      const q = (req.query.search || '').trim().slice(0,160);
+      const rows = await prisma.student.findMany({
+        where:{deletedAt:null,enrollments:{none:{courseId}},...(q?{OR:['name','englishName','registrationNumber','mobile'].map(field=>({[field]:{contains:q,mode:'insensitive'}}))}:{})},
+        select:{id:true,name:true,englishName:true,registrationNumber:true,mobile:true},
+        orderBy:[{name:'asc'},{id:'asc'}], take:21,
+        ...(req.query.cursor ? {cursor:{id:req.query.cursor},skip:1} : {})
+      });
+      return res.json({students:rows.slice(0,20),nextCursor:rows.length>20?rows[19].id:null});
+    }
     const { search } = req.query;
 
     const where = isManager(req.user) ? {} : { deletedAt: null };
@@ -16,7 +34,8 @@ export const getStudents = async (req, res, next) => {
       where.OR = [
         { name: { contains: q } },
         { registrationNumber: { contains: q } },
-        { mobile: { contains: q } }
+        { mobile: { contains: q } },
+        { englishName: { contains: q } }
       ];
     }
 
@@ -34,7 +53,7 @@ export const getStudents = async (req, res, next) => {
 // @desc    Create a new student
 // @route   POST /api/students
 // @access  Private (All authenticated users)
-export const createStudent = atomic(async (req, res, next) => {
+export const createStudentHandler = async (req, res, next) => {
   try {
     const { name, registrationNumber, mobile } = req.body;
 
@@ -57,11 +76,14 @@ export const createStudent = atomic(async (req, res, next) => {
       return res.status(400).json({ error: existing.deletedAt && !isManager(req.user) ? 'This registration number is unavailable. Contact an administrator.' : `A student with registration number '${cleanReg}' already exists (${existing.name}).` });
     }
 
+    const extra = profileFields(req.body);
+    if (!isManager(req.user)) return queueStudentRequest(req, res, 'CREATE_STUDENT', { name: cleanName, registrationNumber: cleanReg, mobile: cleanMobile, ...extra, ...(extra.dateOfBirth ? { dateOfBirth: extra.dateOfBirth.toISOString().slice(0, 10) } : {}) });
     const student = await prisma.student.create({
       data: {
         name: cleanName,
         registrationNumber: cleanReg,
-        mobile: cleanMobile
+        mobile: cleanMobile,
+        ...profileFields(req.body)
       }
     });
 
@@ -75,7 +97,8 @@ export const createStudent = atomic(async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+};
+export const createStudent = atomic(createStudentHandler);
 
 // @desc    Update student details
 // @route   PUT /api/students/:id
@@ -106,7 +129,8 @@ export const updateStudent = atomic(async (req, res, next) => {
       data: {
         name: cleanName,
         registrationNumber: cleanReg,
-        mobile: cleanMobile
+        mobile: cleanMobile,
+        ...profileFields(req.body)
       }
     });
 
@@ -125,7 +149,7 @@ export const updateStudent = atomic(async (req, res, next) => {
 // @desc    Delete student
 // @route   DELETE /api/students/:id
 // @access  Private (All authenticated users)
-export const deleteStudent = atomic(async (req, res, next) => {
+export const deleteStudentHandler = async (req, res, next) => {
   try {
     const { id } = req.params;
     const student = await prisma.student.findUnique({ where: { id } });
@@ -135,6 +159,7 @@ export const deleteStudent = atomic(async (req, res, next) => {
 
     const keep = financialChoice(req.body);
     if (student.deletedAt) return res.status(409).json({ error: "This student is already deleted." });
+    if (!isManager(req.user)) return queueStudentRequest(req, res, 'DELETE_STUDENT', { keepFinancialRecords: keep, confirm: true }, { studentId: id });
     if (!keep) await prisma.enrollment.updateMany({ where: { studentId: id }, data: { financialArchivedAt: new Date() } });
     await prisma.student.update({ where: { id }, data: { deletedAt: student.deletedAt || new Date(), deletedBy: student.deletedBy || req.user.username } });
 
@@ -148,4 +173,20 @@ export const deleteStudent = atomic(async (req, res, next) => {
   } catch (error) {
     next(error);
   }
-});
+};
+export const deleteStudent = atomic(deleteStudentHandler);
+
+// Student-centric enrollment history; removed records remain manager-only.
+export const getStudentDetails = async (req, res, next) => {
+  try {
+    const manager = isManager(req.user);
+    const row = await prisma.student.findUnique({where:{id:req.params.id},include:{enrollments:{
+      where: manager ? {} : {deletedAt:null,financialArchivedAt:null,course:{archivedAt:null,parentCourse:{archivedAt:null}}},
+      include:{bookPayments:activeBookInclude,course:{include:{parentCourse:true}}},
+      orderBy:[{course:{startDate:'desc'}},{id:'asc'}]
+    }}});
+    if(!row || (!manager && row.deletedAt)) return res.status(404).json({error:'Student not found.'});
+    const {enrollments,...student}=row;
+    res.json({student,enrollments:enrollments.map(enrollment=>hidePayroll(enrollmentView(enrollment,enrollment.course),req.user))});
+  } catch(error) {next(error);}
+};

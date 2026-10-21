@@ -98,11 +98,14 @@ try {
   ok(await req('/assignments/' + request.pending.id + '/approve', 'POST', {
     hourlyRate: 100
   }));
-  const enrollment = ok(await req('/cycles/' + cycle.id + '/enrollments', 'POST', {
+  const enrollmentRequest = ok(await req('/cycles/' + cycle.id + '/enrollments', 'POST', {
     studentId: 'demo-student-1',
     recordPayment: true,
     amountPaid: 400
   }, junior));
+  assert(enrollmentRequest.pending);
+  ok(await req('/student-requests/' + enrollmentRequest.requestId + '/approve', 'POST'));
+  const enrollment = await prisma.enrollment.findUnique({ where: { courseId_studentId: { courseId: cycle.id, studentId: 'demo-student-1' } } });
   assert.equal(enrollment.amountPaid, 400);
   const payments = '/cycles/' + cycle.id + '/enrollments/' + enrollment.id + '/payments';
   assert.equal((await req(payments, 'POST', {
@@ -122,10 +125,9 @@ try {
   });
   assert.equal((await req('/cycles/' + cycle.id + '/payment', 'PUT', {
     isPaid: true
-  })).status, 400);
+  })).status, 410);
   assert.equal((await req('/cycles/' + cycle.id + '/finish', 'POST', {
     totalHours: 10,
-    payrollMonth: '2026-10',
     instructorHours: [{
       courseInstructorId: 'wrong-id',
       hoursTaught: 10
@@ -133,22 +135,14 @@ try {
   })).status, 400);
   ok(await req('/cycles/' + cycle.id + '/finish', 'POST', {
     totalHours: 10,
-    payrollMonth: '2026-10',
     instructorHours: [{
       courseInstructorId: assignment.id,
       hoursTaught: 10
     }]
   }));
-  ok(await req('/cycles/' + cycle.id + '/payment', 'PUT', {
-    isPaid: true
-  }));
-  const original = await prisma.payrollRecord.findUnique({
-    where: {
-      courseId: cycle.id
-    }
-  });
+  const original = await prisma.payrollEarning.findFirst({ where: { courseId: cycle.id } });
   ok(await req('/cycles/' + cycle.id + '/revert', 'POST', {}));
-  assert(ok(await req('/finances?month=2026-10')).courses.some(c => c.id === cycle.id && c.isPaid));
+  assert(ok(await req('/finances')).earnings.some(e => e.courseId === cycle.id && e.status === 'UNPAID'));
   ok(await req('/courses/course-ket', 'PUT', {
     name: 'KET UPDATED',
     code: 'KET-UPDATED'
@@ -159,11 +153,7 @@ try {
     }
   });
   assert.equal(renamed.name, 'KET UPDATED 15');
-  assert.equal((await prisma.payrollRecord.findUnique({
-    where: {
-      courseId: cycle.id
-    }
-  })).name, original.name);
+  assert.equal((await prisma.payrollEarning.findFirst({ where: { courseId: cycle.id } })).cycleName, original.cycleName);
   const report = ok(await req('/exports', 'POST', {
     sheets: {
       courses: ['course', 'courseName', 'courseCode', 'cycleNumber'],
@@ -195,6 +185,55 @@ try {
   ok(await req('/courses/' + empty.id + '/restore', 'POST', {}));
   ok(await req('/cycles/' + child.id + '/restore', 'POST', {}));
   assert.equal(await prisma.user.count(), initialUsers);
+
+  // Permanent deletion is separate from archive and removes the complete accounting graph.
+  assert.equal((await req('/cycles/'+cycle.id+'/deletion-preview','GET',undefined,junior)).status,403);
+  assert.equal((await req('/courses/course-ket/permanent','DELETE',{},junior)).status,403);
+  const profileCounts={students:await prisma.student.count(),instructors:await prisma.instructor.count(),users:await prisma.user.count()};
+  const existingPayment=await prisma.paymentEntry.findFirst({where:{courseId:cycle.id,kind:'PAYMENT'}});
+  if(existingPayment)ok(await req(`/cycles/${cycle.id}/enrollments/${existingPayment.enrollmentId}/payments/${existingPayment.id}/reverse`,'POST',{note:'Test deletion of a reversal graph'}));
+  await prisma.importBatch.create({data:{fingerprint:'permanent-delete-fixture',fileName:'test.xlsx',parentCourseId:'course-ket',cycleId:cycle.id,recordedBy:'main-admin',studentCount:1}});
+  const plan=ok(await req('/cycles/'+cycle.id+'/deletion-preview'));
+  assert(plan.counts.payments>0);assert(plan.counts.payroll>0);assert.equal(plan.counts.imports,1);
+  const confirmation={confirm:true,confirmationName:plan.name,version:plan.version};
+  assert.equal((await req('/cycles/'+cycle.id+'/permanent','DELETE',{...confirmation,confirmationName:'wrong'})).status,400);
+  await prisma.cycle.update({where:{id:cycle.id},data:{details:'changed after deletion preview'}});
+  assert.equal((await req('/cycles/'+cycle.id+'/permanent','DELETE',confirmation)).status,409);
+  const fresh=ok(await req('/cycles/'+cycle.id+'/deletion-preview'));
+  ok(await req('/cycles/'+cycle.id+'/permanent','DELETE',{confirm:true,confirmationName:fresh.name,version:fresh.version}));
+  assert.equal(await prisma.cycle.count({where:{id:cycle.id}}),0);
+  for(const model of ['paymentEntry','enrollment','payrollRecord','courseInstructor','pendingAssignment'])assert.equal(await prisma[model].count({where:{courseId:cycle.id}}),0,model);
+  assert.equal(await prisma.importBatch.count({where:{cycleId:cycle.id}}),0);
+  assert(await prisma.course.findUnique({where:{id:'course-ket'}}));
+  const allChildren=await prisma.cycle.findMany({where:{parentCourseId:'course-ket'},select:{id:true}});
+  const pendingIds=await prisma.pendingAssignment.findMany({where:{courseId:{in:allChildren.map(c=>c.id)}},select:{id:true}});
+  const parentPlan=ok(await req('/courses/course-ket/deletion-preview'));
+  assert.equal((await req('/courses/course-ket/permanent','DELETE',{confirm:true,confirmationName:parentPlan.name,version:parentPlan.version})).status,409);
+  assert(await prisma.course.findUnique({where:{id:'course-ket'}}));
+  assert.deepEqual({students:await prisma.student.count(),instructors:await prisma.instructor.count(),users:await prisma.user.count()},profileCounts);
+
+  // Purchase prices freeze at payment time, including within one cycle.
+  ok(await req('/courses/course-ket','PUT',{bookPrice:1000}));
+  const bookCycle=ok(await req('/cycles','POST',{parentCourseId:'course-ket',cycleNumber:990,branch:'MIAMI',startDate:'1901-01-01',courseFee:1000}));
+  const bookStudents=await prisma.student.findMany({take:2}); assert.equal(bookStudents.length,2);
+  const bookRows=[];
+  for(const student of bookStudents)bookRows.push(await prisma.enrollment.create({data:{courseId:bookCycle.id,studentId:student.id,amountPaid:1000}}));
+  const bookPath=e=>`/cycles/${bookCycle.id}/enrollments/${e.id}/books`;
+  ok(await req(bookPath(bookRows[0]),'POST',{status:'PAID',expectedPrice:1000}));
+  ok(await req('/courses/course-ket','PUT',{bookPrice:1500}));
+  assert.equal((await req(bookPath(bookRows[1]),'POST',{status:'PAID',expectedPrice:1000})).status,409);
+  ok(await req(bookPath(bookRows[1]),'POST',{status:'PAID',expectedPrice:1500}));
+  assert.equal((await req(bookPath(bookRows[0]),'POST',{status:'PAID',expectedPrice:1500})).status,409);
+  assert.equal(ok(await req('/finances/income?month=1901-01')).summary.books,2500);
+  const originalBook=await prisma.bookPayment.findUnique({where:{activeKey:bookRows[0].id}});
+  ok(await req(bookPath(bookRows[0]),'POST',{status:'UNPAID',paymentId:originalBook.id}));
+  assert((await prisma.bookPayment.findUnique({where:{id:originalBook.id}})).reversedAt);
+  assert.equal(ok(await req('/finances/income?month=1901-01')).summary.books,1500);
+  ok(await req(bookPath(bookRows[0]),'POST',{status:'EXEMPT'}));
+  const exemptBook=await prisma.bookPayment.findUnique({where:{activeKey:bookRows[0].id}});
+  ok(await req(bookPath(bookRows[0]),'POST',{status:'UNPAID',paymentId:exemptBook.id}));
+  ok(await req(bookPath(bookRows[0]),'POST',{status:'PAID',expectedPrice:1500}));
+  assert.equal(ok(await req('/finances/income?month=1901-01')).summary.books,3000);
   console.log('PASS: course/cycle hierarchy, role guards, numbering and concurrent conflicts, archived reservations, requests, tuition, completion/payroll, rename history, scoped exports, archive/restore.');
 } finally {
   server.closeAllConnections();

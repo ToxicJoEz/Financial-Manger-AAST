@@ -1,0 +1,61 @@
+import assert from 'node:assert/strict';
+import express from 'express';
+import ExcelJS from 'exceljs';
+import service from '../../src/vercel.js';
+import prisma from '../../src/db/prisma.js';
+const app=express();app.use(service);const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}/api`;let token;
+async function req(path,body,auth=token){const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer '+auth}:{})},body:JSON.stringify(body)});return {status:r.status,data:await r.json()};}
+const ok=r=>{assert(r.status<300,JSON.stringify(r));return r.data;};
+async function workbook(rows){const wb=new ExcelJS.Workbook(),sheet=wb.addWorksheet('Sheet1');sheet.getCell('C2').value='م';sheet.getCell('D2').value='الاسم';sheet.getCell('E2').value='ألرقم الوظيفي';rows.forEach((row,i)=>{sheet.getCell(`C${i+3}`).value=i+1;sheet.getCell(`D${i+3}`).value=row[0];sheet.getCell(`E${i+3}`).value=row[1];if(row[2])sheet.getCell(`E${i+3}`).numFmt=row[2];});return Buffer.from(await wb.xlsx.writeBuffer());}
+async function preview(buffer,branch='ALAMEEN',auth=token){const response=await fetch(base+'/employees/import/preview?branch='+branch,{method:'POST',headers:{'Content-Type':'application/octet-stream',Authorization:'Bearer '+auth},body:buffer});return {status:response.status,data:await response.json()};}
+const commit=p=>req('/employees/import/commit',{previewToken:p.previewToken,rows:p.rows.filter(r=>r.action!=='ERROR').map(r=>r.rowNumber)});
+try{
+ token=ok(await req('/auth/login',{username:'main-admin',password:'IsolatedDemoTest!123'})).token;
+ const junior=ok(await req('/auth/login',{username:'Joe',password:'IsolatedDemoTest!123'})).token;
+ const users=await prisma.user.findMany({orderBy:{id:'asc'}});
+ const buffer=await workbook([['  جو   أحمد  ','000123'],['سارة محمد','٠٠٠١٢٤']]);
+ assert.equal((await preview(buffer,'ALAMEEN',junior)).status,403);
+ assert.equal((await req('/employees/import/commit',{},junior)).status,403);
+ assert.equal((await preview(buffer,'UNKNOWN')).status,400);
+ let p=ok(await preview(buffer));assert(p.rows.every(r=>r.action==='CREATE'));assert.equal(p.rows[0].name,'جو أحمد');assert.equal(p.rows[1].employeeId,'000124');
+ const result=ok(await commit(p));assert.equal(result.created,2);
+ const repeat=ok(await preview(buffer));assert(repeat.rows.every(r=>r.action==='ERROR'&&r.issues.some(i=>i.includes('Duplicate'))));
+ p=ok(await preview(buffer,'MIAMI'));assert(p.rows.every(r=>r.action==='ADD_BRANCH'));
+ await prisma.instructor.update({where:{employeeId:'000123'},data:{mobile:'01012345678'}});
+ assert.equal((await commit(p)).status,409);assert.equal((await prisma.instructor.findUnique({where:{employeeId:'000124'}})).branches,'ALAMEEN');
+ p=ok(await preview(buffer,'MIAMI'));assert.equal(ok(await commit(p)).updated,2);
+ const joe=await prisma.instructor.findUnique({where:{employeeId:'000123'}});assert.equal(joe.branches,'ALAMEEN,MIAMI');assert.equal(joe.mobile,'01012345678');
+ const multi=ok(await preview(buffer,'MIAMI,SMART,FOUAD'));
+ assert.deepEqual(multi.branches,['MIAMI','SMART','FOUAD']);
+ assert(multi.rows.every(r=>r.action==='ADD_BRANCH'));
+ assert.deepEqual(multi.rows[0].missingBranches,['SMART','FOUAD']);
+ const merged=ok(await commit(multi));assert.equal(merged.updated,2);assert.equal(merged.membershipsAdded,4);
+ const mergedJoe=await prisma.instructor.findUnique({where:{employeeId:'000123'}});assert.equal(mergedJoe.branches,'ALAMEEN,MIAMI,SMART,FOUAD');assert.equal(mergedJoe.mobile,'01012345678');
+ assert(ok(await preview(buffer,'FOUAD,MIAMI')).rows.every(r=>r.action==='ERROR'));
+ const multiNew=ok(await preview(await workbook([['موظف متعدد الفروع','MULTI-001']]),'ASWAN,SHERATON,ASWAN'));
+ assert.deepEqual(multiNew.branches,['ASWAN','SHERATON']);assert.equal(ok(await commit(multiNew)).created,1);
+ assert.equal((await prisma.instructor.findUnique({where:{employeeId:'MULTI-001'}})).branches,'ASWAN,SHERATON');
+ assert.equal((await preview(buffer,'MIAMI,UNKNOWN')).status,400);assert.equal((await preview(buffer,'')).status,400);
+ async function directory(query='',auth=token){const r=await fetch(base+'/employees/directory'+query,{headers:{Authorization:'Bearer '+auth}});return {status:r.status,data:await r.json()};}
+ assert.equal((await directory('',junior)).status,403);
+ const found=ok(await directory('?search=000123'));assert.equal(found.total,1);assert.equal(found.rows[0].id,joe.id);assert(!JSON.stringify(found).includes('hourlyRate'));
+ assert.equal(ok(await directory('?search=01012345678')).total,1);
+ assert.equal(ok(await directory('?branches=ASWAN,SHERATON&search=MULTI-001')).total,1);
+ assert.equal(ok(await directory('?branches=SMART&search=MULTI-001')).total,0);
+ assert.equal((await directory('?page=0')).status,400);assert.equal((await directory('?sort=unknown')).status,400);
+ const activeExpected=await prisma.instructor.count({where:{courseAssignments:{some:{course:{isFinished:false,archivedAt:null,parentCourse:{archivedAt:null}}}}}});
+ const active=ok(await directory('?status=active&sort=active'));assert.equal(active.total,activeExpected);assert(active.rows.every(r=>r.activeCount>0));
+ const inactive=ok(await directory('?status=inactive'));assert(inactive.rows.every(r=>r.activeCount===0));
+ const detailResponse=await fetch(base+'/employees/'+joe.id+'/details',{headers:{Authorization:'Bearer '+token}});assert.equal(detailResponse.status,200);const detail=await detailResponse.json();assert.equal(detail.id,joe.id);assert(Array.isArray(detail.courseAssignments));assert(!JSON.stringify(detail).includes('hourlyRate'));
+ const ids=(await prisma.instructor.findMany({select:{id:true},orderBy:{name:'asc'}})).map(r=>r.id);const firstPage=ok(await directory());assert.equal(firstPage.total,ids.length);assert.equal(firstPage.rows.length,Math.min(24,ids.length));
+ const conflict=ok(await preview(await workbook([['اسم مختلف','000123']]),'SMART'));assert.equal(conflict.rows[0].action,'ERROR');
+ const duplicates=ok(await preview(await workbook([['موظف أول','DUPLICATE'],['موظف ثان','duplicate']])));assert(duplicates.rows.every(r=>r.action==='ERROR'));
+ const bad=ok(await preview(await workbook([['بلا رقم',null],['صيغة',{formula:'1+2',result:3}]])));assert(bad.rows.every(r=>r.action==='ERROR'));
+ const numeric=ok(await preview(await workbook([['رقم بأصفار',123,'000000']]),'SMART'));assert.equal(numeric.rows[0].employeeId,'000123');assert.equal(numeric.rows[0].action,'ERROR');
+ const race=ok(await preview(await workbook([['موظف للتزامن','RACE-001']]),'SMART'));
+ const results=await Promise.all([commit(race),commit(race)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);assert.equal(await prisma.instructor.count({where:{employeeId:'RACE-001'}}),1);
+ assert.equal((await req('/employees',{name:'جو أحمد',employeeId:' 000123 ',branches:'FOUAD'})).status,409);
+ const tampered=await req('/employees/import/commit',{previewToken:p.previewToken.slice(0,-8)+'tampered',rows:[3]});assert.equal(tampered.status,400);
+ assert.deepEqual(await prisma.user.findMany({orderBy:{id:'asc'}}),users);
+ console.log('PASS: employee import headers, ID normalization/leading zeros, new records, branch merging, duplicate/name conflicts, stale previews and atomic rollback, concurrent imports, manual duplicate guard, role restrictions and preserved accounts.');
+}finally{server.closeAllConnections();await new Promise(r=>server.close(r));await prisma.$disconnect();}

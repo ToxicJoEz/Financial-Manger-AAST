@@ -22,7 +22,7 @@ export default function Login() {
   return <div className="signin">
     <section className="signin-form-side">
       <div className="signin-brand"><Brand /></div>
-      <MotionSurface className="signin-form" distance={12}><h1>Welcome back.</h1><p>{import.meta.env.VITE_DEMO_MODE === 'true' ? 'Demo workspace. Changes are temporary and may reset between requests.' : 'Sign in to manage courses, people, and payroll.'}</p>
+      <MotionSurface className="signin-form" distance={12}><h1>Welcome back.</h1><p>Sign in to manage courses, people, and payroll.</p>
         {error && <div className="alert-error" role="alert"><AlertCircle size={18} />{error}</div>}
         <form onSubmit={submit}><label htmlFor="username">Username</label><input id="username" autoComplete="username" className="input-field" placeholder="Enter your username" value={username} onChange={e=>setUsername(e.target.value)} required />
           <label htmlFor="password">Password</label><div className="password-input"><input id="password" autoComplete="current-password" className="input-field" type={visible ? 'text' : 'password'} placeholder="Enter your password" value={password} onChange={e=>setPassword(e.target.value)} required /><button type="button" className="icon-button" aria-label={visible ? 'Hide password' : 'Show password'} onClick={()=>setVisible(!visible)}>{visible ? <EyeOff size={19} /> : <Eye size={19} />}</button></div>

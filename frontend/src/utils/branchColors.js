@@ -6,6 +6,7 @@ export const getBranchColor = (branchName) => {
     'PORT-SAID': '#f59e0b', // amber
     'ASWAN': '#ef4444', // red
     'SMART': '#06b6d4', // cyan
+    'ALAMEEN': '#0f766e',
     'SHERATON': '#ec4899', // pink
   };
   return colors[branchName.toUpperCase()] || '#6b7280'; // default gray

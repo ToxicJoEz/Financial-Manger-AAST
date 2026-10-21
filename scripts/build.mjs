@@ -7,4 +7,4 @@ function run(args, env = process.env, cwd = root) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 run(['backend/node_modules/prisma/build/index.js', 'generate', '--schema=backend/prisma/schema.prisma']);
-run([fileURLToPath(new URL('../frontend/node_modules/vite/bin/vite.js', import.meta.url)), 'build'], { ...process.env, VITE_DEMO_MODE: process.env.VERCEL === '1' ? 'true' : 'false' }, fileURLToPath(new URL('../frontend/', import.meta.url)));
+run([fileURLToPath(new URL('../frontend/node_modules/vite/bin/vite.js', import.meta.url)), 'build'], process.env, fileURLToPath(new URL('../frontend/', import.meta.url)));

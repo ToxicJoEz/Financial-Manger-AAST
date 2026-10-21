@@ -28,19 +28,7 @@ const course = () => ({
   isFinished: false,
   archivedAt: null,
   enrollments: [enrollment()],
-  payrollRecord: {
-    name: 'Historical course',
-    branch: 'FOUAD',
-    payrollMonth: '2026-09',
-    isPaid: true,
-    instructors: JSON.stringify([{
-      instructor: {
-        name: 'Teacher'
-      },
-      hoursTaught: 10,
-      hourlyRate: 100
-    }])
-  }
+  payrollEarnings: [{ cycleName: 'Historical course', branch: 'FOUAD', instructorName: 'Teacher', employeeId: '', hours: 10, rate: 100, amountMinor: 100000n, createdAt: '2026-09-16', batchId: 'batch', batch: { status: 'PAID', initiatedDate: '2026-09-17', actualPaymentDate: '2026-09-19', initiatedBy: 'admin', paidBy: 'mod' } }]
 });
 test('junior schema never offers instructor payroll', () => {
   assert(!Object.hasOwn(allowedSheets(user), 'payroll'));
@@ -87,7 +75,7 @@ test('archived finances excluded from totals, explicit manager export labels the
   assert.equal(result[0].rows[0].collected, 0);
   assert.match(result[1].rows[0].recordStatus, /EXCLUDED/);
 });
-test('reopened payroll exports snapshot name, branch, hours, rates, month', () => {
+test('reopened payroll exports snapshot name, branch, hours, rates and payment dates', () => {
   const result = buildExport([course()], admin, {
     payroll: Object.keys(EXPORT_COLUMNS.payroll)
   }, {

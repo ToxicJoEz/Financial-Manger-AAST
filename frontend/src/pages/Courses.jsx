@@ -1,17 +1,22 @@
+import CycleScheduleFields, { classTimeLabel } from '../components/CycleScheduleFields';
+import '../styles/_cycleDetails.scss';
+import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
+import PermanentDeleteDialog from '../components/PermanentDeleteDialog';
+import CycleImportDialog from '../components/CycleImportDialog';
 import { tuitionOutstanding, instructorPaymentOutstanding } from '../utils/coursePayments';
 import ExcelExportButton from '../components/ExcelExportButton';
 import EnrollmentDialog from '../components/EnrollmentDialog';
 import FinancialRemovalChoice from '../components/FinancialRemovalChoice';
-import PaymentHistory from '../components/PaymentHistory';
+import StudentTuitionRow from '../components/StudentTuitionRow';
 import { AnimatePresence } from 'framer-motion';
 import { MotionRegion, MotionTab } from '../components/WorkspaceMotion';
 import Dialog from '../components/Dialog';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
-import { ChevronDown, ArrowUpRight, Clock3, LayoutGrid, List, CalendarDays, Users, ChevronRight, AlertTriangle, GraduationCap, DollarSign } from 'lucide-react';
+import { ChevronDown, ArrowUpRight, Clock3, MapPin, LayoutGrid, List, CalendarDays, Users, ChevronRight, AlertTriangle, GraduationCap, DollarSign } from 'lucide-react';
 import { PageHeading, EmptyState, Status, initials } from '../components/WorkspaceUI';
-import { Plus, Edit2, RotateCcw, Trash2, BookOpen, X, CheckCircle, Search, Filter, ClipboardCheck } from 'lucide-react';
+import { Plus, Edit2, RotateCcw, Trash2, Archive, BookOpen, X, CheckCircle, Search, Filter, ClipboardCheck } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AuthContext } from '../context/AuthContext';
 import { BRANCHES, BRANCH_OPTIONS } from '../Constants';
@@ -22,9 +27,9 @@ const Courses = () => {
     user
   } = useContext(AuthContext);
   const { courseId: parentId } = useParams();
+  const dataRequest = useRef(0);
+  const [importOpen, setImportOpen] = useState(false);
   const [parentCourse, setParentCourse] = useState(null);
-  const filterKey = 'aast-cycle-filters:' + (parentId || 'all');
-  const savedFilters = (() => { try { return JSON.parse(sessionStorage.getItem(filterKey)) || {}; } catch { return {}; } })();
   const location = useLocation();
   const navigate = useNavigate();
   const [expandedCourse, setExpandedCourse] = useState(null);
@@ -32,7 +37,6 @@ const Courses = () => {
   const [loadError, setLoadError] = useState(false);
   const [courses, setCourses] = useState([]);
   const [instructorsList, setInstructorsList] = useState([]);
-  const [studentsList, setStudentsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modals
@@ -46,6 +50,8 @@ const Courses = () => {
   // Edit & Delete
 
   const [editingCourse, setEditingCourse] = useState(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [permanentTarget, setPermanentTarget] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [confirmAction, setConfirmAction] = useState(null);
 
@@ -55,15 +61,16 @@ const Courses = () => {
   const [branch, setBranch] = useState(BRANCHES[0]);
   const [totalHours, setTotalHours] = useState('');
   const [courseFee, setCourseFee] = useState('');
+  const [schedule, setSchedule] = useState({});
   const [details, setDetails] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   // Filter states
 
-  const [filterName, setFilterName] = useState(savedFilters.search || '');
-  const [filterBranch, setFilterBranch] = useState(savedFilters.branch || '');
-  const [filterStatus, setFilterStatus] = useState(savedFilters.status || ''); // '', 'active', 'finished'
+  const [filterName, setFilterName] = useState('');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [filterStatus, setFilterStatus] = useState(''); // '', 'active', 'finished'
 
   // Enrollment State
 
@@ -88,39 +95,41 @@ const Courses = () => {
   // Review State
 
   const [reviewingAssignment, setReviewingAssignment] = useState(null);
-  const [reviewRate, setReviewRate] = useState('');
 
   // Finish state
 
   const [finishingCourse, setFinishingCourse] = useState(null);
   const [finishTotalHours, setFinishTotalHours] = useState('');
-  const [finishPayrollMonth, setFinishPayrollMonth] = useState('');
   const [instructorHours, setInstructorHours] = useState({});
   useEffect(() => {
     fetchData();
+    const refreshAssignments = () => fetchData();
+    window.addEventListener('assignments-updated', refreshAssignments);
+    return () => window.removeEventListener('assignments-updated', refreshAssignments);
   }, [parentId]);
-  useEffect(() => { sessionStorage.setItem(filterKey, JSON.stringify({ search: filterName, branch: filterBranch, status: filterStatus })); }, [filterName, filterBranch, filterStatus, filterKey]);
   const fetchData = async () => {
+    const request = ++dataRequest.current;
     setLoadError(false);
     try {
-      const [coursesRes, instructorsRes, studentsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: parentId ? { parentCourseId: parentId } : {} }), axios.get('/instructors'), axios.get('/students'), parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
+      const [coursesRes, instructorsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: parentId ? { parentCourseId: parentId } : {} }), axios.get('/instructors'), parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
+      if (request !== dataRequest.current) return;
       setParentCourse(parentRes.data);
-      if (parentRes.data?.archivedAt && !savedFilters.status) setFilterStatus('archived');
+      if (parentRes.data?.archivedAt) setFilterStatus('archived');
       setCourses(coursesRes.data);
       setInstructorsList(instructorsRes.data);
-      setStudentsList(studentsRes.data);
     } catch (error) {
+      if (request !== dataRequest.current) return;
       setLoadError(true);
       toast.error('Could not load cycles. Please try again.');
     } finally {
-      setLoading(false);
+      if (request === dataRequest.current) setLoading(false);
     }
   };
   const handleAddSubmit = async e => {
     e.preventDefault();
     try {
       await axios.post('/cycles', {
-        parentCourseId: parentId, cycleNumber: name,
+        ...schedule, parentCourseId: parentId, cycleNumber: name,
         branch,
         details,
         startDate: startDate || null,
@@ -138,15 +147,17 @@ const Courses = () => {
   };
   const handleEditSubmit = async e => {
     e.preventDefault();
+    if (editSaving) return;
+    setEditSaving(true);
     try {
       await axios.put(`/cycles/${editingCourse.id}`, {
+        venue: editingCourse.venue, classStartTime: editingCourse.classStartTime, classEndTime: editingCourse.classEndTime,
         cycleNumber: editingCourse.cycleNumber,
         branch: editingCourse.branch,
         details: editingCourse.details,
         startDate: editingCourse.startDate || null,
         endDate: editingCourse.endDate || null,
         isFinished: editingCourse.isFinished,
-        payrollMonth: editingCourse.payrollMonth,
         totalHours: editingCourse.totalHours || null,
         courseFee: editingCourse.courseFee || 0
       });
@@ -155,7 +166,7 @@ const Courses = () => {
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Update failed');
-    }
+    } finally { setEditSaving(false); }
   };
   const confirmDelete = async () => {
     try {
@@ -167,36 +178,6 @@ const Courses = () => {
       toast.error(error.response?.data?.error || 'Archive failed');
     }
   };
-  const handleApproveAssignment = async () => {
-    try {
-      const isRemoval = reviewingAssignment.type === 'REMOVE';
-      if (!isRemoval && (!reviewRate || isNaN(parseFloat(reviewRate)) || parseFloat(reviewRate) < 0)) {
-        toast.error('Please enter a valid non-negative hourly rate');
-        return;
-      }
-      const payload = isRemoval ? {} : {
-        hourlyRate: reviewRate
-      };
-      const res = await axios.post(`/assignments/${reviewingAssignment.id}/approve`, payload);
-      toast.success(res.data?.message || (isRemoval ? 'Instructor removal approved' : 'Assignment approved'));
-      setReviewingAssignment(null);
-      setReviewRate('');
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to approve assignment');
-    }
-  };
-  const handleRejectAssignment = async () => {
-    try {
-      await axios.post(`/assignments/${reviewingAssignment.id}/reject`);
-      toast.success('Assignment rejected');
-      setReviewingAssignment(null);
-      setReviewRate('');
-      fetchData();
-    } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to reject assignment');
-    }
-  };
   const handleAssignSubmit = async e => {
     e.preventDefault();
     try {
@@ -206,11 +187,11 @@ const Courses = () => {
       if (user.role !== 'user') {
         payload.hourlyRate = hourlyRate;
       }
-      const res = await axios.post(replacementAssignmentId ? `/courses/${assignCourseId}/instructors/${replacementAssignmentId}/replace` : `/courses/${assignCourseId}/instructors`, payload);
+      const res = await axios.post(replacementAssignmentId ? `/cycles/${assignCourseId}/instructors/${replacementAssignmentId}/replace` : `/cycles/${assignCourseId}/instructors`, payload);
       if (res.data.pending) {
         toast.success('Assignment request submitted for approval');
       } else {
-        toast.success('Instructor assigned');
+        toast.success("Employee assigned");
       }
       setIsAssignModalOpen(false);
       setAssignCourseId(null);
@@ -242,18 +223,18 @@ const Courses = () => {
   const handleRemoveInstructor = (courseId, courseInstructorId) => {
     const isJunior = user?.role === 'user';
     setConfirmAction({
-      title: isJunior ? 'Request Instructor Removal' : 'Remove Instructor',
-      message: isJunior ? 'Are you sure you want to request removing this instructor? A manager will review your request.' : 'Are you sure you want to remove this instructor from the course?',
+      title: isJunior ? "Request Employee Removal" : "Remove Employee",
+      message: isJunior ? "Are you sure you want to request removing this employee? A manager will review your request." : "Are you sure you want to remove this employee from the course?",
       confirmText: isJunior ? 'Submit Request' : 'Remove',
       confirmColor: "appearance-bg-red-600 appearance-text-white appearance-hover-bg-red-700",
       titleColor: "appearance-text-red-700",
       action: async () => {
         try {
           const res = await axios.delete(`/cycles/${courseId}/instructors/${courseInstructorId}`);
-          toast.success(res.data?.message || 'Instructor removed');
+          toast.success(res.data?.message || "Employee removed");
           fetchData();
         } catch (error) {
-          toast.error(error.response?.data?.error || 'Failed to remove instructor');
+          toast.error(error.response?.data?.error || "Failed to remove employee");
         }
       }
     });
@@ -267,7 +248,6 @@ const Courses = () => {
       }));
       await axios.post(`/cycles/${finishingCourse.id}/finish`, {
         totalHours: finishTotalHours,
-        payrollMonth: finishPayrollMonth,
         instructorHours: ih
       });
       toast.success('Course marked as finished');
@@ -281,7 +261,7 @@ const Courses = () => {
     setName('');
     setBranch(BRANCHES[0]);
     setTotalHours('');
-    setCourseFee('');
+    setCourseFee(''); setSchedule({});
     setDetails('');
     setStartDate('');
     setEndDate('');
@@ -335,13 +315,14 @@ const Courses = () => {
         courseId,
         enrollment
       } = removingEnrollment;
-      await axios.delete(`/cycles/${courseId}/enrollments/${enrollment.id}`, {
+      const res = await axios.delete(`/cycles/${courseId}/enrollments/${enrollment.id}`, {
         data: {
           keepFinancialRecords: keepEnrollmentFinancials,
           confirm: confirmEnrollmentRemoval
         }
       });
-      toast.success(`Removed ${enrollment.student.name} from course`);
+      toast.success(res.data.pending ? res.data.message : `Removed ${enrollment.student.name} from course`);
+      window.dispatchEvent(new Event('notifications-updated'));
       setRemovingEnrollment(null);
       fetchData();
     } catch (error) {
@@ -398,215 +379,8 @@ const Courses = () => {
   }, [loading, location.state, courses, navigate, location.pathname, user.role]);
   if (loading) return <div className="loading-state"><span className="loading-spinner" />Loading cycles…</div>;
   if (loadError) return <section className="panel"><EmptyState title="Courses couldn’t be loaded" description="Check your connection and try again."><button className="btn-primary" onClick={fetchData}>Try again</button></EmptyState></section>;
-  return <div className="courses-page cycles-page">
-
-      <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} /><span>{parentCourse?.name || 'All cycles'}</span></nav>
-      <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
-
-        <ExcelExportButton parentCourseId={parentId} />
-        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
-
-      </PageHeading>
-
-      <div className="section-tabs" aria-label="Course status">
-
-        {[['', 'All cycles', courses.filter(c => !c.archivedAt).length], ['active', 'Active', courses.filter(c => !c.archivedAt && !c.isFinished).length], ['finished', 'Completed', courses.filter(c => !c.archivedAt && c.isFinished).length], ['tuition-due', 'Tuition outstanding', courses.filter(tuitionOutstanding).length], ...(user.role !== 'user' ? [['payroll-due', 'Instructor payments due', courses.filter(c => instructorPaymentOutstanding(c, user.role)).length]] : []), ['pending', 'Pending approval', courses.filter(c => !c.archivedAt && c.pendingAssignments?.length).length], ...(user.role !== 'user' ? [['archived', 'Archived', courses.filter(c => c.archivedAt).length]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
-
-      </div>
-
-      {filterStatus === 'tuition-due' && <p className="payment-view-note">Courses with remaining student tuition, including partial payments. Retained financial records still count; archived financial records do not.</p>}
-      {filterStatus === 'payroll-due' && <p className="payment-view-note">Completed courses with unpaid instructor earnings. Instructor payments are settled after course completion.</p>}
-      <section className={view === 'grid' ? 'course-collection' : 'panel course-collection list-view'}>
-
-        <div className="filter-toolbar">
-
-          <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, instructors, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
-
-          <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={BRANCH_OPTIONS} placeholder="All branches" /></div>
-
-          {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}
-
-          <span className="result-count">{filteredCourses.length} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
-            setView('grid');
-            localStorage.setItem('aast-course-view', 'grid');
-          }}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => {
-            setView('list');
-            localStorage.setItem('aast-course-view', 'list');
-          }}><List size={18} /></button></div>
-
-        </div>
-
-        <MotionRegion transitionKey={view + ':' + filterStatus + ':' + filterBranch}>
-
-        {view === 'grid' ? <div className="course-grid">{filteredCourses.map(course => <CourseTile key={course.id} course={course} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
-            setReplacementAssignmentId(assignmentId);
-            setAssignCourseId(course.id);
-            setSelectedInstructorId('');
-            setHourlyRate('');
-            setExpandedCourse(null);
-            setIsAssignModalOpen(true);
-          }} onRestore={async () => {
-            await axios.post(`/cycles/${course.id}/restore`);
-            fetchData();
-          }} onExpand={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)} onAssign={() => {
-            setReplacementAssignmentId(null);
-            setAssignCourseId(course.id);
-            setIsAssignModalOpen(true);
-            setSelectedInstructorId('');
-            setHourlyRate('');
-          }} onEdit={() => setEditingCourse(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
-            setFinishingCourse(course);
-            setFinishTotalHours(course.totalHours || '');
-            setFinishPayrollMonth('');
-            const ih = {};
-            course.instructors.forEach(ci => {
-              ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
-            });
-            setInstructorHours(ih);
-          }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead><tbody>{filteredCourses.map(course => <CourseRows key={course.id} course={course} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
-                setReplacementAssignmentId(assignmentId);
-                setAssignCourseId(course.id);
-                setSelectedInstructorId('');
-                setHourlyRate('');
-                setExpandedCourse(null);
-                setIsAssignModalOpen(true);
-              }} onRestore={async () => {
-                await axios.post(`/cycles/${course.id}/restore`);
-                fetchData();
-              }} onExpand={() => setExpandedCourse(expandedCourse === course.id ? null : course.id)} onAssign={() => {
-                setReplacementAssignmentId(null);
-                setAssignCourseId(course.id);
-                setIsAssignModalOpen(true);
-                setSelectedInstructorId('');
-                setHourlyRate('');
-              }} onEdit={() => setEditingCourse(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
-                setFinishingCourse(course);
-                setFinishTotalHours(course.totalHours || '');
-                setFinishPayrollMonth('');
-                const ih = {};
-                course.instructors.forEach(ci => {
-                  ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
-                });
-                setInstructorHours(ih);
-              }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</tbody></table></div>}
-
-        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{courses.length ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{courses.length ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{courses.length > 0 && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
-
-        </MotionRegion>
-
-        <div className="panel-footnote">Showing {filteredCourses.length} of {courses.length} cycles<span>Expand a cycle to manage its details</span></div>
-
-      </section>
-
-
-
-      {/* Add Course Modal */}
-
-      <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
-
-          <div className="modal-content card max-w-lg w-full relative">
-
-            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
-
-              <Plus size={20} className="appearance-text-emerald-600" /> Create Cycle
-
-            </h3>
-
-            <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
-
-              <div>
-
-                <label className="input-label appearance-text-emerald-900">Cycle number</label>
-
-                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required /><small className="muted">Suggested next number. You can enter another unused number; numbering is shared across branches.</small>
-
-              </div>
-
-              <div>
-
-                <label className="input-label appearance-text-emerald-900">Branch</label>
-
-                <CustomFilterDropdown options={BRANCH_OPTIONS} value={branch} onChange={setBranch} />
-
-              </div>
-
-              <div>
-
-                <label className="input-label appearance-text-emerald-900">Details / Description</label>
-
-                <textarea className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500 min-h-[80px]" value={details} onChange={e => setDetails(e.target.value)} />
-
-              </div>
-
-              <div className="flex gap-4">
-
-                <div className="flex-1">
-
-                  <label className="input-label appearance-text-emerald-900">Start Date</label>
-
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
-
-                </div>
-
-                <div className="flex-1">
-
-                  <label className="input-label appearance-text-emerald-900">End Date</label>
-
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={endDate} onChange={e => setEndDate(e.target.value)} />
-
-                </div>
-
-              </div>
-
-              <div className="flex gap-4">
-
-                <div className="flex-1">
-
-                  <label className="input-label appearance-text-emerald-900">Total Cycle Hours</label>
-
-                  <input type="number" step="0.5" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={totalHours} onChange={e => setTotalHours(e.target.value)} />
-
-                </div>
-
-                <div className="flex-1">
-
-                  <label className="input-label appearance-text-emerald-900">Tuition Fee (EGP)</label>
-
-                  <input type="number" step="100" min="0" placeholder="e.g. 3500" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={courseFee} onChange={e => setCourseFee(e.target.value)} />
-
-                </div>
-
-              </div>
-
-              <div className="flex justify-end gap-3 appearance-mt-4">
-
-                <button type="button" onClick={() => setIsAddModalOpen(false)} className="btn-secondary">Cancel</button>
-
-                <button type="submit" className="appearance-bg-emerald-600 appearance-hover-bg-emerald-700 appearance-text-white appearance-px-6 appearance-py-2 appearance-rounded-lg appearance-font-bold appearance-transition-colors">Create</button>
-
-              </div>
-
-            </form>
-
-          </div>
-
-        </Dialog>}</AnimatePresence>
-
-
-
-      {/* Edit Cycle Modal */}
-
-      <AnimatePresence>{editingCourse && <Dialog title="Edit cycle" onClose={() => setEditingCourse(null)}>
-
-          <div className="modal-content card max-w-lg w-full relative">
-
-            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
-
-              <Edit2 size={18} className="appearance-text-emerald-600" /> Edit Cycle
-
-            </h3>
-
-            <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
+  const editForm = editingCourse ? (
+            <form onSubmit={handleEditSubmit} className="cycle-inline-edit">
 
               <div>
 
@@ -667,7 +441,8 @@ const Courses = () => {
 
               </div>
 
-              <div className="flex gap-4">
+              <CycleScheduleFields value={editingCourse} onChange={setEditingCourse} />
+<div className="flex gap-4">
 
                 <div className="flex-1">
 
@@ -697,7 +472,198 @@ const Courses = () => {
 
                 <button type="button" onClick={() => setEditingCourse(null)} className="btn-secondary">Cancel</button>
 
-                <button type="submit" className="appearance-bg-emerald-600 appearance-hover-bg-emerald-700 appearance-text-white appearance-px-6 appearance-py-2 appearance-rounded-lg appearance-font-bold appearance-transition-colors">Save</button>
+                <button type="submit" disabled={editSaving} className="btn-primary">{editSaving ? 'Saving…' : 'Save changes'}</button>
+
+              </div>
+
+            </form>
+  ) : null;
+  return <div className="courses-page cycles-page">
+
+      <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} /><span>{parentCourse?.name || 'All cycles'}</span></nav>
+      <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
+
+        <ExcelExportButton parentCourseId={parentId} />
+        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
+
+        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary" onClick={() => setImportOpen(true)}>Import cycle from Excel</button>}
+      </PageHeading>
+
+      <div className="section-tabs" aria-label="Course status">
+
+        {[['', 'All cycles', courses.filter(c => !c.archivedAt).length], ['active', 'Active', courses.filter(c => !c.archivedAt && !c.isFinished).length], ['finished', 'Completed', courses.filter(c => !c.archivedAt && c.isFinished).length], ['tuition-due', 'Tuition outstanding', courses.filter(tuitionOutstanding).length], ...(user.role !== 'user' ? [['payroll-due', "Employee payments due", courses.filter(c => instructorPaymentOutstanding(c, user.role)).length]] : []), ['pending', 'Pending approval', courses.filter(c => !c.archivedAt && c.pendingAssignments?.length).length], ...(user.role !== 'user' ? [['archived', 'Archived', courses.filter(c => c.archivedAt).length]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
+
+      </div>
+
+      {filterStatus === 'tuition-due' && <p className="payment-view-note">Courses with remaining student tuition, including partial payments. Retained financial records still count; archived financial records do not.</p>}
+      {filterStatus === 'payroll-due' && <p className="payment-view-note">Completed courses with unpaid employee earnings. Employee payments are settled after course completion.</p>}
+      <section className={view === 'grid' ? 'course-collection' : 'panel course-collection list-view'}>
+
+        <div className="filter-toolbar">
+
+          <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, employees, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
+
+          <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={BRANCH_OPTIONS} placeholder="All branches" /></div>
+
+          {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}
+
+          <span className="result-count">{filteredCourses.length} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
+            setView('grid');
+            localStorage.setItem('aast-course-view', 'grid');
+          }}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => {
+            setView('list');
+            localStorage.setItem('aast-course-view', 'list');
+          }}><List size={18} /></button></div>
+
+        </div>
+
+        <MotionRegion transitionKey={view + ':' + filterStatus + ':' + filterBranch}>
+
+        {view === 'grid' ? <div className="course-grid">{filteredCourses.map(course => <CourseTile key={course.id} course={course} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
+            setReplacementAssignmentId(assignmentId);
+            setAssignCourseId(course.id);
+            setSelectedInstructorId('');
+            setHourlyRate('');
+            setExpandedCourse(null);
+            setIsAssignModalOpen(true);
+          }} onRestore={async () => {
+            await axios.post(`/cycles/${course.id}/restore`);
+            fetchData();
+          }} onExpand={() => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(expandedCourse === course.id ? null : course.id); }} onAssign={() => {
+            setReplacementAssignmentId(null);
+            setAssignCourseId(course.id);
+            setIsAssignModalOpen(true);
+            setSelectedInstructorId('');
+            setHourlyRate('');
+          }} onEdit={() => setEditingCourse(course)} onPermanentDelete={() => setPermanentTarget(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
+            setFinishingCourse(course);
+            setFinishTotalHours(course.totalHours || '');
+            const ih = {};
+            course.instructors.forEach(ci => {
+              ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
+            });
+            setInstructorHours(ih);
+          }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead><tbody>{filteredCourses.map(course => <CourseRows key={course.id} course={course} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
+                setReplacementAssignmentId(assignmentId);
+                setAssignCourseId(course.id);
+                setSelectedInstructorId('');
+                setHourlyRate('');
+                setExpandedCourse(null);
+                setIsAssignModalOpen(true);
+              }} onRestore={async () => {
+                await axios.post(`/cycles/${course.id}/restore`);
+                fetchData();
+              }} onExpand={() => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(expandedCourse === course.id ? null : course.id); }} onAssign={() => {
+                setReplacementAssignmentId(null);
+                setAssignCourseId(course.id);
+                setIsAssignModalOpen(true);
+                setSelectedInstructorId('');
+                setHourlyRate('');
+              }} onEdit={() => setEditingCourse(course)} onPermanentDelete={() => setPermanentTarget(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
+                setFinishingCourse(course);
+                setFinishTotalHours(course.totalHours || '');
+                    const ih = {};
+                course.instructors.forEach(ci => {
+                  ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
+                });
+                setInstructorHours(ih);
+              }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</tbody></table></div>}
+
+        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{courses.length ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{courses.length ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{courses.length > 0 && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
+
+        </MotionRegion>
+
+        <div className="panel-footnote">Showing {filteredCourses.length} of {courses.length} cycles<span>Expand a cycle to manage its details</span></div>
+
+      </section>
+
+
+
+      {/* Add Course Modal */}
+
+      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
+      <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
+
+          <div className="modal-content card max-w-lg w-full relative">
+
+            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
+
+              <Plus size={20} className="appearance-text-emerald-600" /> Create Cycle
+
+            </h3>
+
+            <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
+
+              <div>
+
+                <label className="input-label appearance-text-emerald-900">Cycle number</label>
+
+                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required /><small className="muted">Suggested next number. You can enter another unused number; numbering is shared across branches.</small>
+
+              </div>
+
+              <div>
+
+                <label className="input-label appearance-text-emerald-900">Branch</label>
+
+                <CustomFilterDropdown options={BRANCH_OPTIONS} value={branch} onChange={setBranch} />
+
+              </div>
+
+              <div>
+
+                <label className="input-label appearance-text-emerald-900">Details / Description</label>
+
+                <textarea className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500 min-h-[80px]" value={details} onChange={e => setDetails(e.target.value)} />
+
+              </div>
+
+              <div className="flex gap-4">
+
+                <div className="flex-1">
+
+                  <label className="input-label appearance-text-emerald-900">Start Date</label>
+
+                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
+
+                </div>
+
+                <div className="flex-1">
+
+                  <label className="input-label appearance-text-emerald-900">End Date</label>
+
+                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={endDate} onChange={e => setEndDate(e.target.value)} />
+
+                </div>
+
+              </div>
+
+              <CycleScheduleFields value={schedule} onChange={setSchedule} />
+<div className="flex gap-4">
+
+                <div className="flex-1">
+
+                  <label className="input-label appearance-text-emerald-900">Total Cycle Hours</label>
+
+                  <input type="number" step="0.5" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={totalHours} onChange={e => setTotalHours(e.target.value)} />
+
+                </div>
+
+                <div className="flex-1">
+
+                  <label className="input-label appearance-text-emerald-900">Tuition Fee (EGP)</label>
+
+                  <input type="number" step="100" min="0" placeholder="e.g. 3500" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={courseFee} onChange={e => setCourseFee(e.target.value)} />
+
+                </div>
+
+              </div>
+
+              <div className="flex justify-end gap-3 appearance-mt-4">
+
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="btn-secondary">Cancel</button>
+
+                <button type="submit" className="appearance-bg-emerald-600 appearance-hover-bg-emerald-700 appearance-text-white appearance-px-6 appearance-py-2 appearance-rounded-lg appearance-font-bold appearance-transition-colors">Create</button>
 
               </div>
 
@@ -709,31 +675,44 @@ const Courses = () => {
 
 
 
+      {/* Edit Cycle Modal */}
+
+      <AnimatePresence>{editingCourse && expandedCourse !== editingCourse.id && <Dialog title="Edit cycle" onClose={() => setEditingCourse(null)}>
+
+          <div className="modal-content card max-w-lg w-full relative">
+
+            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900 flex items-center gap-2">
+
+              <Edit2 size={18} className="appearance-text-emerald-600" /> Edit Cycle
+
+            </h3>
+
+            {editForm}
+
+          </div>
+
+        </Dialog>}</AnimatePresence>
+
+
+
       {/* Assign Instructor Modal */}
 
-      <AnimatePresence>{isAssignModalOpen && <Dialog title={replacementAssignmentId ? 'Replace instructor' : 'Assign instructor'} onClose={() => setIsAssignModalOpen(false)}>
+      <AnimatePresence>{isAssignModalOpen && <Dialog title={replacementAssignmentId ? "Replace employee" : "Assign employee"} onClose={() => setIsAssignModalOpen(false)}>
 
           <div className="modal-content card max-w-md w-full relative">
 
-            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900">{replacementAssignmentId ? 'Replace Instructor' : 'Assign Instructor'}</h3>
+            <h3 className="appearance-text-xl appearance-font-bold appearance-mb-4 appearance-text-emerald-900">{replacementAssignmentId ? "Replace Employee" : "Assign Employee"}</h3>
 
             <form onSubmit={handleAssignSubmit} className="flex flex-col gap-4">
 
               <div>
 
-                <label className="input-label appearance-text-emerald-900">Select Instructor</label>
+                <label className="input-label appearance-text-emerald-900">Select Employee</label>
 
-                <select className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={selectedInstructorId} onChange={e => setSelectedInstructorId(e.target.value)} required>
-
-                  <option value="">-- Choose Instructor --</option>
-
-                  {instructorsList.filter(inst => {
+                <CustomFilterDropdown value={selectedInstructorId} onChange={setSelectedInstructorId} required placeholder="Choose employee" options={instructorsList.filter(inst => {
                   const targetCourse = courses.find(c => c.id === assignCourseId);
-                  const assigned = targetCourse?.instructors?.map(ci => ci.instructorId) || [];
-                  return !assigned.includes(inst.id);
-                }).map(inst => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
-
-                </select>
+                  return !(targetCourse?.instructors?.map(ci => ci.instructorId) || []).includes(inst.id);
+                }).map(inst => ({value:inst.id,label:inst.name}))} />
 
               </div>
 
@@ -785,13 +764,7 @@ const Courses = () => {
 
                 </div>
 
-                <div>
 
-                  <label className="input-label appearance-text-emerald-900">Payroll Month (YYYY-MM)</label>
-
-                  <input type="month" className="input-field appearance-border-emerald-200 appearance-focus-border-emerald-500" value={finishPayrollMonth} onChange={e => setFinishPayrollMonth(e.target.value)} required />
-
-                </div>
 
               </div>
 
@@ -844,13 +817,14 @@ const Courses = () => {
 
       {/* Delete Confirmation Modal */}
 
+      {permanentTarget && <PermanentDeleteDialog kind="cycle" record={permanentTarget} onClose={() => setPermanentTarget(null)} onDeleted={() => {setPermanentTarget(null);setExpandedCourse(null);fetchData();toast.success("Cycle permanently deleted");}} />}
       <AnimatePresence>{deleteId && <Dialog title="Archive cycle" onClose={() => setDeleteId(null)}>
 
           <div className="modal-content card max-w-sm w-full relative">
 
             <h3 className="appearance-text-xl appearance-font-bold appearance-mb-2 appearance-text-red-700">Archive Course</h3>
 
-            <p className="appearance-text-gray-600 appearance-text-sm appearance-mb-4">Archive this course? Its student tuition and instructor payroll history will remain available, and a manager can restore the course.</p>
+            <p className="appearance-text-gray-600 appearance-text-sm appearance-mb-4">Archive this course? Its student tuition and employee payroll history will remain available, and a manager can restore the course.</p>
 
             <div className="flex justify-end gap-3 appearance-mt-4">
 
@@ -899,106 +873,11 @@ const Courses = () => {
 
       {/* Review Assignment Request Modal */}
 
-      <AnimatePresence>{reviewingAssignment && (() => {
-        const targetCourse = courses.find(c => c.id === reviewingAssignment.courseId);
-        const newInst = reviewingAssignment.instructor;
-        const isRemoval = reviewingAssignment.type === 'REMOVE';
-        const isReplacement = reviewingAssignment.type === 'REPLACE';
-        return <Dialog title={isRemoval ? "Review removal request" : isReplacement ? "Review replacement request" : "Review assignment"} onClose={() => setReviewingAssignment(null)}>
-
-            <div className="modal-content card max-w-lg w-full relative">
-
-              <div className="flex items-center gap-3 appearance-mb-6 appearance-pb-4 appearance-border-b appearance-border-gray-100">
-
-                <div className={`appearance-p-2 appearance-rounded-lg ${isRemoval ? "appearance-bg-red-100 appearance-text-red-700" : "appearance-bg-emerald-100 appearance-text-emerald-700"}`}>
-
-                  <ClipboardCheck size={24} />
-
-                </div>
-
-                <div>
-
-                  <h3 className="appearance-text-xl appearance-font-bold appearance-text-gray-900">{isRemoval ? 'Review Removal Request' : isReplacement ? 'Review Replacement Request' : 'Review Assignment Request'}</h3>
-
-                  <p className="appearance-text-sm appearance-text-gray-500">Submitted by <span className="appearance-font-bold">@{reviewingAssignment.submittedBy?.username}</span></p>
-
-                </div>
-
-              </div>
+      <AnimatePresence>{reviewingAssignment && <AssignmentReviewDialog key={reviewingAssignment.id} request={{ ...reviewingAssignment, course: courses.find(c => c.id === reviewingAssignment.courseId) || reviewingAssignment.course }} onClose={() => setReviewingAssignment(null)} />}</AnimatePresence>
 
 
 
-              <div className="appearance-bg-gray-50 appearance-rounded-xl appearance-p-4 appearance-mb-6 appearance-border appearance-border-gray-200">
-
-                <div className="flex items-center gap-2 appearance-mb-4">
-
-                  <BookOpen size={16} className={isRemoval ? "appearance-text-red-600" : "appearance-text-emerald-600"} />
-
-                  <span className="appearance-font-bold appearance-text-gray-900 appearance-text-lg">{targetCourse?.name}</span>
-
-                </div>
-
-                <div className="appearance-text-center">
-
-                  <div className={`appearance-text-10px appearance-uppercase appearance-font-bold appearance-mb-1 ${isRemoval ? "appearance-text-red-600" : "appearance-text-emerald-600"}`}>Proposed Action</div>
-
-                  <div className={`appearance-font-semibold ${isRemoval ? "appearance-text-red-600" : "appearance-text-emerald-900"}`}>
-
-                    {isRemoval ? `Remove ${newInst ? newInst.name : 'Instructor'}` : isReplacement ? `Replace the original assignment with ${newInst ? newInst.name : 'Instructor'}` : `Assign ${newInst ? newInst.name : 'Instructor'}`}
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              
-
-              {!isRemoval && <div className="appearance-mb-6">
-
-                  <label className="input-label appearance-text-gray-800">Set Hourly Rate for this assignment</label>
-
-                  <div className="relative flex items-center">
-
-                    <input type="number" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500 appearance-pr-12" value={reviewRate} onChange={e => setReviewRate(e.target.value)} placeholder="e.g. 150" required />
-
-                    <span className="absolute right-3 appearance-text-gray-500 appearance-font-bold">EGP</span>
-
-                  </div>
-
-                </div>}
-
-              
-
-              <div className="flex justify-between gap-3 appearance-pt-2">
-
-                <button onClick={handleRejectAssignment} className="appearance-bg-red-600 appearance-hover-bg-red-700 appearance-text-white appearance-px-5 appearance-py-2 appearance-rounded-lg appearance-font-bold appearance-transition-colors appearance-shadow-sm">Reject Request</button>
-
-                <div className="flex gap-2">
-
-                  <button onClick={() => {
-                  setReviewingAssignment(null);
-                  setReviewRate('');
-                }} className="btn-secondary">Cancel</button>
-
-                  <button onClick={handleApproveAssignment} className={`${isRemoval ? "appearance-bg-red-600 appearance-hover-bg-red-700" : "appearance-bg-emerald-600 appearance-hover-bg-emerald-700"} appearance-text-white appearance-px-5 appearance-py-2 appearance-rounded-lg appearance-font-bold appearance-transition-colors appearance-shadow-sm`}>
-
-                    {isRemoval ? 'Approve Removal' : 'Approve Change'}
-
-                  </button>
-
-                </div>
-
-              </div>
-
-            </div>
-
-          </Dialog>;
-      })()}</AnimatePresence>
-
-
-
-      <AnimatePresence>{enrollingCourse && <EnrollmentDialog course={enrollingCourse} students={studentsList} manager={user.role !== 'user'} onClose={() => setEnrollingCourse(null)} onSaved={fetchData} />}</AnimatePresence>
+      <AnimatePresence>{enrollingCourse && <EnrollmentDialog course={enrollingCourse} manager={user.role !== 'user'} onClose={() => setEnrollingCourse(null)} onSaved={fetchData} />}</AnimatePresence>
 
 
 
@@ -1046,18 +925,7 @@ const Courses = () => {
 
                   <label className="input-label appearance-text-emerald-900">Tuition Fee Rule</label>
 
-                  <select className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500 appearance-mb-2" value={editFeeType} onChange={e => {
-                const val = e.target.value;
-                setEditFeeType(val);
-              }}>
-
-                    <option value="standard">Standard Course Tuition</option>
-
-                    <option value="custom">Adjust / Custom Discounted Fee</option>
-
-                    <option value="waive">Remove Fee / 100% Scholarship (0 EGP)</option>
-
-                  </select>
+                  <CustomFilterDropdown value={editFeeType} onChange={setEditFeeType} allowClear={false} options={[{value:'standard',label:'Standard Course Tuition'},{value:'custom',label:'Adjust / Custom Discounted Fee'},{value:'waive',label:'Remove Fee / 100% Scholarship (0 EGP)'}]} />
 
 
 
@@ -1111,7 +979,7 @@ const Courses = () => {
 
         <FinancialRemovalChoice keep={keepEnrollmentFinancials} onKeep={setKeepEnrollmentFinancials} confirmed={confirmEnrollmentRemoval} onConfirm={setConfirmEnrollmentRemoval} />
 
-        <div className="payment-entry-actions"><button type="button" className="btn-secondary" onClick={() => setRemovingEnrollment(null)}>Cancel</button><button type="button" className="btn-primary" disabled={!confirmEnrollmentRemoval} onClick={handleConfirmRemoveEnrollment}>Archive enrollment</button></div>
+        <div className="payment-entry-actions"><button type="button" className="btn-secondary" onClick={() => setRemovingEnrollment(null)}>Cancel</button><button type="button" className="btn-primary" disabled={!confirmEnrollmentRemoval} onClick={handleConfirmRemoveEnrollment}>{user.role === 'user' ? 'Request removal' : 'Archive enrollment'}</button></div>
 
       </div></Dialog>}</AnimatePresence>
 
@@ -1125,6 +993,7 @@ function CourseRows({
   onAssign,
   onEdit,
   onDelete,
+  onPermanentDelete,
   onRevert,
   onRemove,
   onReview,
@@ -1153,7 +1022,7 @@ function CourseRows({
             "--runtime-background": getBranchColor(course.branch)
           }} className="courses-presentation-2" />{course.branch}</span></td>
 
-      <td>{course.instructors.length ? <span className="instructor-cell"><span className="mini-avatar">{course.instructors[0].instructor.name.slice(0, 1)}</span><span>{course.instructors[0].instructor.name}{course.instructors.length > 1 && <small>+{course.instructors.length - 1} co-instructor</small>}</span></span> : <span className="muted">Unassigned</span>}</td>
+      <td>{course.instructors.length ? <span className="instructor-cell"><span className="mini-avatar">{course.instructors[0].instructor.name.slice(0, 1)}</span><span>{course.instructors[0].instructor.name}{course.instructors.length > 1 && <small>+{course.instructors.length - 1} additional employee</small>}</span></span> : <span className="muted">Unassigned</span>}</td>
 
       <td>
 
@@ -1180,6 +1049,7 @@ function CourseRows({
           user,
           onEdit,
           onDelete,
+          onPermanentDelete,
           onRevert,
           onRemove,
           onReview,
@@ -1195,11 +1065,13 @@ function CourseRows({
 
   </>;
 }
-function CourseDetail({
+export function CourseDetail({
+  readOnly = false,
   course,
   user,
   onEdit,
   onDelete,
+  onPermanentDelete,
   onRevert,
   onRemove,
   onReview,
@@ -1212,9 +1084,9 @@ function CourseDetail({
   onRestore,
   onPaymentsChanged
 }) {
-  const [historyEnrollment, setHistoryEnrollment] = useState(null);
+
   const manager = user.role !== 'user';
-  const [activeTab, setActiveTab] = useState('instructors');
+  const [activeTab, setActiveTab] = useState("employees");
   const [studentSearch, setStudentSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const date = value => value ? new Date(value).toLocaleDateString('en-GB', {
@@ -1230,7 +1102,8 @@ function CourseDetail({
     const regNum = enr.student?.registrationNumber?.toLowerCase() || '';
     const mobile = enr.student?.mobile?.toLowerCase() || '';
     const q = studentSearch.toLowerCase().trim();
-    const matchesSearch = !q || studentName.includes(q) || regNum.includes(q) || mobile.includes(q);
+    const paymentText = (enr.paymentSummary || []).map(p => `${p.paymentMethod} ${p.receiptNumber || ''}`).join(' ').toLowerCase();
+    const matchesSearch = !q || studentName.includes(q) || regNum.includes(q) || mobile.includes(q) || (enr.student?.englishName || '').toLowerCase().includes(q) || paymentText.includes(q);
     const matchesStatus = statusFilter === 'all' || enr.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -1238,51 +1111,19 @@ function CourseDetail({
   const partialCount = enrollments.filter(e => e.status === 'PARTIAL').length;
   const unpaidCount = enrollments.filter(e => e.status === 'UNPAID').length;
   const exemptCount = enrollments.filter(e => e.status === 'EXEMPT').length;
-  return <div className="course-detail">
+  return <div className="course-detail cycle-detail-layout">
 
-      <AnimatePresence>{historyEnrollment && <PaymentHistory course={course} enrollment={historyEnrollment} manager={manager} onClose={() => setHistoryEnrollment(null)} onChanged={onPaymentsChanged} />}</AnimatePresence>
-
-      <div>
-
-        <div className="eyebrow">CYCLE DETAILS</div>
-
-        <h3>{course.name}</h3>
-
-        <p>{course.details || 'No additional description.'}</p>
-
-        <div className="detail-meta">
-
-          <span>Start <strong>{date(course.startDate)}</strong></span>
-
-          <span>End <strong>{date(course.endDate)}</strong></span>
-
-          {<span>Tuition Fee <strong>{course.courseFee ? Number(course.courseFee).toLocaleString() + ' EGP' : 'Free / Unset'}</strong></span>}
-
-          {course.payrollMonth && <span>Payroll <strong>{course.payrollMonth}</strong></span>}
-
-        </div>
-
-        {manager && (course.archivedAt ? <div className="detail-actions"><span className="deleted-tag">Archived cycle · financial records retained</span><button className="btn-secondary" onClick={onRestore}>Restore cycle</button></div> : <div className="detail-actions">
-
-            <button className="btn-secondary" onClick={onEdit}><Edit2 size={14} />Edit details</button>
-
-            {!course.isFinished ? <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={14} />Complete cycle</button> : <button className="btn-secondary" onClick={onRevert}><RotateCcw size={14} />Reopen cycle</button>}
-
-            <button className="icon-button danger" aria-label={'Archive ' + course.name} onClick={onDelete}><Trash2 size={16} /></button>
-
-          </div>)}
-
-      </div>
-
-
-
-      <div>
-
+      <section className="cycle-overview">
+        <div className="cycle-overview-heading"><div className="cycle-heading-identity"><span className="eyebrow">{course.parentCourse?.code || course.branch}</span><h3>{course.name}</h3><Status complete={course.isFinished}>{course.archivedAt ? 'Archived' : course.isFinished ? 'Completed' : 'In progress'}</Status>{course.details && <p>{course.details}</p>}</div><div className="cycle-date-range"><CalendarDays size={19}/><div><span>Start date</span><strong>{date(course.startDate)}</strong></div><span className="cycle-date-separator" aria-hidden="true">→</span><div><span>End date</span><strong>{date(course.endDate)}</strong></div></div></div>
+        <div className="cycle-facts"><div className="cycle-fact-venue"><MapPin size={19}/><div><span>Venue / room</span><strong>{course.venue || 'Not set'}</strong></div></div><div className="cycle-fact-time"><Clock3 size={19}/><div><span>Class time</span><strong>{classTimeLabel(course) || 'Not set'}</strong></div></div><div className="cycle-fact-tuition"><DollarSign size={19}/><div><span>Standard tuition</span><strong>{Number(course.courseFee || 0).toLocaleString()} <small>EGP</small></strong></div></div><div className="cycle-fact-hours"><BookOpen size={19}/><div><span>Teaching hours</span><strong>{course.totalHours ?? 'Not set'}{course.totalHours != null && <small> hours</small>}</strong></div></div></div>
+        {manager && !readOnly && <div className="cycle-action-bar"><div className="cycle-primary-actions">{course.archivedAt ? <button className="btn-secondary" onClick={onRestore}><RotateCcw size={15}/>Restore cycle</button> : <><button className="btn-secondary" onClick={onEdit}><Edit2 size={15}/>Edit details</button>{course.isFinished && !course.payrollEarnings?.length && course.instructors.length > 0 && <button className="btn-primary" onClick={onFinish}>Confirm teaching hours</button>}{course.isFinished ? <button className="btn-secondary" onClick={onRevert}><RotateCcw size={15}/>Reopen cycle</button> : <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={15}/>Complete cycle</button>}</>}</div><div className="cycle-danger-actions">{!course.archivedAt && <button className="btn-secondary" onClick={onDelete}><Archive size={15}/>Archive</button>}<button className="btn-secondary cycle-delete-action" onClick={onPermanentDelete}><Trash2 size={15}/>Permanently delete</button></div></div>}
+      </section>
+      <section className="cycle-roster-panel">
         <div className="detail-subtabs">
 
-          <button type="button" className={activeTab === 'instructors' ? 'active' : ''} onClick={() => setActiveTab('instructors')}>
+          <button type="button" className={activeTab === "employees" ? 'active' : ''} onClick={() => setActiveTab("employees")}>
 
-            Instructors <span>{course.instructors.length}</span>
+            Employees <span>{course.instructors.length}</span>
 
           </button>
 
@@ -1296,7 +1137,7 @@ function CourseDetail({
 
 
 
-        {activeTab === 'instructors' ? <div className="teaching-team">
+        {activeTab === "employees" ? <div className="teaching-team">
 
             {course.instructors.map(ci => <div className="team-line" key={ci.id}>
 
@@ -1306,13 +1147,13 @@ function CourseDetail({
 
                   <small>
 
-                    {manager ? `${ci.hourlyRate ? ci.hourlyRate + ' EGP / hour' : ''}${ci.hoursTaught != null ? (ci.hourlyRate ? ' · ' : '') + ci.hoursTaught + ' hours taught' : ''}` : ci.hoursTaught != null ? `${ci.hoursTaught} hours taught` : 'Cycle instructor'}
+                    {manager ? `${ci.hourlyRate ? ci.hourlyRate + ' EGP / hour' : ''}${ci.hoursTaught != null ? (ci.hourlyRate ? ' · ' : '') + ci.hoursTaught + ' hours taught' : ''}` : ci.hoursTaught != null ? `${ci.hoursTaught} hours taught` : "Cycle employee"}
 
                   </small>
 
                 </span>
 
-                {!course.isFinished && !course.archivedAt && <><button className="text-button" onClick={() => onReplace(ci.id)}>{manager ? "Replace" : "Request replacement"}</button><button className="icon-button danger" title={manager ? 'Remove instructor' : 'Request instructor removal'} aria-label={'Remove ' + ci.instructor.name} onClick={() => onRemove(ci.id)}>
+                {!readOnly && !course.isFinished && !course.archivedAt && <><button className="text-button" onClick={() => onReplace(ci.id)}>{manager ? "Replace" : "Request replacement"}</button><button className="icon-button danger" title={manager ? "Remove employee" : "Request employee removal"} aria-label={'Remove ' + ci.instructor.name} onClick={() => onRemove(ci.id)}>
 
                     <X size={14} />
 
@@ -1320,9 +1161,9 @@ function CourseDetail({
 
               </div>)}
 
-            {!course.isFinished && !course.archivedAt && <button className="text-button" onClick={onAssign}>
+            {!readOnly && !course.isFinished && !course.archivedAt && <button className="text-button" onClick={onAssign}>
 
-                <Plus size={14} />{course.instructors.length ? 'Add co-instructor' : 'Assign an instructor'}
+                <Plus size={14} />{course.instructors.length ? "Add additional employee" : "Assign an employee"}
 
               </button>}
 
@@ -1330,13 +1171,13 @@ function CourseDetail({
 
                 <span>
 
-                  <strong>{pa.type === 'REPLACE' ? `Replacement: ${pa.instructor?.name || 'Instructor'}` : pa.type === 'REMOVE' ? `Removal: ${pa.instructor?.name || 'Instructor'}` : pa.instructor?.name || 'Assignment'}</strong>
+                  <strong>{pa.type === 'REPLACE' ? `Replacement: ${pa.instructor?.name || "Employee"}` : pa.type === 'REMOVE' ? `Removal: ${pa.instructor?.name || "Employee"}` : pa.instructor?.name || 'Assignment'}</strong>
 
                   <small>Requested by @{pa.submittedBy?.username}</small>
 
                 </span>
 
-                {manager ? <button className="btn-secondary" onClick={() => onReview(pa)}>Review</button> : <span className="status-badge status-pending">Awaiting review</span>}
+                {manager && !readOnly ? <button className="btn-secondary" onClick={() => onReview(pa)}>Review</button> : <span className="status-badge status-pending">Awaiting review</span>}
 
               </div>)}
 
@@ -1350,7 +1191,7 @@ function CourseDetail({
 
                 {<>
 
-                    <span>Collected: <strong>{collectedTotal.toLocaleString()} EGP</strong></span>
+                    <span>Tuition: <strong>{collectedTotal.toLocaleString()} EGP</strong></span><span>Books: <strong>{Number(course.totalBookRevenue || 0).toLocaleString()} EGP</strong></span><span>Total income: <strong>{Number(course.totalIncome ?? collectedTotal).toLocaleString()} EGP</strong></span>
 
                     {expectedTotal > collectedTotal && <span className="courses-presentation-3">Remaining: <strong>{(expectedTotal - collectedTotal).toLocaleString()} EGP</strong></span>}
 
@@ -1358,11 +1199,11 @@ function CourseDetail({
 
               </div>
 
-              <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt} onClick={onEnroll}>
+              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt} onClick={onEnroll}>
 
                 <Plus size={13} /> Enroll student
 
-              </button>
+              </button>}
 
             </div>
 
@@ -1426,7 +1267,7 @@ function CourseDetail({
 
                 </p>
 
-                {enrollments.length === 0 ? <button className="text-button" disabled={!!course.archivedAt} onClick={onEnroll}>
+                {enrollments.length === 0 && !readOnly ? <button className="text-button" disabled={!!course.archivedAt} onClick={onEnroll}>
 
                     <Plus size={13} /> Enroll first student
 
@@ -1441,77 +1282,12 @@ function CourseDetail({
 
               </div> : <div className="enrollment-list">
 
-                {filteredEnrollments.map(enr => <div className="enrollment-row-card" key={enr.id}>
-
-                    <div className="enrollment-student-meta">
-
-                      <span className="student-avatar-mini">{initials(enr.student?.name || 'ST')}</span>
-
-                      <div className="student-info">
-
-                        <strong>{enr.student?.name} {(enr.student?.deletedAt || enr.deletedAt) && <span className="deleted-tag">{enr.student?.deletedAt ? "Deleted student" : "Archived enrollment"}{enr.financialArchivedAt ? " · finances archived" : ""}</span>}</strong>
-
-                        <small>Reg: {enr.student?.registrationNumber} {enr.student?.mobile ? `• ${enr.student.mobile}` : ''}</small>
-
-                      </div>
-
-                    </div>
-
-
-
-                    <div className="enrollment-financial-info">
-
-                      {<div className="courses-presentation-6">
-
-                          <div className="courses-presentation-7">
-
-                            {Number(enr.amountPaid || 0).toLocaleString()} EGP
-
-                          </div>
-
-                          <small className="courses-presentation-8">
-
-                            {enr.customFee === 0 ? 'Exempt (0 EGP)' : enr.customFee !== null ? `Fee: ${Number(enr.customFee).toLocaleString()} EGP` : `Fee: ${(course.courseFee || 0).toLocaleString()} EGP`}
-
-                          </small>
-
-                        </div>}
-
-
-
-                      <span className={`enrollment-badge ${(enr.status || 'unpaid').toLowerCase()}`}>
-
-                        {enr.status === 'PAID' ? 'Paid' : enr.status === 'PARTIAL' ? 'Partial' : enr.status === 'EXEMPT' ? 'Exempt' : 'Unpaid'}
-
-                      </span>
-
-
-
-                      <button type="button" className="text-button" onClick={() => setHistoryEnrollment(enr)}>Payment history</button>
-
-                      {manager && <button className="icon-button" title="Edit tuition fee" aria-label="Edit tuition fee" onClick={() => onEditEnrollment(enr)}>
-
-                          <Edit2 size={13} />
-
-                        </button>}
-
-
-
-                      <button className="icon-button danger" title="Remove student from course" aria-label="Remove student" disabled={!!enr.deletedAt} onClick={() => onRemoveEnrollment(enr)}>
-
-                        <X size={14} />
-
-                      </button>
-
-                    </div>
-
-                  </div>)}
-
+                {filteredEnrollments.map(enr => <StudentTuitionRow key={enr.id} course={course} enrollment={enr} manager={manager} readOnly={readOnly} onBooksChanged={onPaymentsChanged} onEdit={() => onEditEnrollment(enr)} onRemove={() => onRemoveEnrollment(enr)} />)}
               </div>}
 
           </div>}
 
-      </div>
+      </section>
 
     </div>;
 }
@@ -1546,11 +1322,11 @@ function CourseTile(props) {
 
   <div className="course-tile-team">{course.instructors.length ? <><div className="avatar-stack">{course.instructors.slice(0, 3).map((ci, index) => <span key={ci.id} style={{
             '--avatar-color': ['#e5eaff', '#dcf3ef', '#ffeadc'][index]
-          }} title={ci.instructor.name}>{initials(ci.instructor.name)}</span>)}</div><div><strong>{course.instructors[0].instructor.name}</strong><small>{course.instructors.length > 1 ? '+' + (course.instructors.length - 1) + ' co-instructor' : 'Cycle instructor'}</small></div></> : <><span className="unassigned-avatar"><Users size={18} /></span><div><strong>Room for a great instructor</strong><small>Ready to assign</small></div></>}</div>
+          }} title={ci.instructor.name}>{initials(ci.instructor.name)}</span>)}</div><div><strong>{course.instructors[0].instructor.name}</strong><small>{course.instructors.length > 1 ? '+' + (course.instructors.length - 1) + " additional employee" : "Cycle employee"}</small></div></> : <><span className="unassigned-avatar"><Users size={18} /></span><div><strong>Room for a great employee</strong><small>Ready to assign</small></div></>}</div>
 
   
 
-  <div className="flex items-center justify-between">
+  <div className="cycle-card-student-summary">
 
     <div className="course-tile-students">
 
@@ -1584,7 +1360,7 @@ function CourseTile(props) {
 
       </div>
 
-      <div className="tuition-meter-bar">
+      <div className="tuition-meter-bar" role="progressbar" aria-label="Tuition collected" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
 
         <div className="tuition-meter-fill courses-presentation-10" style={{
           "--runtime-width": `${percent}%`
@@ -1598,12 +1374,9 @@ function CourseTile(props) {
 
   {course.pendingAssignments?.length > 0 && <div className="tile-pending"><Clock3 size={13} />{course.pendingAssignments.length} pending approval</div>}
 
-  <div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Cycle details'}<ChevronRight size={16} /></button></div>
+  {(course.venue || classTimeLabel(course)) && <div className="cycle-schedule-summary">{course.venue && <span>Venue: <strong>{course.venue}</strong></span>}{classTimeLabel(course) && <span>Class: <strong>{classTimeLabel(course)}</strong></span>}</div>}<div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Cycle details'}<ChevronRight size={16} /></button></div>
 
-  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>Cycle details</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div><CourseDetail {...props} onEdit={() => {
-            onExpand();
-            props.onEdit();
-          }} onDelete={() => {
+  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>{props.editForm ? 'Edit cycle details' : 'Cycle details'}</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div>{props.editForm ? <div className="cycle-edit-view"><div className="cycle-edit-intro"><h3>{course.name}</h3><p>Update this cycle’s details, location and schedule.</p></div>{props.editForm}</div> : <CourseDetail {...props} onEdit={props.onEdit} onPermanentDelete={() => { onExpand(); props.onPermanentDelete(); }} onDelete={() => {
             onExpand();
             props.onDelete();
           }} onRevert={() => {
@@ -1630,7 +1403,7 @@ function CourseTile(props) {
           }} onRemoveEnrollment={enr => {
             onExpand();
             props.onRemoveEnrollment(enr);
-          }} /></div></Dialog>}</AnimatePresence>
+          }} />}</div></Dialog>}</AnimatePresence>
 
  </article>;
 }

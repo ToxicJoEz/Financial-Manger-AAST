@@ -1,0 +1,32 @@
+// Instructor request review: identity first, then proposed change and decision.
+.approval-dialog { width:min(560px,100%); padding:28px; --approval-accent:#4966af;
+ .approval-heading {display:flex;align-items:center;gap:13px;margin-bottom:22px;h2 {margin:5px 0 0;font-size:22px;font-weight:750;color:#263b58;letter-spacing:-.5px;}}
+ .approval-heading-icon {display:grid;place-items:center;width:46px;height:46px;flex-shrink:0;border-radius:13px;background:#eaf0ff;color:var(--approval-accent);}
+ .approval-eyebrow {font-size:10px;font-weight:750;letter-spacing:1.2px;color:#71839e;}
+ .approval-label {display:block;font-size:11px;font-weight:600;color:#718198;margin-bottom:5px;}
+ .approval-requester {display:flex;align-items:center;gap:13px;padding:18px;border:1px solid #cfdcf6;background:linear-gradient(115deg,#edf2ff,#f7f9ff);border-radius:13px;margin-bottom:20px;}
+ .approval-avatar {display:grid;place-items:center;flex-shrink:0;width:48px;height:48px;border-radius:14px;background:#4966af;color:white;font-size:17px;font-weight:750;}
+ .approval-username {display:block;font-size:21px;font-weight:800;letter-spacing:-.4px;color:#324e8b;overflow-wrap:anywhere;}
+ .approval-fullname {display:block;font-size:12px;color:#617392;margin-top:4px;}
+ .approval-pending {margin-left:auto;align-self:flex-start;flex-shrink:0;font-size:10px;font-weight:650;color:#885d22;background:#fff0d5;border:1px solid #edd9b5;border-radius:99px;padding:5px 8px;}
+ .approval-change {border:1px solid #e0e7f1;border-radius:12px;overflow:hidden;}
+ .approval-cycle {display:flex;align-items:center;gap:10px;padding:15px 18px;background:#f5f7fb;color:#5d7295;strong {font-size:15px;color:#304766;} }
+ .approval-branch {margin-left:auto;font-size:10px;font-weight:750;padding:6px 8px;border-radius:6px;color:#364961;background:color-mix(in srgb,var(--branch-color) 13%,white);}
+ .approval-proposal {padding:18px;strong {display:block;font-size:19px;font-weight:700;color:#293e59;text-align:start;}p {font-size:12px;color:#708097;line-height:1.6;margin-top:8px;}}
+ .approval-rate {margin-top:21px;label {display:block;font-size:13px;font-weight:700;color:#3c506c;margin-bottom:9px;>span {color:#c84c59;}} >div {position:relative;>span {position:absolute;right:13px;top:50%;transform:translateY(-50%);font-size:11px;color:#708198;pointer-events:none;}}input {padding-right:95px;font-size:16px;font-weight:650;}p {font-size:11px;line-height:1.5;color:#7a889c;margin:8px 0 0;}}
+ .approval-actions {display:flex;justify-content:space-between;gap:12px;border-top:1px solid #e5ebf4;margin-top:24px;padding-top:20px;>div {display:flex;gap:8px;}button {display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:12px;}}
+ .approval-reject {border:1px solid #efcfd2;border-radius:8px;padding:10px 12px;color:#b74651;background:#fff6f6;cursor:pointer;&:hover {background:#fbe7e9;}}
+ &.approval-removal .approval-approve {background:#bb4653;}
+}
+@media(max-width:600px) {.approval-dialog {padding:20px;.approval-pending {display:none;}.approval-actions {flex-wrap:wrap;>div {flex:1;justify-content:flex-end;}}.approval-username {font-size:19px;}.approval-heading h2 {font-size:20px;}}}
+
+.approval-dialog {
+ --action-ink:#216747; --action-bg:#e7f5ed; --action-border:#c2e5d1;
+ &.approval-removal { --action-ink:#b23243; --action-bg:#fff0f1; --action-border:#f0c5cc; }
+ &.approval-replacement { --action-ink:#8b5b14; --action-bg:#fff5df; --action-border:#ecd6a5; }
+ .approval-action-label { display:inline-flex; align-items:center; gap:7px; padding:7px 10px; margin-bottom:13px; border:1px solid var(--action-border); border-radius:7px; background:var(--action-bg); color:var(--action-ink); font-size:12px; font-weight:750; }
+ .approval-proposal { border-left:3px solid var(--action-border); }
+}
+
+.student-request-details {display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:15px;font-size:12px;dt {color:#7b889c;font-size:10px;margin-bottom:5px;}dd {color:#344b68;overflow-wrap:anywhere;}}
+.student-request-consequence {background:#f6f8fc;border:1px solid #e1e8f3;border-radius:8px;padding:13px;margin-top:14px;b {font-size:12px;color:#3e5573;}}

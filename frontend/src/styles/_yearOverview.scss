@@ -1,0 +1,29 @@
+.home-summary.has-year-finances {grid-template-columns:repeat(2,minmax(0,1fr));.balance-card{grid-column:auto;}.balance-body{min-height:146px;}.balance-legend{gap:30px;}.balance-amount{white-space:normal;overflow-wrap:anywhere;}}
+.annual-payroll-mark{display:flex;flex-direction:column;align-items:center;gap:7px;background:#ffffff14;border:1px solid #ffffff24;border-radius:14px;padding:18px;flex-shrink:0;color:#e0e7ff;strong{font-size:24px;color:white;}span{font-size:10px;}}
+.home-summary .year-income-card {background:#207c6a;.balance-label,.balance-period,.balance-amount>span,.balance-legend{color:#d6f0e7;}.balance-legend i{background:#b3ead8;}.balance-legend>span:nth-child(2) i{background:#e8d99e;}}
+@media(max-width:600px){.home-summary.has-year-finances .balance-card{grid-column:1/-1;}.annual-payroll-mark{padding:12px;}.home-summary.has-year-finances .balance-body{gap:12px;}.home-summary.has-year-finances .balance-amount{font-size:29px;}}
+
+.home-summary.has-year-finances {
+  grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; align-items: stretch;
+  .balance-card, > .metric { min-width: 0; padding: 20px; }
+  .balance-card { display: flex; flex-direction: column; }
+  .balance-top { gap: 8px; font-size: 11px; }
+  .balance-period { flex-shrink: 0; }
+  .balance-body { min-height: 0; padding: 20px 0 16px; flex: 1; }
+  .balance-label { font-size: 11px; line-height: 1.6; }
+  .balance-amount { font-size: clamp(23px, 2.1vw, 31px); line-height: 1.6; letter-spacing: -.7px; }
+  .balance-amount > span { font-size: 10px; margin-left: 5px; }
+  .balance-legend { gap: 12px; flex-wrap: wrap; font-size: 10px; margin-top: auto; }
+  .balance-legend strong { font-size: 11px; }
+  .annual-payroll-mark { display: none; }
+  > .metric .metric-value { font-size: 30px; }
+}
+@media(max-width:1100px) {
+  .home-summary.has-year-finances { grid-template-columns: repeat(2, minmax(0,1fr)); }
+}
+@media(max-width:600px) {
+  .home-summary.has-year-finances { gap: 12px; .balance-card, >.metric { padding: 17px; } .balance-card { grid-column: auto; } .balance-amount { font-size: 24px; } .balance-top { flex-wrap: wrap; } }
+}
+@media(max-width:380px) {
+  .home-summary.has-year-finances { grid-template-columns: 1fr; }
+}

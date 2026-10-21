@@ -1,13 +1,15 @@
+import { paymentFields } from './studentProfile.js';
 import { assertWithinFee } from './tuition.js';
 import prisma from '../db/prisma.js';
 import { moneyMinor } from './numbers.js';
 
 export const paymentView = entry => ({ ...entry, amountMinor: entry.amountMinor.toString(), amount: Number(entry.amountMinor) / 100 });
 
-export async function appendPayment(enrollment, course, student, user, { amountMinor, kind, note, idempotencyKey, reversalOfId, occurredAt }) {
+export async function appendPayment(enrollment, course, student, user, { amountMinor, kind, note, idempotencyKey, reversalOfId, occurredAt, paymentMethod, receiptNumber, paymentDateKnown = true, importBatchId }) {
   const entry = await prisma.paymentEntry.create({ data: {
     enrollmentId: enrollment.id, courseId: course.id, studentId: student.id,
     courseName: course.name, studentName: student.name, amountMinor, kind, note,
+    ...paymentFields({ paymentMethod, receiptNumber }), paymentDateKnown, importBatchId,
     recordedBy: user.username, idempotencyKey, reversalOfId, occurredAt: occurredAt || new Date()
   } });
   const { _sum } = await prisma.paymentEntry.aggregate({ where: { enrollmentId: enrollment.id }, _sum: { amountMinor: true } });
@@ -19,9 +21,9 @@ export async function appendPayment(enrollment, course, student, user, { amountM
   return paymentView(entry);
 }
 
-export async function openingBalance(enrollment, course, student, user) {
+export async function openingBalance(enrollment, course, student, user, metadata = {}) {
   const amountMinor = moneyMinor(enrollment.amountPaid);
   if (amountMinor === 0n) return;
   await appendPayment(enrollment, course, student, user, { amountMinor, kind: 'PAYMENT',
-    note: 'Payment explicitly recorded when the student was enrolled.', idempotencyKey: `opening:${enrollment.id}` });
+    note: 'Payment explicitly recorded when the student was enrolled.', idempotencyKey: `opening:${enrollment.id}`, ...metadata });
 }

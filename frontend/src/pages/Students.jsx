@@ -1,5 +1,8 @@
+import StudentDetailsDialog from '../components/StudentDetailsDialog';
+import { AuthContext } from '../context/AuthContext';
+import StudentProfileFields from '../components/StudentProfileFields';
 import FinancialRemovalChoice from '../components/FinancialRemovalChoice';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, Phone, GraduationCap, X, Check } from 'lucide-react';
@@ -7,7 +10,10 @@ import { toast } from 'react-hot-toast';
 import Dialog from '../components/Dialog';
 import { PageHeading, initials } from '../components/WorkspaceUI';
 export default function Students() {
+  const { user } = useContext(AuthContext);
+  const manager = ['admin', 'mod'].includes(user.role);
   const [students, setStudents] = useState([]);
+  const [viewingStudent, setViewingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -15,6 +21,7 @@ export default function Students() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [addName, setAddName] = useState('');
   const [addRegNumber, setAddRegNumber] = useState('');
+  const [addProfile, setAddProfile] = useState({});
   const [addMobile, setAddMobile] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,6 +35,8 @@ export default function Students() {
   useEffect(() => { setKeepFinancialRecords(true); setConfirmRemoval(false); }, [deleteTarget]);
   useEffect(() => {
     fetchStudents();
+    window.addEventListener('students-updated', fetchStudents);
+    return () => window.removeEventListener('students-updated', fetchStudents);
   }, []);
   const fetchStudents = async () => {
     try {
@@ -44,6 +53,7 @@ export default function Students() {
     setAddName('');
     setAddRegNumber('');
     setAddMobile('');
+    setAddProfile({});
   };
   const handleAddSubmit = async e => {
     e.preventDefault();
@@ -56,9 +66,11 @@ export default function Students() {
       const res = await axios.post('/students', {
         name: addName.trim(),
         registrationNumber: addRegNumber.trim(),
-        mobile: addMobile.trim() || null
+        mobile: addMobile.trim() || null,
+        ...addProfile
       });
-      toast.success(`Student ${res.data.name} registered`);
+      toast.success(res.data.pending ? res.data.message : `Student ${res.data.name} registered`);
+      window.dispatchEvent(new Event('notifications-updated'));
       setIsAddModalOpen(false);
       resetAddForm();
       fetchStudents();
@@ -79,7 +91,8 @@ export default function Students() {
       const res = await axios.put(`/students/${editingStudent.id}`, {
         name: editingStudent.name.trim(),
         registrationNumber: editingStudent.registrationNumber.trim(),
-        mobile: editingStudent.mobile ? editingStudent.mobile.trim() : null
+        mobile: editingStudent.mobile ? editingStudent.mobile.trim() : null,
+        englishName: editingStudent.englishName || null, dateOfBirth: editingStudent.dateOfBirth?.slice(0,10) || null, nationality: editingStudent.nationality || null, placeOfBirth: editingStudent.placeOfBirth || null
       });
       toast.success(`Updated ${res.data.name}`);
       setEditingStudent(null);
@@ -94,8 +107,9 @@ export default function Students() {
     if (!deleteTarget) return;
     try {
       setSubmitting(true);
-      await axios.delete(`/students/${deleteTarget.id}`, { data: { keepFinancialRecords, confirm: confirmRemoval } });
-      toast.success(`Removed student ${deleteTarget.name}`);
+      const res = await axios.delete(`/students/${deleteTarget.id}`, { data: { keepFinancialRecords, confirm: confirmRemoval } });
+      toast.success(res.data.pending ? res.data.message : `Removed student ${deleteTarget.name}`);
+      window.dispatchEvent(new Event('notifications-updated'));
       setDeleteTarget(null);
       fetchStudents();
     } catch (err) {
@@ -106,7 +120,7 @@ export default function Students() {
   };
   const filtered = students.filter(s => {
     const q = searchTerm.toLowerCase();
-    return s.name.toLowerCase().includes(q) || s.registrationNumber.toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
+    return (s.englishName || '').toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.registrationNumber.toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
   });
   return <div className="students-container">
       <PageHeading eyebrow="ACADEMIC DIRECTORY" title="Students" description="Comprehensive directory of registered students across all academic branches.">
@@ -114,10 +128,11 @@ export default function Students() {
         resetAddForm();
         setIsAddModalOpen(true);
       }}>
-          <Plus size={16} /> Add student
+          <Plus size={16} /> {manager ? 'Add student' : 'Request student addition'}
         </button>
       </PageHeading>
 
+      {!manager && <p className="payment-view-note">Student additions and removals require approval from an admin or moderator. Pending requests appear in Notifications.</p>}
       <div className="students-toolbar">
         <div className="students-search">
           <Search size={16} />
@@ -168,8 +183,8 @@ export default function Students() {
                       <div className="student-info-cell">
                         <span className="student-avatar">{initials(student.name)}</span>
                         <div className="student-name-block">
-                          <strong>{student.name} {student.deletedAt && <span className="deleted-tag">Deleted</span>}</strong>
-                          <span>ID: {student.id.slice(0, 8)}...</span>
+                          <button type="button" className="student-name-link" onClick={()=>setViewingStudent(student)}>{student.name}</button> {student.deletedAt && <span className="deleted-tag">Deleted</span>}
+                          <span>{student.englishName || `ID: ${student.id.slice(0, 8)}…`}</span><small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?.slice(0,10)].filter(Boolean).join(" · ")}</small>
                         </div>
                       </div>
                     </td>
@@ -209,6 +224,7 @@ export default function Students() {
           </div>
         </div>}
 
+      <AnimatePresence>{viewingStudent && <StudentDetailsDialog studentId={viewingStudent.id} onClose={()=>setViewingStudent(null)} />}</AnimatePresence>
       {/* Add Student Modal */}
       <AnimatePresence>
         {isAddModalOpen && <Dialog title="Add Student" onClose={() => setIsAddModalOpen(false)}>
@@ -235,12 +251,13 @@ export default function Students() {
                   <label>Mobile Number</label>
                   <input type="tel" placeholder="e.g. 01012345678" value={addMobile} onChange={e => setAddMobile(e.target.value)} />
                 </div>
+                <StudentProfileFields prefix="add" value={addProfile} onChange={setAddProfile} />
                 <div className="student-modal-actions">
                   <button type="button" className="btn-secondary" onClick={() => setIsAddModalOpen(false)}>
                     Cancel
                   </button>
                   <button type="submit" className="btn-primary" disabled={submitting}>
-                    <Plus size={16} /> {submitting ? 'Registering...' : 'Register student'}
+                    <Plus size={16} /> {submitting ? 'Submitting…' : manager ? 'Register student' : 'Submit for approval'}
                   </button>
                 </div>
               </form>
@@ -283,6 +300,7 @@ export default function Students() {
                 mobile: e.target.value
               })} />
                 </div>
+                <StudentProfileFields prefix="edit" value={editingStudent} onChange={setEditingStudent} />
                 <div className="student-modal-actions">
                   <button type="button" className="btn-secondary" onClick={() => setEditingStudent(null)}>
                     Cancel
@@ -319,7 +337,7 @@ export default function Students() {
                     Cancel
                   </button>
                   <button type="button" className="btn-primary students-presentation-25" onClick={handleDeleteSubmit} disabled={submitting || !confirmRemoval}>
-                    <Trash2 size={16} /> {submitting ? 'Deleting...' : 'Delete student'}
+                    <Trash2 size={16} /> {submitting ? 'Submitting…' : manager ? 'Delete student' : 'Request removal'}
                   </button>
                 </div>
               </div>

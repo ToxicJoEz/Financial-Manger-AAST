@@ -1,0 +1,41 @@
+.finance-main-tabs { display:flex; gap:8px; border-bottom:1px solid #dfe6f1; padding-bottom:12px; margin-bottom:30px; a { display:flex; align-items:center; gap:9px; padding:11px 22px; border-radius:9px; font-size:13px; font-weight:650; color:#7b89a0; text-decoration:none; } a:hover { background:#f0f3fa; color:#536995; } a.active { background:#e8eefb; color:#4966af; } }
+.income-page .page-heading h1 { font-size:24px; }
+.income-metrics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.income-layout { display:grid; grid-template-columns:minmax(0,1fr) 290px; gap:22px; align-items:start; }
+.income-ledger { min-width:0; overflow:hidden; }
+.income-layout .panel-heading h2 { font-size:15px; font-weight:750; color:#3c506c; }
+.income-layout .panel-heading p { font-size:11px; color:#8996a9; margin-top:6px; line-height:1.5; }
+.income-count { font-size:11px; color:#8291a7; white-space:nowrap; }
+.income-cycle-link { display:flex; gap:7px; align-items:center; font-weight:700; color:#3e587b; }
+.income-table td { vertical-align:middle; }
+.income-table td small { display:block; margin-top:6px; color:#8795aa; font-size:10px; }
+.income-table .currency { white-space:nowrap; }
+.income-branch { display:block; width:100%; text-align:left; padding:20px 22px; border:0; border-top:1px solid #e7edf5; background:transparent; cursor:pointer; transition:background .15s;
+ &:hover, &.is-selected { background:color-mix(in srgb, var(--branch-color) 7%, white); }
+ >div:first-child {display:flex;justify-content:space-between;align-items:center;gap:10px;}
+ strong {display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.4px;color:#40516c;}
+ b {display:block;margin-top:12px;font-size:22px;font-weight:750;letter-spacing:-.6px;color:#243b59;font-variant-numeric:tabular-nums;}
+ b small {font-size:10px;letter-spacing:.5px;color:#708198;}
+ >small {display:block;margin-top:10px;font-size:11px;color:#65768c;}
+ &:focus-visible {outline:2px solid var(--branch-color);outline-offset:-3px;}
+}
+.income-share {font-size:12px;font-weight:700;color:#52667f;}
+.income-branch-track {height:7px;margin-top:12px;border-radius:99px;background:color-mix(in srgb,var(--branch-color) 12%, #f5f7fa);overflow:hidden;span {display:block;height:100%;background:var(--branch-color);border-radius:inherit;}}
+.income-branch i, .income-branch-badge i, .income-branch-filters i {display:inline-block;width:8px;height:8px;flex-shrink:0;border-radius:50%;background:var(--branch-color);}
+.income-branch-badge {display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:7px 9px;border-radius:7px;font-size:10px;font-weight:750;color:#334760;background:color-mix(in srgb,var(--branch-color) 12%,white);border:1px solid color-mix(in srgb,var(--branch-color) 22%,white);}
+.income-branch-filters {display:flex;gap:8px;flex-wrap:wrap;padding:0 22px 20px;button {display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid #dfe6ef;border-radius:8px;background:white;color:#53657c;font-size:10px;font-weight:700;cursor:pointer;--branch-color:#526baa;span {font-size:10px;opacity:.7;} &:hover,&.is-active {background:color-mix(in srgb,var(--branch-color) 10%,white);border-color:var(--branch-color);color:#263c59;} &:focus-visible {outline:2px solid var(--branch-color);outline-offset:2px;}}}
+.income-filter-summary {display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f1f6fb;padding:12px 22px;font-size:12px;color:#52667e;button {background:none;border:0;margin-left:10px;text-decoration:underline;color:#4a65a0;cursor:pointer;} strong {color:#243f59;font-variant-numeric:tabular-nums;} small {font-size:10px;}}
+.income-types {display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;span {font-size:10px;padding:3px 5px;border-radius:4px;white-space:nowrap;} .full {background:#e6f4ed;color:#216647;} .discounted {background:#fff2dc;color:#80551b;} .exempt {background:#eeebfa;color:#675198;}}
+.income-student-label {font-size:11px;font-weight:400;color:#74849a;}
+.income-metrics .metric:first-child {background:linear-gradient(115deg,#e6f5f0,#f5faf8);border-color:#c7e4d9; .metric-value {color:#1e6655;} }
+.income-table .currency {font-weight:750;font-size:14px;color:#235d53;font-variant-numeric:tabular-nums;}
+.income-table tbody tr:hover {background:#f7f9fc;}
+.income-ledger .filter-toolbar .search-field {flex:1;}
+.income-undated { margin-top:18px; font-size:12px; color:#8391a7; a { color:#5d75ac; text-decoration:underline; } }
+.income-no-branches { padding:22px; font-size:12px; color:#8a98ae; }
+@media(max-width:1100px) { .income-layout { grid-template-columns:1fr; } .income-branches { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); .panel-heading { grid-column:1/-1; } } }
+@media(max-width:600px) { .income-metrics { grid-template-columns:1fr; } .income-table { min-width:650px; } .finance-main-tabs a { flex:1; justify-content:center; } .income-branches { display:block; } }
+
+.income-branch-filters button { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
+.income-branch-track span { transition: width .4s ease; }
+@media (prefers-reduced-motion: reduce) { .income-branch-filters button, .income-branch-track span { transition: none; } }

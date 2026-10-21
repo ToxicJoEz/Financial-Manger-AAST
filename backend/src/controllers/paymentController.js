@@ -1,3 +1,4 @@
+import { paymentFields } from '../utils/studentProfile.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { appendPayment, paymentView } from '../utils/paymentLedger.js';
 import { moneyMinor } from '../utils/numbers.js';
@@ -23,6 +24,7 @@ export const recordPayment = atomic(async (req, res, next) => {
     const enrollment = await enrollmentFor(req);
     if (!isManager(req.user)) return res.status(403).json({ error: 'Only admins and mods can record or correct tuition payments.' });
     if (enrollment.deletedAt || enrollment.financialArchivedAt) return res.status(409).json({ error: 'This enrollment is archived. Its payment history is read-only.' });
+    const metadata = paymentFields(req.body);
     const { amount, kind = 'PAYMENT', note, idempotencyKey, occurredAt } = req.body;
     if (!['PAYMENT', 'REFUND', 'ADJUSTMENT'].includes(kind)) return res.status(400).json({ error: 'Invalid payment entry type.' });
     if (typeof note !== 'string' || !note.trim() || note.length > 1000) return res.status(400).json({ error: 'A description of 1–1000 characters is required.' });
@@ -34,10 +36,10 @@ export const recordPayment = atomic(async (req, res, next) => {
     if (!Number.isFinite(date.getTime()) || date > new Date()) return res.status(400).json({ error: 'Payment date must be valid and not in the future.' });
     const existing = await prisma.paymentEntry.findUnique({ where: { idempotencyKey } });
     if (existing) {
-      if (existing.enrollmentId !== enrollment.id || existing.kind !== kind || existing.amountMinor !== amountMinor || existing.note !== note.trim()) return res.status(409).json({ error: 'This request key was already used for another payment.' });
+      if (existing.enrollmentId !== enrollment.id || existing.kind !== kind || existing.amountMinor !== amountMinor || existing.note !== note.trim() || existing.paymentMethod !== metadata.paymentMethod || existing.receiptNumber !== metadata.receiptNumber) return res.status(409).json({ error: 'This request key was already used for another payment.' });
       return res.json(paymentView(existing));
     }
-    res.status(201).json(await appendPayment(enrollment, enrollment.course, enrollment.student, req.user, { amountMinor, kind, note: note.trim(), idempotencyKey, occurredAt: date }));
+    res.status(201).json(await appendPayment(enrollment, enrollment.course, enrollment.student, req.user, { amountMinor, kind, note: note.trim(), idempotencyKey, occurredAt: date, ...metadata }));
   } catch (error) { if (error.status) return res.status(error.status).json({ error: error.message }); next(error); }
 });
 export const reversePayment = atomic(async (req, res, next) => {
@@ -49,6 +51,6 @@ export const reversePayment = atomic(async (req, res, next) => {
     const entry = await prisma.paymentEntry.findFirst({ where: { id: req.params.paymentId, enrollmentId: enrollment.id }, include: { reversal: true } });
     if (!entry) return res.status(404).json({ error: 'Payment entry not found.' });
     if (entry.reversal || entry.kind === 'REVERSAL') return res.status(409).json({ error: 'This entry cannot be reversed again.' });
-    res.status(201).json(await appendPayment(enrollment, enrollment.course, enrollment.student, req.user, { amountMinor: -entry.amountMinor, kind: 'REVERSAL', note: req.body.note.trim(), idempotencyKey: `reversal:${entry.id}`, reversalOfId: entry.id }));
+    res.status(201).json(await appendPayment(enrollment, enrollment.course, enrollment.student, req.user, { amountMinor: -entry.amountMinor, kind: 'REVERSAL', note: req.body.note.trim(), idempotencyKey: `reversal:${entry.id}`, reversalOfId: entry.id, paymentMethod: entry.paymentMethod, receiptNumber: entry.receiptNumber }));
   } catch (error) { if (error.status) return res.status(error.status).json({ error: error.message }); next(error); }
 });

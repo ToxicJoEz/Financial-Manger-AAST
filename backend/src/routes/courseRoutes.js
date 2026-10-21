@@ -1,4 +1,6 @@
+import { deletionPreview, permanentlyDelete } from '../controllers/permanentDeletionController.js';
 import { getPayments, recordPayment, reversePayment } from '../controllers/paymentController.js';
+import { updateBookStatus } from '../controllers/bookController.js';
 import express from 'express';
 import { 
   getCourses, 
@@ -22,8 +24,11 @@ import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 router.use(protect);
+router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
+router.delete('/:id/permanent', modOrAbove, permanentlyDelete('cycle'));
 
 router.get('/', getCourses);
+router.get('/:id', getCourses);
 router.post('/', modOrAbove, createCourse);
 router.put('/:id', modOrAbove, updateCourse);
 router.put('/:id/payment', modOrAbove, togglePaymentStatus);
@@ -36,6 +41,7 @@ router.post('/:id/finish', modOrAbove, markFinished);
 router.post('/:id/revert', modOrAbove, revertFinish);
 
 // Enrollment routes (accessible to all authenticated users)
+router.post('/:id/enrollments/:enrollmentId/books', updateBookStatus);
 router.get('/:id/enrollments', getCourseEnrollments);
 router.post('/:id/enrollments', enrollStudent);
 router.put('/:id/enrollments/:enrollmentId', updateEnrollment);

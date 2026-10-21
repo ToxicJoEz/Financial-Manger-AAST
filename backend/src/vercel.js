@@ -30,7 +30,7 @@ async function handler(req, res) {
     return app(req, res);
   } catch {
     // Never return initialization details, filesystem paths, or secrets to clients.
-    console.error('Finance API initialization failed. Verify deployment configuration and bundled database.');
+    console.error('Finance API initialization failed. Verify PostgreSQL connection settings and applied migrations.');
     return res.status(503).json({ error: 'The API could not initialize. Check the deployment configuration.' });
   }
 }

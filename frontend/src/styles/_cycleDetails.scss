@@ -1,0 +1,123 @@
+/* Full-width cycle details and a readable student ledger. */
+.course-detail-modal.modal-content.card { width:min(1120px,calc(100vw - 40px)); max-width:1120px; }
+.course-detail.cycle-detail-layout { display:flex; flex-direction:column; gap:26px; max-width:100%; min-width:0; padding:0; }
+.cycle-overview { padding:0 0 22px; border-bottom:1px solid #e5eaf2; }
+.cycle-overview-heading { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; h3 { font-size:25px; margin:6px 0 0; } p { margin-top:8px; } }
+.cycle-facts { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:24px 0; gap:14px; >div { background:#f7f9fd; border:1px solid #e8edf5; border-radius:10px; padding:13px 16px; } span { display:block; font-size:11px; color:#8190a6; margin-bottom:7px; } strong { font-size:13px; color:#364b69; } }
+.cycle-action-bar,.cycle-primary-actions,.cycle-danger-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.cycle-action-bar { justify-content:space-between; }
+.cycle-action-bar .cycle-delete-action { color:#b63143; background:#fff1f2; border-color:#f0cbd0; &:hover { background:#ffe3e7; border-color:#db9da6; } }
+.cycle-roster-panel { min-width:0; width:100%; }
+.cycle-roster-panel .detail-subtabs { margin-bottom:22px; }
+.cycle-roster-panel .enrollment-summary-bar { display:flex; justify-content:space-between; align-items:center; gap:18px; margin-bottom:20px; border-radius:12px; background:#f5f8fc; border:1px solid #e5ebf3; }
+.cycle-roster-panel .course-student-toolbar { flex-wrap:wrap; gap:14px; margin-bottom:20px; }
+.cycle-roster-panel .course-student-search-box { flex:1; min-width:220px; }
+.cycle-roster-panel .enrollment-list { display:grid; gap:14px; }
+.student-tuition-card { border:1px solid #e1e7f0; background:#fff; border-radius:13px; overflow:hidden; }
+.student-tuition-header { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:18px 20px; border-bottom:1px solid #edf0f5; background:linear-gradient(110deg,#eef2fa,#e2eaf8); }
+.student-tuition-identity { display:flex; align-items:center; gap:12px; min-width:0; >div { display:flex; flex-direction:column; gap:5px; } strong { font-size:15px; color:#2e435e; } small { font-size:11px; color:#7b8ba2; } }
+.student-registration { font-size:11px; color:#8290a5; }
+.student-tuition-status,.student-tuition-actions { display:flex; align-items:center; gap:10px; }
+.student-tuition-actions { border-left:1px solid #e5eaf3; padding-left:10px; }
+.student-tuition-body { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(0,.8fr) minmax(0,1fr); gap:22px; padding:20px; }
+.student-personal-facts { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.student-money-facts { display:flex; flex-direction:column; gap:13px; padding:0 20px; border-left:1px solid #edf0f5; border-right:1px solid #edf0f5; >div { display:flex; justify-content:space-between; gap:10px; } }
+.student-tuition-body dt,.student-payment-label { color:#8592a6; font-size:11px; }
+.student-tuition-body dd { margin:6px 0 0; font-size:12px; color:#3a4f6c; overflow-wrap:anywhere; }
+.student-money-facts dd { margin:0; font-weight:650; white-space:nowrap; }
+.student-payment-references { display:flex; flex-direction:column; gap:13px; min-width:0; }
+.student-payment-reference { display:grid; grid-template-columns: minmax(0,1.2fr) minmax(0,1fr); gap:16px; margin:0; padding:0; }
+.student-payment-reference + .student-payment-reference { padding-top:12px; border-top:1px solid #edf0f5; }
+.student-payment-reference dd { margin-top:9px; font-weight:600; line-height:1.6; }
+.cycles-page .course-tile-team { padding:20px 20px; }
+.cycle-card-student-summary { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 20px; }
+.cycles-page .course-tile .course-tuition-meter { margin:18px 20px 20px; padding:14px; border:1px solid #e5ebf3; border-radius:10px; background:#f7f9fd; }
+.cycles-page .course-tile .tuition-meter-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:11px; font-size:10px; }
+.cycles-page .course-tile .tuition-meter-label { color:#7b8aa2; white-space:nowrap; }
+.cycles-page .course-tile .tuition-meter-amount { color:#8291a7; text-align:right; font-size:10px; strong { color:#405a78; } }
+.cycles-page .course-tile .tuition-meter-bar { height:6px; background:#e3e9f4; border-radius:999px; overflow:hidden; }
+.cycles-page .course-tile .tuition-meter-fill { height:100%; width:var(--runtime-width); border-radius:inherit; background:#6886cc; }
+@media(max-width:760px) { .course-detail-modal.modal-content.card { width:calc(100vw - 28px); padding:20px; } .cycle-facts { grid-template-columns:1fr 1fr; gap:10px; } .cycle-action-bar { align-items:stretch; gap:14px; } .cycle-danger-actions { padding-top:12px; border-top:1px solid #e6ebf3; width:100%; } .student-tuition-body { grid-template-columns:1fr; gap:18px; } .student-money-facts { border-left:0; border-right:0; padding:16px 0; border-top:1px solid #edf0f5; border-bottom:1px solid #edf0f5; } .student-tuition-header { align-items:flex-start; flex-wrap:wrap; } .student-tuition-status { width:100%; justify-content:space-between; } .student-tuition-actions { margin-left:auto; } .cycle-roster-panel .enrollment-summary-bar { flex-wrap:wrap; } }
+
+.dialog-motion:has(> .course-detail-modal) { max-width:1120px; }
+
+
+.student-tuition-identity .student-avatar-mini { width:36px; height:36px; min-width:36px; display:grid; place-items:center; border-radius:11px; background:#edf1fb; color:#647da9; font-size:12px; }
+
+.student-tuition-card .student-tuition-header { display:grid; grid-template-columns:auto minmax(0,1fr); gap:24px; border-bottom-color:#d4dff0; }
+.student-tuition-card .student-tuition-identity { grid-column:2; grid-row:1; flex-direction:row-reverse; text-align:right; justify-self:end; >div { align-items:flex-end; } strong { line-height:1.7; } small { line-height:1.5; } }
+.student-tuition-card .student-registration { color:#6f819e; }
+.student-tuition-card .student-tuition-status { grid-column:1; grid-row:1; width:auto; flex-direction:row-reverse; }
+.student-tuition-card .student-tuition-actions { border-left:0; padding-left:0; margin-left:0; border-right:1px solid #cbd6e9; padding-right:12px; }
+.student-tuition-actions .icon-button { background:#ffffffa8; border:1px solid #d7e0ef; border-radius:8px; }
+.student-tuition-identity .student-avatar-mini { background:#cfdbf0; color:#405b85; font-weight:650; min-width:42px; width:42px; height:42px; }
+@media(max-width:760px) { .student-tuition-card .student-tuition-header { gap:16px; padding:16px; align-items:start; } .student-tuition-card .student-tuition-status { flex-direction:column-reverse; align-items:flex-start; gap:12px; } .student-tuition-card .student-tuition-actions { border:0; padding:0; gap:5px; } .student-tuition-card .student-tuition-identity { align-items:flex-start; gap:9px; } .student-tuition-identity .student-avatar-mini { min-width:34px; width:34px; height:34px; } .student-tuition-identity strong { overflow-wrap:anywhere; } }
+
+.student-payment-reference .payment-method-value { display:flex; align-items:center; gap:7px; }
+.payment-method-value svg { flex-shrink:0; color:#778aab; }
+
+.cycle-schedule-fields { border: 0; padding: 0; margin: 16px 0; min-width: 0;
+  legend { font-weight: 600; margin-bottom: 12px; small { font-weight: 400; color: #718096; margin-left: 8px; } }
+  label { display: grid; gap: 6px; font-size: 13px; min-width: 0; }
+  .cycle-time-inputs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 12px; }
+}
+.cycle-schedule-summary { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 12px 20px; border-top: 1px solid #e8edf5; color: #718096; font-size: 12px; strong { color: #314463; font-weight: 500; } }
+
+.cycle-heading-identity { min-width: 0; h3 { margin-bottom: 10px; } }
+.cycle-date-range { display: flex; flex-shrink: 0; align-items: center; gap: 18px; padding: 16px 20px; border: 1px solid #dce4f2; border-radius: 14px; background: #f3f6fc;
+  >svg { color: #586ed2; }
+  div { display: grid; gap: 6px; }
+  div>span { font-size: 11px; color: #73839c; }
+  strong { font-size: 13px; color: #263c5b; white-space: nowrap; }
+  .cycle-date-separator { color: #91a0b7; }
+}
+.cycle-facts > div { display: flex; align-items: center; gap: 12px; border-radius: 12px; padding: 17px 16px; border-color: #e1e7f0;
+  >svg { flex-shrink: 0; padding: 8px; box-sizing: content-box; border-radius: 10px; background: #e8edff; color: #5867c4; }
+  >div { min-width: 0; }
+  span { color: #6a7c96; margin-bottom: 5px; }
+  strong { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+  small { font-weight: 400; font-size: 11px; color: #73839c; }
+  &.cycle-fact-venue { background: #f6f7ff; }
+  &.cycle-fact-time { background: #f3f8fc; >svg { background: #e3eff9; color: #387ba7; } }
+  &.cycle-fact-tuition { background: #f2f8f5; >svg { background: #dff0e8; color: #30876a; } }
+  &.cycle-fact-hours { background: #faf6f0; >svg { background: #f5e9d8; color: #ad7b3d; } }
+}
+@media(max-width:760px) { .cycle-overview-heading { flex-wrap: wrap; } .cycle-date-range { margin-left: auto; gap: 12px; padding: 12px 14px; } .cycle-facts >div { padding: 12px; gap: 9px; >svg { padding: 6px; } } }
+@media(max-width:440px) { .cycle-date-range { width: 100%; justify-content: space-between; } .cycle-facts { grid-template-columns: 1fr; } }
+
+.cycle-edit-intro { margin: 0 0 22px; h3 { font-size: 25px; margin: 0 0 6px; color: #314463; } p { font-size: 13px; color: #73839c; } }
+.cycle-inline-edit { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20px 24px;
+  >div, >fieldset { min-width: 0; }
+  >div:has(textarea), >fieldset, >div:last-child { grid-column: 1 / -1; }
+  .cycle-schedule-fields { padding: 18px; margin: 0; background: #f6f8fc; border: 1px solid #e1e7f0; border-radius: 12px; }
+  >div:last-child { border-top: 1px solid #e5eaf2; padding-top: 20px; }
+}
+@media(max-width:760px) { .cycle-inline-edit { grid-template-columns: 1fr; gap: 16px; } }
+
+.student-books { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding: 16px 22px; border-top: 1px solid #e1e7f0; background: #f8faff; }
+.student-books-label { display: flex; align-items: center; gap: 12px; color: #5867c4; strong { display: block; font-size: 13px; color: #314463; } small { display: block; margin-top: 4px; color: #73839c; } }
+.student-book-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; >span { font-size: 12px; color: #314463; } }
+.catalog-book-price { padding: 0 28px; font-size: 12px; color: #73839c; }
+
+.enrollment-student-picker { margin-bottom: 12px; .search-field { width: 100%; margin-top: 7px; } .required-star { color: #ca344b; } }
+.enrollment-picker-hint { display: block; color: #7b89a0; font-size: 11px; line-height: 1.6; margin: 7px 0; }
+.enrollment-student-results { border: 1px solid #e0e6f0; border-radius: 12px; max-height: 270px; overflow-y: auto; overscroll-behavior: contain; }
+.enrollment-student-result { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border: 0; border-bottom: 1px solid #edf0f5; text-align: left; background: white; transition: background .15s; &:hover:not(:disabled), &:focus-visible { background: #eef3ff; } >span:nth-child(2) { flex: 1; min-width: 0; } strong { display: block; font-size: 13px; color: #314463; overflow-wrap: anywhere; } small { display: block; color: #7a89a2; font-size: 11px; margin-top: 4px; } }
+.enrollment-student-avatar { display: grid; place-items: center; flex-shrink: 0; height: 36px; width: 36px; background: #edf0fc; color: #6274c1; border-radius: 10px; font-size: 12px; }
+.enrollment-pick-label { color: #6579cf; font-size: 11px; }
+.enrollment-picker-empty { padding: 20px 16px; text-align: center; font-size: 12px; color: #7b89a0; }
+.enrollment-more-results { display: block; width: 100%; padding: 12px; background: #f6f8fd; border: 0; color: #526bc5; font-size: 12px; }
+.enrollment-selected-student { display: flex; gap: 12px; align-items: center; background: #f0f6ff; border: 1px solid #cbdaf4; padding: 16px; border-radius: 12px; color: #586fbd; >div { flex: 1; min-width: 0; } strong { display: block; font-size: 14px; color: #314463; } small { display: block; margin-top: 5px; font-size: 11px; color: #73839c; } }
+.enrollment-selected-label { display: flex; gap: 4px; align-items: center; font-size: 10px; }
+@media(max-width:500px) { .enrollment-selected-label, .enrollment-pick-label { display: none; } }
+
+.student-books {
+  --book-ink: #956015; --book-tint: #fff9ed; --book-line: #edcf93; --book-badge: #ffedc6;
+  &.book-state-paid { --book-ink: #17694d; --book-tint: #eff9f4; --book-line: #a9d8c2; --book-badge: #d4efdf; }
+  &.book-state-exempt { --book-ink: #45617e; --book-tint: #f1f5fa; --book-line: #c0cfdf; --book-badge: #e0e9f3; }
+  background: var(--book-tint); border-top-color: var(--book-line); border-inline-start: 4px solid var(--book-line);
+  .student-book-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; background: var(--book-badge); color: var(--book-ink); border-radius: 11px; }
+  .student-book-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+  .student-book-status { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: 6px; color: var(--book-ink); background: var(--book-badge); font-size: 11px; font-weight: 700; line-height: 1.2; }
+  .student-books-label small { color: var(--book-ink); opacity: .88; }
+}

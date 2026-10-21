@@ -40,3 +40,6 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 /* Motion uses only opacity/transform; no per-row animation or layout measurement. */
 .page-transition{min-width:0}.dialog-motion{width:100%;max-width:900px;display:flex;justify-content:center;pointer-events:none}.dialog-motion>.modal-content{pointer-events:auto}.section-tabs .motion-tab:after{display:none}.motion-tab-indicator{position:absolute;bottom:0;left:0;right:0;height:2px;background:#4c65eb;transform-origin:center}.section-tabs .motion-tab{transition:color .15s ease}.side-link{transition:background-color .15s ease,color .15s ease}.modal-overlay{backdrop-filter:none}.course-tile:hover{transform:none}.course-tile{transition:border-color .15s ease,box-shadow .15s ease}.course-tile:hover{border-color:#cbd5f4;box-shadow:0 5px 16px #30446608}
 @media(prefers-reduced-motion:reduce){.sidebar{transition:none}.section-tabs .motion-tab{transition:none}}
+
+.topbar .notification-trigger { width:40px; height:40px; }
+.topbar .notification-count { position:absolute; top:-3px; right:-5px; display:grid; place-items:center; min-width:23px; height:23px; padding:0 5px; border:2px solid #fff; border-radius:99px; background:#dc3545; color:#fff; font-size:11px; line-height:1; font-weight:800; font-variant-numeric:tabular-nums; box-shadow:0 2px 5px #b51e3330; pointer-events:none; }

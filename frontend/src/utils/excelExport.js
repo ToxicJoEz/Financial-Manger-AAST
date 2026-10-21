@@ -61,11 +61,11 @@ export async function createExcelBuffer(report) {
   info.addRow(['AAST Finance', 'Export details']);
   info.addRow(['Generated (UTC)', report.generatedAt]);
   for (const [key, value] of Object.entries(report.filters)) if (value !== '' && value !== false) info.addRow([key, String(value)]);
-  info.addRow(['Dates', 'Courses: course start date, or creation date when start date is unset. Tuition: enrollment date. Payroll: payroll month (inclusive months).']);
+  info.addRow(['Dates', 'Courses: course start date, or creation date when start date is unset. Tuition: enrollment date. Payroll: selected earnings-recorded, payment-initiation, or actual-payment date.']);
   info.addRow(['Course tuition totals', 'Retained financial records count even when the student/enrollment is removed. Archived finances do not count.']);
   info.addRow(['Student counts', 'Active visible enrollments only. Totals can include retained financial records omitted from a junior roster.']);
   info.addRow(['Tuition status filter', 'Filters tuition rows; Courses includes courses with at least one matching visible enrollment. Course totals remain whole-course totals.']);
-  info.addRow(['Payroll', 'Completed payroll snapshots, including reopened courses; earned amounts, not a record of interim cash payments.']);
+  info.addRow(['Payroll', 'Instructor earnings and payment batches, including reopened cycles. Dates show earnings recording, payment initiation and actual payment separately. Legacy payment dates may be unknown.']);
   info.addRow(['Archives', 'Excluded unless requested by a manager. Archived tuition rows are labelled and excluded from course totals.']);
   info.addRow(['Worksheets', report.sheets.map(s => `${names[s.key]}: ${s.rows.length} rows`).join('; ')]);
   info.eachRow(row => {

@@ -1,132 +1,153 @@
-import prisma from '../db/prisma.js';
-
-// GET /finances?month=YYYY-MM
-export const getFinances = async (req, res) => {
-  try {
-    const { month } = req.query;
-    if (!month) {
-      return res.status(400).json({ error: 'Month parameter is required (YYYY-MM)' });
-    }
-
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ error: 'Month parameter must be in YYYY-MM format (e.g. 2026-09)' });
-    }
-
-    const records = await prisma.payrollRecord.findMany({ where: { payrollMonth: month }, include: { course: { include: { parentCourse: true } } } });
-    const finishedCourses = records.map(record => ({ ...record, id: record.courseId, instructors: JSON.parse(record.instructors) }));
-
-    let totalPayroll = 0;
-    let totalPaid = 0;
-    let totalUnpaid = 0;
-    const instructorMap = {};
-    const branchMap = {};
-
-    const coursesData = [];
-
-    finishedCourses.forEach(course => {
-      let courseTotalPayout = 0;
-      const instructorNames = [];
-
-      course.instructors.forEach(ci => {
-        const hours = (ci.hoursTaught !== null && !isNaN(ci.hoursTaught)) ? ci.hoursTaught : 0;
-        const rate = (ci.hourlyRate !== null && !isNaN(ci.hourlyRate)) ? ci.hourlyRate : 0;
-        const payout = Math.round(hours * rate * 100) / 100;
-
-        courseTotalPayout = Math.round((courseTotalPayout + payout) * 100) / 100;
-        if (ci.instructor?.name) {
-          instructorNames.push(ci.instructor.name);
-        }
-
-        if (!instructorMap[ci.instructorId] && ci.instructor) {
-          instructorMap[ci.instructorId] = {
-            id: ci.instructor.id,
-            name: ci.instructor.name,
-            employeeId: ci.instructor.employeeId,
-            mobile: ci.instructor.mobile,
-            coursesTaught: 0,
-            courseNames: [],
-            totalHours: 0,
-            totalPayout: 0,
-            totalPaid: 0,
-            totalUnpaid: 0
-          };
-        }
-
-        if (instructorMap[ci.instructorId]) {
-          instructorMap[ci.instructorId].coursesTaught += 1;
-          instructorMap[ci.instructorId].courseNames.push(course.name);
-          instructorMap[ci.instructorId].totalHours = Math.round((instructorMap[ci.instructorId].totalHours + hours) * 100) / 100;
-          instructorMap[ci.instructorId].totalPayout = Math.round((instructorMap[ci.instructorId].totalPayout + payout) * 100) / 100;
-          if (course.isPaid) {
-            instructorMap[ci.instructorId].totalPaid = Math.round((instructorMap[ci.instructorId].totalPaid + payout) * 100) / 100;
-          } else {
-            instructorMap[ci.instructorId].totalUnpaid = Math.round((instructorMap[ci.instructorId].totalUnpaid + payout) * 100) / 100;
-          }
-        }
-      });
-
-      totalPayroll = Math.round((totalPayroll + courseTotalPayout) * 100) / 100;
-      if (course.isPaid) {
-        totalPaid = Math.round((totalPaid + courseTotalPayout) * 100) / 100;
-      } else {
-        totalUnpaid = Math.round((totalUnpaid + courseTotalPayout) * 100) / 100;
-      }
-
-      if (!branchMap[course.branch]) {
-        branchMap[course.branch] = {
-          name: course.branch,
-          totalPayout: 0,
-          totalPaid: 0,
-          totalUnpaid: 0
-        };
-      }
-      branchMap[course.branch].totalPayout = Math.round((branchMap[course.branch].totalPayout + courseTotalPayout) * 100) / 100;
-      if (course.isPaid) {
-        branchMap[course.branch].totalPaid = Math.round((branchMap[course.branch].totalPaid + courseTotalPayout) * 100) / 100;
-      } else {
-        branchMap[course.branch].totalUnpaid = Math.round((branchMap[course.branch].totalUnpaid + courseTotalPayout) * 100) / 100;
-      }
-
-      coursesData.push({
-        id: course.id,
-        parentCourseId: course.course?.parentCourseId,
-        courseCode: course.course?.parentCourse?.code,
-        courseName: course.course?.parentCourse?.name,
-        cycleNumber: course.course?.cycleNumber,
-        name: course.name,
-        branch: course.branch,
-        instructorNames: instructorNames.join(', '),
-        totalHours: course.totalHours,
-        totalPayout: courseTotalPayout,
-        isPaid: course.isPaid,
-        instructors: course.instructors.map(ci => ({
-          name: ci.instructor?.name || 'Unknown',
-          hoursTaught: ci.hoursTaught,
-          hourlyRate: ci.hourlyRate,
-          payout: Math.round(((ci.hoursTaught || 0) * ci.hourlyRate) * 100) / 100
-        }))
-      });
-    });
-
-    const instructors = Object.values(instructorMap).sort((a, b) => b.totalPayout - a.totalPayout);
-    const branches = Object.values(branchMap).sort((a, b) => b.totalPayout - a.totalPayout);
-
-    const topInstructor = instructors.length > 0 ? instructors[0] : null;
-    const topBranch = branches.length > 0 ? branches[0] : null;
-
-    res.json({
-      summary: {
-        totalPayroll,
-        totalPaid,
-        totalUnpaid,
-        topInstructor,
-        topBranch
-      },
-      instructors,
-      branches,
-      courses: coursesData
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+import { createHash } from 'node:crypto';
+import prisma, { atomic } from '../db/prisma.js';
+import { earningView } from '../utils/payrollRecord.js';
+import { cairoToday } from '../utils/academyDate.js';
+import { logAction } from '../utils/logger.js';
+const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
+const paymentDate = (value, label) => {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value || value > cairoToday() || value < '1900-01-01') fail(`Choose a valid ${label}, no later than today.`);
+  return new Date(value + 'T00:00:00Z');
 };
+
+export const getFinances = async (req, res, next) => {
+  try {
+    const month = req.query.month;
+    if (month !== undefined && (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month))) return res.status(400).json({ error: 'Choose a valid salary report month.' });
+    const records = await prisma.payrollEarning.findMany({ include: { batch: true }, orderBy: [{ instructorName: 'asc' }, { createdAt: 'desc' }], take: 10001 });
+    if (records.length > 10000) return res.status(413).json({ error: 'Payroll exceeds the interactive limit. Contact your administrator to archive old records.' });
+    const earnings = records.map(earningView);
+    const batches = await prisma.instructorPaymentBatch.findMany({ include: { earnings: { orderBy: { cycleName: 'asc' } } }, orderBy: { createdAt: 'desc' }, take: 10000 });
+    const amounts = { totalPayroll: 0n, totalPaid: 0n, totalProcessing: 0n, totalUnpaid: 0n };
+    for (const row of records) {
+      amounts.totalPayroll += row.amountMinor;
+      amounts[row.batch?.status === 'PAID' ? 'totalPaid' : row.batch ? 'totalProcessing' : 'totalUnpaid'] += row.amountMinor;
+    }
+    const needsAllocation = await prisma.cycle.findMany({ where: { isFinished: true, archivedAt: null, payrollEarnings: { none: {} } }, select: { id: true, name: true, parentCourseId: true, branch: true } });
+    const monthlyRows = month ? records.filter(e => e.batch?.status === 'PAID' && e.batch.actualPaymentDate?.toISOString().slice(0, 7) === month) : [];
+    const monthlyInstructors = new Map();
+    for (const row of monthlyRows) {
+      const instructor = monthlyInstructors.get(row.instructorId) || { id: row.instructorId, name: row.instructorName, employeeId: row.employeeId, amountMinor: 0n };
+      instructor.amountMinor += row.amountMinor; monthlyInstructors.set(row.instructorId, instructor);
+    }
+    const monthly = month ? { month, instructorsPaid: monthlyInstructors.size, cyclesPaid: new Set(monthlyRows.map(row => row.courseId)).size, paymentsCompleted: new Set(monthlyRows.map(row => row.batchId)).size, totalPaid: Number(monthlyRows.reduce((sum, row) => sum + row.amountMinor, 0n)) / 100, instructors: [...monthlyInstructors.values()].sort((a,b) => Number(b.amountMinor-a.amountMinor)).map(({amountMinor,...row}) => ({ ...row, totalPaid: Number(amountMinor)/100 })) } : null;
+    res.json({ monthly, summary: monthly ? { totalPaid: monthly.totalPaid, instructorsPaid: monthly.instructorsPaid, cyclesPaid: monthly.cyclesPaid, paymentsCompleted: monthly.paymentsCompleted } : Object.fromEntries(Object.entries(amounts).map(([key, value]) => [key, Number(value) / 100])), earnings,
+      batches: batches.map(batch => ({ ...batch, earnings: batch.earnings.map(earningView), amount: Number(batch.earnings.reduce((sum, e) => sum + e.amountMinor, 0n)) / 100 })), needsAllocation });
+  } catch (error) { next(error); }
+};
+
+export const initiatePaymentHandler = async (req, res, next) => {
+  try {
+    const { earningIds, initiatedDate, versions, idempotencyKey } = req.body;
+    if (!Array.isArray(earningIds) || !earningIds.length || earningIds.length > 500 || earningIds.some(id => typeof id !== 'string') || new Set(earningIds).size !== earningIds.length) fail('Select unique cycle earnings for one instructor (up to 500).');
+    if (typeof idempotencyKey !== 'string' || !/^[a-zA-Z0-9-]{16,100}$/.test(idempotencyKey)) fail('A valid payment request key is required.');
+    const date = paymentDate(initiatedDate, 'payment initiation date');
+    const existing = await prisma.instructorPaymentBatch.findUnique({ where: { idempotencyKey }, include: { earnings: { select: { id: true } } } });
+    if (existing) {
+      if (JSON.stringify(existing.earnings.map(e => e.id).sort()) !== JSON.stringify([...earningIds].sort()) || existing.initiatedDate?.toISOString().slice(0, 10) !== initiatedDate) fail('This payment request key was already used for different details.', 409);
+      return res.json({ id: existing.id, message: 'Payment batch was already initiated.' });
+    }
+    const rows = await prisma.payrollEarning.findMany({ where: { id: { in: earningIds } } });
+    if (rows.length !== earningIds.length || rows.some(r => r.batchId)) fail('Some selected salary are no longer unpaid. Refresh payroll and select again.', 409);
+    if (new Set(rows.map(r => r.instructorId)).size !== 1) fail('A payment batch must belong to one instructor.');
+    if (!versions || rows.some(r => versions[r.id] !== r.updatedAt.toISOString())) fail('The salary records changed after selection. Refresh payroll before initiating payment.', 409);
+    const total = rows.reduce((sum, row) => sum + row.amountMinor, 0n);
+    if (total <= 0n) fail('Selected salary must have a positive total.');
+    const batch = await prisma.instructorPaymentBatch.create({ data: { instructorId: rows[0].instructorId, instructorName: rows[0].instructorName, initiatedDate: date, initiatedBy: req.user.username, idempotencyKey } });
+    const claimed = await prisma.payrollEarning.updateMany({ where: { id: { in: earningIds }, batchId: null }, data: { batchId: batch.id } });
+    if (claimed.count !== earningIds.length) fail('Another reviewer started payment for these salary records. Refresh payroll.', 409);
+    await logAction('INITIATE_INSTRUCTOR_PAYMENT', `Batch ${batch.id}: ${rows[0].instructorName}, ${rows.length} cycles, ${Number(total) / 100} EGP; initiated ${initiatedDate}.`, req.user.username);
+    res.status(201).json({ id: batch.id, message: 'Selected salary are now processing. Actual payment date is still empty.' });
+  } catch (error) { next(error); }
+};
+export const initiatePayment = atomic(initiatePaymentHandler);
+
+export const completePaymentHandler = async (req, res, next) => {
+  try {
+    const date = paymentDate(req.body.actualPaymentDate, 'actual payment date');
+    const batch = await prisma.instructorPaymentBatch.findUnique({ where: { id: req.params.id } });
+    if (!batch) fail('Payment batch not found.', 404);
+    if (batch.status !== 'PROCESSING') fail('This batch has already been paid.', 409);
+    if (date < batch.initiatedDate) fail('Actual payment date cannot be earlier than the initiation date.');
+    const claimed = await prisma.instructorPaymentBatch.updateMany({ where: { id: batch.id, status: 'PROCESSING' }, data: { status: 'PAID', actualPaymentDate: date, paidBy: req.user.username } });
+    if (claimed.count !== 1) fail('Another reviewer already processed this payment.', 409);
+    await logAction('COMPLETE_INSTRUCTOR_PAYMENT', `Batch ${batch.id} for ${batch.instructorName} paid on ${req.body.actualPaymentDate}. Initiation date preserved.`, req.user.username);
+    res.json({ message: 'Payment confirmed. Both dates have been saved.' });
+  } catch (error) { next(error); }
+};
+export const completePayment = atomic(completePaymentHandler);
+
+async function applyHandler(handler, req) {
+  let status = 200, result;
+  const response = { status(code) { status = code; return this; }, json(body) { result = body; return this; } };
+  await handler(req, response, error => { throw error; });
+  if (status >= 400 || !result) fail(result?.error || 'Payment could not be processed.', status >= 400 ? status : 500);
+  return result;
+}
+
+// Course selection creates one ordinary batch per instructor, together in one transaction.
+export const initiateCoursePayment = atomic(async (req, res, next) => {
+  try {
+    const { earningIds, courseIds, idempotencyKey } = req.body;
+    if (!Array.isArray(courseIds) || !courseIds.length || courseIds.length > 100 || courseIds.some(id => typeof id !== 'string') || new Set(courseIds).size !== courseIds.length) fail('Select valid, unique courses.');
+    if (!Array.isArray(earningIds) || !earningIds.length || earningIds.length > 500 || earningIds.some(id => typeof id !== 'string') || new Set(earningIds).size !== earningIds.length) fail('Select valid course salary records.');
+    if (typeof idempotencyKey !== 'string' || !/^[a-zA-Z0-9-]{16,100}$/.test(idempotencyKey)) fail('A valid payment request key is required.');
+    const rows = await prisma.payrollEarning.findMany({ where: { id: { in: earningIds }, courseId: { in: courseIds } } });
+    if (rows.length !== earningIds.length || new Set(rows.map(e=>e.courseId)).size !== courseIds.length) fail('The selected course salary records changed. Refresh and review them again.',409);
+    const omitted = await prisma.payrollEarning.count({ where: { courseId: { in: courseIds }, batchId: null, amountMinor: { gt: 0n }, id: { notIn: earningIds } } });
+    if (omitted) fail('A selected course has additional unpaid instructors. Refresh and select the course again to include everyone.',409);
+    const batchIds = await initiateSelectedBatches(req, rows);
+    res.status(201).json({ batchIds, message: 'Course payments started for all selected unpaid instructors.' });
+  } catch (error) { next(error); }
+});
+
+export const completeCoursePayments = atomic(async (req, res, next) => {
+  try {
+    const { batchIds, courseIds } = req.body;
+    if (!Array.isArray(batchIds) || !batchIds.length || batchIds.length > 100 || batchIds.some(id=>typeof id!=='string') || new Set(batchIds).size!==batchIds.length) fail('Select valid payment batches.');
+    if (!Array.isArray(courseIds) || !courseIds.length || courseIds.some(id=>typeof id!=='string')) fail('Select valid courses.');
+    const rows = await prisma.instructorPaymentBatch.findMany({where:{id:{in:batchIds}},include:{earnings:{select:{courseId:true}}}});
+    if(rows.length!==batchIds.length)fail('A selected payment batch no longer exists.',409);
+    if(rows.some(b=>b.earnings.some(e=>!courseIds.includes(e.courseId))))fail('One payment batch includes other courses. Confirm that full batch in Payment batches to avoid paying an unselected course.',409);
+    for (const id of batchIds) await applyHandler(completePaymentHandler,{...req,params:{id}});
+    res.json({message:'Selected course payments confirmed. Actual payment date saved for every instructor.'});
+  } catch(error){next(error);}
+});
+
+async function initiateSelectedBatches(req, rows) {
+  const groups = new Map();
+  for (const row of rows) groups.set(row.instructorId, [...(groups.get(row.instructorId) || []), row.id]);
+  const batchIds = [];
+  for (const [instructorId, ids] of groups) {
+    const key = createHash('sha256').update(req.body.idempotencyKey + ':' + instructorId).digest('hex');
+    const result = await applyHandler(initiatePaymentHandler, { ...req, body: { ...req.body, earningIds: ids, idempotencyKey: key } });
+    batchIds.push(result.id);
+  }
+  return batchIds;
+}
+
+// Arbitrary cycle selections may span instructors; every instructor gets a separate batch.
+export const initiateSalarySelection = atomic(async (req, res, next) => {
+  try {
+    const { earningIds, idempotencyKey } = req.body;
+    if (!Array.isArray(earningIds) || !earningIds.length || earningIds.length > 500 || earningIds.some(id => typeof id !== 'string') || new Set(earningIds).size !== earningIds.length) fail('Select valid, unique salary records (up to 500).');
+    if (typeof idempotencyKey !== 'string' || !/^[a-zA-Z0-9-]{16,100}$/.test(idempotencyKey)) fail('A valid payment request key is required.');
+    const rows = await prisma.payrollEarning.findMany({ where: { id: { in: earningIds } } });
+    if (rows.length !== earningIds.length) fail('Some selected salary records no longer exist. Refresh payroll.', 409);
+    const batchIds = await initiateSelectedBatches(req, rows);
+    res.status(201).json({ batchIds, message: `Payment processing started for ${batchIds.length} instructor${batchIds.length === 1 ? '' : 's'}.` });
+  } catch (error) { next(error); }
+});
+
+// A visible daily batch contains every instructor payment initiated on that date.
+export const completeDailyBatch = atomic(async (req, res, next) => {
+  try {
+    const initiatedDate = paymentDate(req.params.day, 'batch initiation date');
+    const { batchIds } = req.body;
+    if (!Array.isArray(batchIds) || !batchIds.length || batchIds.length > 1000 || batchIds.some(id => typeof id !== 'string') || new Set(batchIds).size !== batchIds.length) fail('Select valid pending payments for this daily batch.');
+    const pending = await prisma.instructorPaymentBatch.findMany({ where: { initiatedDate, status: 'PROCESSING' }, select: { id: true } });
+    if (JSON.stringify(pending.map(p => p.id).sort()) !== JSON.stringify([...batchIds].sort())) fail('This batch changed since you opened it. Refresh and review its pending payments before confirming.', 409);
+    for (const id of batchIds) await applyHandler(completePaymentHandler, { ...req, params: { id } });
+    await logAction('COMPLETE_DAILY_PAYMENT_BATCH', `Confirmed ${batchIds.length} payments initiated ${req.params.day}; actual payment date ${req.body.actualPaymentDate}.`, req.user.username);
+    res.json({ message: `Batch confirmed: ${batchIds.length} payments marked as paid.` });
+  } catch (error) { next(error); }
+});

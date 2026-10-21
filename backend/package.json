@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "seed:students": "node src/scripts/seedStudents.js",
     "test": "node --test test/*.test.js",
-    "demo:generate": "node src/scripts/createDemoDatabase.js",
     "password:hash": "node src/scripts/hashPassword.js",
     "build": "prisma generate",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "db:start": "node src/scripts/localPostgres.js start",
+    "db:stop": "node src/scripts/localPostgres.js stop",
+    "db:import-users": "node src/scripts/importUsers.js"
   },
   "keywords": [],
   "author": "",
@@ -22,15 +25,22 @@
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3"
+    "jsonwebtoken": "^9.0.3",
+    "unzipper": "^0.10.14"
   },
   "devDependencies": {
-    "prisma": "^5.22.0",
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "prisma": "^5.22.0"
   },
   "engines": {
     "node": "22.x"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
   }
 }

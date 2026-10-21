@@ -14,7 +14,6 @@ coverage/
 *.db-*
 *.sqlite
 *.sqlite3
-!backend/demo/demo.db
 # Logs and generated reports
 *.log
 *.xlsx
@@ -37,3 +36,10 @@ coverage/
 Thumbs.db
 
 /backend/generated/
+
+# Private PostgreSQL setup and user transfer files
+.local-postgres.json
+*.users.private.json
+**/pgdata/
+**/postgresql.zip
+**/*.dump

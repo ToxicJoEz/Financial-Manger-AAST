@@ -14,3 +14,10 @@ patch_*.js
 fix.js
 revert_snippet.js
 **/*.log
+
+# Private PostgreSQL setup and user transfer files
+**/.local-postgres.json
+*.users.private.json
+**/pgdata/
+**/postgresql.zip
+**/*.dump

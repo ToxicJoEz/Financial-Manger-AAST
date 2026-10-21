@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -48,11 +49,12 @@ model Instructor {
   id         String   @id @default(uuid())
   name       String
   branches   String   // Stored as a comma-separated string (e.g., "MIAMI,FOUAD")
-  employeeId String?  // Employee ID
+  employeeId String? @unique  // Employee ID
   mobile     String?  // Mobile Number
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
+  payrollEarnings PayrollEarning[]
   courseAssignments  CourseInstructor[]
   pendingAssignments PendingAssignment[]
 }
@@ -62,6 +64,7 @@ model Course {
   id String @id @default(uuid())
   name String
   code String @unique
+  bookPrice Float @default(0)
   archivedAt DateTime?
   archivedBy String?
   createdAt DateTime @default(now())
@@ -76,6 +79,9 @@ model Cycle {
 
   id           String   @id @default(uuid())
   name         String
+  venue        String?
+  classStartTime String? // Local class time HH:mm
+  classEndTime   String? // Local class time HH:mm
   details      String?
   branch       String
   startDate    DateTime?
@@ -83,11 +89,12 @@ model Cycle {
   isFinished   Boolean  @default(false)
   totalHours   Float?   // Set when course is created or finished
   courseFee    Float    @default(0) // Standard tuition fee in EGP
-  payrollMonth String?  // e.g. "2026-09"
-  isPaid       Boolean  @default(false) 
+  payrollMonth String?  // Legacy migration-only; current earnings have no payroll month.
+  isPaid       Boolean  @default(false) // Legacy migration-only; use earning batches. 
   archivedAt   DateTime?
   archivedBy   String?
   payrollRecord PayrollRecord?
+  payrollEarnings PayrollEarning[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -156,6 +163,10 @@ model BranchColor {
 model Student {
   id                 String       @id @default(uuid())
   name               String
+  englishName        String?
+  dateOfBirth        DateTime?
+  nationality        String?
+  placeOfBirth       String?
   registrationNumber String       @unique
   mobile             String?
   createdAt          DateTime     @default(now())
@@ -174,6 +185,7 @@ model Enrollment {
   customFee  Float?   // If set, overrides course courseFee for this student (0 = exempt / scholarship)
   enrolledAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  bookPayments BookPayment[]
   payments   PaymentEntry[]
   deletedAt  DateTime?
   deletedBy  String?
@@ -185,7 +197,8 @@ model Enrollment {
   @@unique([courseId, studentId])
 }
 
-// Completed payroll is retained independently from editable teaching assignments.
+// Legacy snapshots retained for migration and historical compatibility only.
+// Current payroll uses PayrollEarning and InstructorPaymentBatch.
 model PayrollRecord {
   id           String @id @default(uuid())
   courseId     String @unique
@@ -219,6 +232,10 @@ model PaymentEntry {
   recordedAt        DateTime @default(now())
   occurredAt        DateTime @default(now())
   idempotencyKey    String   @unique
+  paymentMethod     String   @default("UNSPECIFIED")
+  receiptNumber     String?
+  paymentDateKnown  Boolean  @default(true)
+  importBatchId     String?
   reversalOfId      String?  @unique
   reversalOf        PaymentEntry? @relation("PaymentReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
   reversal          PaymentEntry? @relation("PaymentReversal")
@@ -228,3 +245,86 @@ model PaymentEntry {
   @@index([studentId])
 }
 
+
+// Successful imports only. Source workbooks are not retained.
+model ImportBatch {
+  id String @id @default(uuid())
+  fingerprint String @unique
+  fileName String
+  parentCourseId String
+  cycleId String @unique
+  recordedBy String
+  createdAt DateTime @default(now())
+  studentCount Int
+}
+
+// Durable approval history. Scalar target IDs and snapshots survive target deletion.
+model StudentRequest {
+  id String @id @default(uuid())
+  action String
+  status String @default("PENDING")
+  submittedById String
+  resolvedById String?
+  studentId String?
+  courseId String?
+  enrollmentId String?
+  payload String
+  snapshot String
+  pendingKey String? @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, createdAt])
+  @@index([submittedById, createdAt])
+}
+
+model PayrollEarning {
+  id String @id @default(uuid())
+  courseId String
+  course Cycle @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  instructorId String
+  instructor Instructor @relation(fields: [instructorId], references: [id], onDelete: Restrict)
+  cycleName String
+  branch String
+  instructorName String
+  employeeId String?
+  hours Float
+  rate Float
+  amountMinor BigInt
+  batchId String?
+  batch InstructorPaymentBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([courseId, instructorId])
+  @@index([instructorId, batchId])
+}
+model InstructorPaymentBatch {
+  id String @id @default(uuid())
+  instructorId String
+  instructorName String
+  status String @default("PROCESSING")
+  initiatedDate DateTime?
+  actualPaymentDate DateTime?
+  initiatedBy String?
+  paidBy String?
+  legacy Boolean @default(false)
+  idempotencyKey String? @unique
+  earnings PayrollEarning[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([status, initiatedDate])
+}
+
+// Immutable purchase-time amounts; undo retains the original record.
+model BookPayment {
+  id String @id @default(uuid())
+  enrollmentId String
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  activeKey String? @unique
+  status String
+  amountMinor BigInt
+  recordedAt DateTime @default(now())
+  recordedBy String
+  reversedAt DateTime?
+  reversedBy String?
+  @@index([enrollmentId])
+}

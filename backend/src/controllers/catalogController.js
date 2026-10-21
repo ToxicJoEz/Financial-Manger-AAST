@@ -1,3 +1,4 @@
+import { moneyMinor } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
 import { logAction } from '../utils/logger.js';
@@ -15,6 +16,7 @@ const summary = (course, user) => {
     id: course.id,
     name: course.name,
     code: course.code,
+    bookPrice: course.bookPrice,
     archivedAt: course.archivedAt,
     nextCycleNumber: highest < 2147483647 ? highest + 1 : null,
     cycleCount: visible.length,
@@ -93,6 +95,7 @@ export const createCourse = atomic(async (req, res, next) => {
     });
     const course = await prisma.course.create({
       data: {
+        bookPrice: Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
         name,
         code
       }
@@ -128,6 +131,7 @@ export const editCourse = atomic(async (req, res, next) => {
         id: current.id
       },
       data: {
+        bookPrice: Number(moneyMinor(req.body.bookPrice ?? current.bookPrice, 'Book price')) / 100,
         name,
         code
       }

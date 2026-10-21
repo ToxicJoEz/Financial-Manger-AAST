@@ -19,17 +19,16 @@
       "framework": "express",
       "entrypoint": "src/vercel.js",
       "installCommand": "npm ci",
-      "buildCommand": "npm run build",
+      "buildCommand": "npm run build && npm run db:deploy",
       "functions": {
         "src/vercel.js": {
-          "includeFiles": "{demo/demo.db,generated/client/**}",
+          "includeFiles": "generated/client/**",
           "maxDuration": 60
         }
       }
     }
   },
   "env": {
-    "VERCEL_SQLITE_DEMO": "1",
     "NODE_ENV": "production"
   },
   "rewrites": [

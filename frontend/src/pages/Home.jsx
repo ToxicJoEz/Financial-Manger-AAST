@@ -1,3 +1,4 @@
+import '../styles/_yearOverview.scss';
 import { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -17,6 +18,7 @@ export default function Home() {
     error: false
   });
   const month = localMonth();
+  const year = month.slice(0,4);
   const load = async () => {
     setState(s => ({
       ...s,
@@ -24,7 +26,7 @@ export default function Home() {
       error: false
     }));
     try {
-      const [courses, finances] = await Promise.all([axios.get('/cycles'), manager ? axios.get(`/finances?month=${month}`) : Promise.resolve(null)]);
+      const [courses, finances] = await Promise.all([axios.get('/cycles'), manager ? axios.get('/finances/overview', {params:{year}}) : Promise.resolve(null)]);
       setState({
         courses: courses.data.filter(course => !course.archivedAt),
         finances: finances?.data,
@@ -55,9 +57,7 @@ export default function Home() {
   })));
   const unassigned = active.filter(c => !c.instructors.length);
   const recent = [...courses].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)).slice(0, 5);
-  const paid = finances?.summary.totalPaid || 0;
-  const total = finances?.summary.totalPayroll || 0;
-  const percent = total > 0 ? Math.round(paid / total * 100) : 0;
+  const paid = finances?.payroll.totalPaid || 0;
   const instructors = new Set(courses.flatMap(c => c.instructors.map(i => i.instructorId)));
   const branches = Object.entries(courses.reduce((map, c) => {
     map[c.branch] = (map[c.branch] || 0) + 1;
@@ -66,10 +66,6 @@ export default function Home() {
   const dateLabel = new Date().toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
-    year: 'numeric'
-  });
-  const monthLabel = new Date(`${month}-01T12:00:00`).toLocaleDateString('en-GB', {
-    month: 'long',
     year: 'numeric'
   });
   const firstName = user.firstName || user.username;
@@ -81,26 +77,27 @@ export default function Home() {
       }}><Plus size={17} />New course</Link>}
     </PageHeading>
     {error ? <section className="panel"><EmptyState title="Let’s try that again" description="We couldn’t load your overview. Check your connection and refresh." icon={CircleHelp}><button className="btn-primary" onClick={load}>Try again</button></EmptyState></section> : loading ? <div className="loading-state"><span className="loading-spinner" />Getting your workspace ready…</div> : <>
-      <div className="home-summary">
+      <div className={`home-summary ${manager ? 'has-year-finances' : ''}`}>
         <section className="balance-card">
-          <div className="balance-top"><span><Wallet size={17} />{manager ? 'Payroll snapshot' : 'Course snapshot'}</span><span className="balance-period">{manager ? monthLabel : 'All branches'}</span></div>
-          <div className="balance-body"><div><div className="balance-label">{manager ? 'Total monthly payroll' : 'Cycles across the academy'}</div><div className="balance-amount">{manager ? money(total) : courses.length}<span>{manager ? 'EGP' : 'cycles'}</span></div><Link to={manager ? '/finances' : '/courses'} className="balance-link">{manager ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
-            <div className="payroll-ring" style={{
-              '--progress': `${manager ? percent : courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}%`
-            }} aria-label={manager ? `${percent}% of payroll paid` : 'Course completion'}><div><strong>{manager ? percent : courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}<small>%</small></strong><span>{manager ? 'paid' : 'completed'}</span></div></div>
+          <div className="balance-top"><span><Wallet size={17} />{manager ? 'Payroll snapshot' : 'Course snapshot'}</span><span className="balance-period">{manager ? year : 'All branches'}</span></div>
+          <div className="balance-body"><div><div className="balance-label">{manager ? `Salary paid in ${year}` : 'Cycles across the academy'}</div><div className="balance-amount">{manager ? money(paid) : courses.length}<span>{manager ? 'EGP' : 'cycles'}</span></div><Link to={manager ? '/finances/payroll' : '/courses'} className="balance-link">{manager ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
+            {manager ? <div className="annual-payroll-mark"><CalendarDays size={25}/><strong>{year}</strong><span>Actual payment year</span></div> : (<div className="payroll-ring" style={{
+              '--progress': `${courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}%`
+            }} aria-label={'Course completion'}><div><strong>{courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}<small>%</small></strong><span>completed</span></div></div>)}
           </div>
-          <div className="balance-legend"><span><i />{manager ? 'Paid' : 'Completed'}<strong>{manager ? money(paid) + ' EGP' : courses.length - active.length}</strong></span><span><i />{manager ? 'Outstanding' : 'Active'}<strong>{manager ? money(finances?.summary.totalUnpaid) + ' EGP' : active.length}</strong></span></div>
+          <div className="balance-legend"><span><i/>{manager ? "Employees paid" : 'Completed'}<strong>{manager ? finances?.payroll.instructorsPaid || 0 : courses.length-active.length}</strong></span><span><i/>{manager ? 'Cycles paid' : 'Active'}<strong>{manager ? finances?.payroll.cyclesPaid || 0 : active.length}</strong></span></div>
         </section>
+        {manager && <section className="balance-card year-income-card"><div className="balance-top"><span><Wallet size={17}/>Income snapshot</span><span className="balance-period">{year}</span></div><div className="balance-body"><div><div className="balance-label">Income from cycles starting in {year}</div><div className="balance-amount">{money(finances?.income.total || 0)}<span>EGP</span></div><Link to="/finances/income" className="balance-link">View income<ArrowUpRight size={17}/></Link></div></div><div className="balance-legend"><span><i/>Tuition<strong>{money(finances?.income.tuition || 0)} EGP</strong></span><span><i/>Books<strong>{money(finances?.income.books || 0)} EGP</strong></span></div></section>}
         <Metric tone="blue" icon={BookOpen} label="Active courses" value={String(active.length).padStart(2, '0')} detail={`${courses.length} courses in your workspace`}><div className="metric-footer"><span className="micro-bar"><i style={{
                 "--runtime-width": `${courses.length ? active.length / courses.length * 100 : 0}%`
               }} className="home-presentation-12" /></span><Link to="/courses/cycles" state={{
               status: 'active'
             }} aria-label="View active courses"><ArrowUpRight size={17} /></Link></div></Metric>
-        <Metric tone="peach" icon={Users} label="Teaching team" value={String(instructors.size).padStart(2, '0')} detail="Instructors assigned to courses"><div className="metric-footer"><div className="avatar-stack">{[...new Map(courses.flatMap(c => c.instructors.map(i => [i.instructorId, i.instructor.name]))).values()].slice(0, 3).map((name, index) => <span key={name} style={{
+        <Metric tone="peach" icon={Users} label="Teaching team" value={String(instructors.size).padStart(2, '0')} detail="Employees assigned to courses"><div className="metric-footer"><div className="avatar-stack">{[...new Map(courses.flatMap(c => c.instructors.map(i => [i.instructorId, i.instructor.name]))).values()].slice(0, 3).map((name, index) => <span key={name} style={{
                 '--avatar-color': ['#dee5fe', '#ffdfca', '#d3efea'][index]
-              }} title={name}>{name.slice(0, 1)}</span>)}</div><Link to={manager ? '/instructors' : '/courses'} aria-label="View teaching team"><ArrowUpRight size={17} /></Link></div></Metric>
+              }} title={name}>{name.slice(0, 1)}</span>)}</div><Link to={manager ? '/employees' : '/courses'} aria-label="View teaching team"><ArrowUpRight size={17} /></Link></div></Metric>
       </div>
-      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${manager ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an instructor` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses/cycles" state={pending.length ? {
+      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${manager ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an employee` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses/cycles" state={pending.length ? {
           status: 'pending',
           openReviewId: manager ? pending[0].id : null
         } : unassigned.length ? {
@@ -126,7 +123,7 @@ export default function Home() {
           create: true
         } : {
           status: 'unassigned'
-        }}><span className="quick-icon"><Plus size={20} /></span><div><strong>{manager ? 'Make room for what’s next' : 'Find your next assignment'}</strong><p>{manager ? 'Set up a new course in a few simple steps.' : 'Browse courses that need an instructor.'}</p></div><ArrowRight size={18} /></Link><Link to={manager ? '/finances' : '/profile'}><span className="quick-icon teal"><Wallet size={20} /></span><div><strong>{manager ? 'Close the month with clarity' : 'A workspace that feels like you'}</strong><p>{manager ? 'Review teaching hours and settle course payments.' : 'Keep your profile and account details up to date.'}</p></div><ArrowRight size={18} /></Link></div>
+        }}><span className="quick-icon"><Plus size={20} /></span><div><strong>{manager ? 'Make room for what’s next' : 'Find your next assignment'}</strong><p>{manager ? 'Set up a new course in a few simple steps.' : "Browse courses that need an employee."}</p></div><ArrowRight size={18} /></Link><Link to={manager ? '/finances/payroll' : '/profile'}><span className="quick-icon teal"><Wallet size={20} /></span><div><strong>{manager ? "Keep employee payments moving" : 'A workspace that feels like you'}</strong><p>{manager ? 'Review teaching hours and settle course payments.' : 'Keep your profile and account details up to date.'}</p></div><ArrowRight size={18} /></Link></div>
     </>}
   </div>;
 }

@@ -69,7 +69,7 @@ export const approveAssignment = atomic(async (req, res) => {
         });
 
         if (alreadyAssigned) {
-          throw new Error('DUPLICATE_ASSIGNMENT: Instructor is already assigned to this course.');
+          throw new Error('DUPLICATE_ASSIGNMENT: Employee is already assigned to this course.');
         }
 
         await tx.courseInstructor.create({
@@ -110,13 +110,13 @@ export const approveAssignment = atomic(async (req, res) => {
 
     await logAction('ASSIGNMENT_APPROVED', logDesc, req.user.username, pending.submittedBy.username);
 
-    res.json({ message: isRemoval ? 'Instructor removal approved successfully' : 'Assignment approved successfully' });
+    res.json({ message: isRemoval ? 'Employee removal approved successfully' : 'Assignment approved successfully' });
   } catch (error) {
     if (error.message?.includes('CONCURRENCY_ERROR')) {
       return res.status(409).json({ error: 'Assignment has already been processed by another reviewer.' });
     }
     if (error.message?.includes('DUPLICATE_ASSIGNMENT') || error.code === 'P2002') {
-      return res.status(400).json({ error: 'Instructor is already assigned to this course.' });
+      return res.status(400).json({ error: 'Employee is already assigned to this course.' });
     }
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -231,3 +231,18 @@ export const undoAssignment = atomic(async (req, res) => {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
+
+// Fetch only review details; compensation and user credentials are not needed here.
+export const getAssignmentReview = async (req, res, next) => {
+  try {
+    const request = await prisma.pendingAssignment.findUnique({ where: { id: req.params.id }, select: {
+      id: true, type: true, status: true, courseId: true,
+      instructor: { select: { id: true, name: true } },
+      course: { select: { id: true, name: true, branch: true } },
+      submittedBy: { select: { username: true, firstName: true, lastName: true } }
+    } });
+    if (!request) return res.status(404).json({ error: 'This request no longer exists.' });
+    if (request.status !== 'PENDING') return res.status(409).json({ error: 'This request has already been processed. Refresh your notifications.' });
+    res.json(request);
+  } catch (error) { next(error); }
+};

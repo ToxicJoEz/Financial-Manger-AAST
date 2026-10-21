@@ -1,3 +1,6 @@
+import FinanceLayout from './layouts/FinanceLayout';
+import Income from './pages/Income';
+import Notifications from './pages/Notifications';
 import CourseCatalog from './pages/CourseCatalog';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
@@ -47,6 +50,10 @@ const PublicRoute = ({
 };
 import { Toaster } from 'react-hot-toast';
 const CycleRoute = () => { const { courseId } = useParams(); return <Courses key={courseId || 'all'} />; };
+const FinanceRoute = () => {
+  const { user } = useContext(AuthContext);
+  return ['admin', 'mod'].includes(user.role) ? <FinanceLayout /> : <Navigate to="/" replace />;
+};
 const App = () => {
   return <WorkspaceMotion><AuthProvider>
       <Toaster position="top-right" toastOptions={{
@@ -75,12 +82,17 @@ const App = () => {
             <Route path="/register-user" element={<RegisterUser />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/users" element={<ManageUsers />} />
-            <Route path="/instructors" element={<Instructors />} />
+            <Route path="/employees" element={<Instructors />} /><Route path="/instructors" element={<Navigate to="/employees" replace />} />
             <Route path="/courses" element={<CourseCatalog />} />
             <Route path="/courses/cycles" element={<CycleRoute />} />
             <Route path="/courses/:courseId" element={<CycleRoute />} />
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/students" element={<Students />} />
-            <Route path="/finances" element={<Finances />} />
+            <Route path="/finances" element={<FinanceRoute />}>
+              <Route index element={<Navigate to="income" replace />} />
+              <Route path="income" element={<Income />} />
+              <Route path="payroll" element={<Finances />} />
+            </Route>
           </Route>
 
           {/* Catch-all for undefined routes */}
