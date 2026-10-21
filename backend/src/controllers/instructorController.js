@@ -1,8 +1,6 @@
-import pkg from '../../generated/client/index.js';
-const {Prisma}=pkg;
 import {employeeName,employeeNumber,employeeBranches} from '../utils/employees.js';
 import { hidePayroll } from '../utils/courseView.js';
-import prisma, { atomic } from '../db/prisma.js';
+import prisma, { atomic, Prisma } from '../db/prisma.js';
 import { logAction } from '../utils/logger.js';
 
 export const getInstructors = async (req, res) => {

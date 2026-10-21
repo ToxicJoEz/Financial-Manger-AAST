@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
-import pkg from '../../generated/client/index.js';
+import pkg from './prismaClient.js';
+export const Prisma=pkg.Prisma;
 import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
