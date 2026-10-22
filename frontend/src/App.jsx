@@ -1,3 +1,4 @@
+import ActivityLog from './pages/ActivityLog';
 import FinanceLayout from './layouts/FinanceLayout';
 import Income from './pages/Income';
 import Notifications from './pages/Notifications';
@@ -82,6 +83,7 @@ const App = () => {
             <Route path="/register-user" element={<RegisterUser />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/users" element={<ManageUsers />} />
+            <Route path="/logs" element={<ActivityLog />} />
             <Route path="/employees" element={<Instructors />} /><Route path="/instructors" element={<Navigate to="/employees" replace />} />
             <Route path="/courses" element={<CourseCatalog />} />
             <Route path="/courses/cycles" element={<CycleRoute />} />

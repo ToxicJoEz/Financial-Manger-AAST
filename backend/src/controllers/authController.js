@@ -1,3 +1,4 @@
+import {auditActor} from '../utils/auditContext.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
@@ -23,6 +24,7 @@ export const loginUser = atomic(async (req, res, next) => {
     
     const user = await prisma.user.findUnique({ where: { username } });
 
+    if(user)auditActor(user,'PASSWORD');
     if (user && user.password && (await bcrypt.compare(password, user.password))) {
       // Check Enterprise Security Flags
       if (user.isBanned) {
@@ -210,6 +212,7 @@ export const ssoLogin = atomic(async (req, res, next) => {
       });
     }
 
+    auditActor(user,'SSO');
     // 4. Generate Local Session (same as normal login)
     if (user.isBanned) {
       res.status(403);
@@ -239,7 +242,7 @@ export const ssoLogin = atomic(async (req, res, next) => {
         isActive: user.isActive,
         isBanned: user.isBanned
       },
-      token: generateToken(user.id) // Issue a standard local token!
+      token: generateToken(user.id,'SSO') // Issue a standard local token!
     });
 
   } catch (error) {
@@ -247,3 +250,5 @@ export const ssoLogin = atomic(async (req, res, next) => {
     next(new Error(error.message || 'SSO Authentication Failed'));
   }
 });
+
+export const logoutUser=(req,res)=>res.json({message:'Signed out.'});

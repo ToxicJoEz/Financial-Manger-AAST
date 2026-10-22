@@ -1,3 +1,5 @@
+import {auditContext} from '../utils/auditContext.js';
+import {auditData,snapshotChange} from '../utils/auditEvent.js';
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
 import pkg from './prismaClient.js';
@@ -6,7 +8,7 @@ import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment']);
+const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment','courseInstructor','importBatch','notification','branchColor']);
 
 // Controllers use the same client inside atomic(), including their existing transaction callbacks.
 const prisma = new Proxy(base, {
@@ -25,14 +27,13 @@ const prisma = new Proxy(base, {
         return async args => {
           const before = operation === 'create' || operation === 'createMany' ? [] : await model.findMany({ where: args.where });
           const result = await method.call(model, args);
-          if (context.actor) {
-            const ids = before.map(row => row.id);
-            const after = operation === 'delete' || operation === 'deleteMany' ? [] : operation === 'createMany' ? auditSnapshot(args.data) : await model.findMany({ where: ids.length ? { id: { in: ids } } : { id: result.id } });
-            const old = auditSnapshot(before);
-            const changed = before.length === 1 && Array.isArray(after) && after.length === 1
-              ? Object.fromEntries(Object.keys(after[0]).filter(key => !/password|token|secret/i.test(key) && JSON.stringify(auditSnapshot(before[0][key])) !== JSON.stringify(auditSnapshot(after[0][key]))).map(key => [key, { before: auditSnapshot(before[0][key]), after: auditSnapshot(after[0][key]) }]))
-              : { before: old, after: auditSnapshot(after) };
-            await context.tx.systemLog.create({ data: { action: `${property.toUpperCase()}_${String(operation).toUpperCase()}`, description: JSON.stringify({ entity: property, ids: ids.length ? ids : [result.id].filter(Boolean), changes: changed }), actorUsername: context.actor } });
+          const audit=auditContext.getStore();
+          if(audit||context.actor){
+            const identity=property==='branchColor'?'name':'id';
+            const ids=before.map(row=>row[identity]);
+            const after=operation==='delete'||operation==='deleteMany'?[]:operation==='createMany'?args.data:await model.findMany({where:ids.length?{[identity]:{in:ids}}:{[identity]:result[identity]}});
+            if(audit)audit.changes.push(snapshotChange(property,operation,before,after));
+            else await context.tx.systemLog.create({data:{action:`${property.toUpperCase()}_${operation.toUpperCase()}`,description:JSON.stringify(snapshotChange(property,operation,before,after)),actorUsername:context.actor}});
           }
           return result;
         };
@@ -45,6 +46,7 @@ const prisma = new Proxy(base, {
 export function atomic(handler, { timeout = 20000 } = {}) {
   return async (req, res, next) => {
     let response;
+    const audit=auditContext.getStore();
     const buffered = Object.create(res);
     buffered.statusCode = res.statusCode || 200;
     buffered.status = code => { buffered.statusCode = code; return buffered; };
@@ -54,7 +56,9 @@ export function atomic(handler, { timeout = 20000 } = {}) {
         await handler(req, buffered, error => { throw error; });
         if (!response) throw new Error('Mutation handler did not produce a response.');
         if (response.status >= 400) throw Object.assign(new Error('Request rejected'), { bufferedResponse: response });
+        if(audit){const data=await auditData(prisma,audit,req,response.status,response.body);await tx.systemLog.create({data});}
       }), { maxWait: 10000, timeout, isolationLevel: 'Serializable' });
+      if(audit)audit.persisted=true;
       res.status(response.status).json(response.body);
     } catch (error) {
       if (error.bufferedResponse) return res.status(error.bufferedResponse.status).json(error.bufferedResponse.body);

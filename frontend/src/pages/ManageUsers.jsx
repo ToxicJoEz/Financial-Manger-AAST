@@ -19,8 +19,6 @@ const ManageUsers = () => {
   const [loading, setLoading] = useState(true);
 
   // Modal states
-  const [showLogModal, setShowLogModal] = useState(false);
-  const [logs, setLogs] = useState([]);
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
 
   useEffect(() => {
@@ -42,17 +40,6 @@ const ManageUsers = () => {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-  const fetchLogs = async () => {
-    try {
-      const {
-        data
-      } = await axios.get('/logs');
-      setLogs(data);
-      setShowLogModal(true);
-    } catch (err) {
-      console.error(err);
     }
   };
   const canModify = targetUser => {
@@ -115,7 +102,7 @@ const ManageUsers = () => {
   }
   return <div className="manage-users-container">
       <PageHeading eyebrow="The people you work with" title="Team & access" description="A shared workspace, with the right access for everyone.">
-        {currentUser.role === 'admin' && <button onClick={fetchLogs} className="btn-secondary"><ListOrdered size={16} />Activity log</button>}
+        <Link to="/logs" className="btn-secondary"><ListOrdered size={16}/>Activity log</Link>
         <Link to="/register-user" className="btn-primary"><UserPlus size={16} />Add colleague</Link>
       </PageHeading>
       <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => u.isActive && !u.isBanned).length} active accounts</span></div>
@@ -209,41 +196,6 @@ const ManageUsers = () => {
           </div>
         </Dialog>}</AnimatePresence>
 
-      {/* Logs Modal (Admin Only) */}
-      <AnimatePresence>{showLogModal && <Dialog title="Audit logs" onClose={() => setShowLogModal(false)}>
-          <div className="modal-content card max-w-5xl w-full max-h-[85vh] flex flex-col relative">
-            <div className="flex justify-between items-center appearance-mb-6">
-              <div>
-                <h3 className="appearance-text-xl appearance-font-bold">System Audit Logs</h3>
-                <p className="appearance-text-xs text-muted appearance-mt-1">Immutable record of all state changes and authentications.</p>
-              </div>
-              <button onClick={() => setShowLogModal(false)} className="btn-secondary">Close</button>
-            </div>
-            
-            <div className="overflow-y-auto flex-1 appearance-pr-2">
-              <table className="mu-table w-full appearance-text-left appearance-text-sm">
-                <thead className="sticky top-0 appearance-bg-white appearance-shadow-sm z-10">
-                  <tr>
-                    <th>Timestamp</th>
-                    <th>Action Event</th>
-                    <th>Actor</th>
-                    <th>Description</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map(log => <tr key={log.id}>
-                      <td className="text-muted appearance-text-xs">{new Date(log.createdAt).toLocaleString()}</td>
-                      <td>
-                        <span className="appearance-font-semibold text-primary">{log.action}</span>
-                      </td>
-                      <td className="appearance-font-medium">{log.actorUsername}</td>
-                      <td className="text-muted">{log.description}</td>
-                    </tr>)}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </Dialog>}</AnimatePresence>
 
     </div>;
 };

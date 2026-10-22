@@ -40,3 +40,5 @@ test('Student requests require approval and student imports require a manager',(
 test('Instructor earnings use selected-cycle batches and separate payment dates',()=>fixture('instructorPaymentWorkflow.js'));
 
 test('Employee Excel imports merge branches and preserve unique identities',()=>fixture('employeeImportWorkflow.js'));
+
+test('Audit history survives failures and deletions with role-scoped access',()=>fixture('auditWorkflow.js'));

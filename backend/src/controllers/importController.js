@@ -1,3 +1,4 @@
+import {auditContext} from '../utils/auditContext.js';
 import { cycleSchedule } from '../utils/cycleSchedule.js';
 import { savePayrollRecord } from '../utils/payrollRecord.js';
 import { importedCycleFinished } from '../utils/academyDate.js';
@@ -122,6 +123,7 @@ export const commitImport = atomic(async (req, res, next) => {
     } catch {
       throw importError('The preview expired or is invalid. Upload the workbook again.');
     }
+    req.auditFileName=claim.fileName;
     if (claim.purpose !== 'cycle-import' || claim.userId !== req.user.id || claim.parentId !== req.params.parentId) throw importError('This preview belongs to another user or course.', 403);
     const parent = await parentFor(claim.parentId),
       parsed = claim.parsed;
@@ -216,6 +218,7 @@ export const commitImport = atomic(async (req, res, next) => {
         studentCount: rows.length
       }
     });
+    if(auditContext.getStore())auditContext.getStore().records=rows.map(({existing,...row})=>({...row,selectedChoice:choices[row.registrationNumber]}));
     let created = 0;
     for (const row of rows) {
       const choice = choices[row.registrationNumber];

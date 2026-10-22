@@ -25,8 +25,6 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  logs      SystemLog[] @relation("ActorLogs")
-  targetOf  SystemLog[] @relation("TargetLogs")
 
   submittedAssignments PendingAssignment[] @relation("SubmittedAssignments")
   resolvedAssignments  PendingAssignment[] @relation("ResolvedAssignments")
@@ -41,8 +39,21 @@ model SystemLog {
   targetUsername String?
   createdAt      DateTime @default(now())
 
-  actor          User     @relation("ActorLogs", fields: [actorUsername], references: [username], onDelete: Cascade)
-  target         User?    @relation("TargetLogs", fields: [targetUsername], references: [username], onDelete: SetNull)
+  actorId        String?
+  actorRole      String?
+  authMethod     String?
+  category       String   @default("system")
+  outcome        String   @default("SUCCESS")
+  requestId      String?  @unique
+  statusCode     Int?
+  durationMs     Int?
+  recordCount    Int      @default(0)
+  details        Json?
+
+  @@index([createdAt, id])
+  @@index([actorRole, createdAt])
+  @@index([actorUsername, createdAt])
+  @@index([category, outcome, createdAt])
 }
 
 model Instructor {

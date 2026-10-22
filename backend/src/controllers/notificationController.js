@@ -1,4 +1,4 @@
-import prisma from '../db/prisma.js';
+import prisma,{atomic} from '../db/prisma.js';
 
 async function requestDetails(notifications) {
   const ids = [...new Set(notifications.map(n => n.relatedId).filter(Boolean))];
@@ -57,7 +57,7 @@ export const getNotifications = async (req, res) => {
   }
 };
 
-export const markAsRead = async (req, res) => {
+export const markAsRead = atomic(async (req, res) => {
   try {
     const { id } = req.params;
     const notification = await prisma.notification.update({
@@ -68,9 +68,9 @@ export const markAsRead = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};
+});
 
-export const markAllAsRead = async (req, res) => {
+export const markAllAsRead = atomic(async (req, res) => {
   try {
     await prisma.notification.updateMany({
       where: { userId: req.user.id, isRead: false },
@@ -80,4 +80,4 @@ export const markAllAsRead = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};
+});

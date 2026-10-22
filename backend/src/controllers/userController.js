@@ -232,7 +232,7 @@ export const updateProfile = atomic(async (req, res, next) => {
     });
 
     await logAction(
-      'PROFILE_UPDATED',
+      newPassword ? 'PASSWORD_CHANGED' : 'PROFILE_UPDATED',
       `User updated their personal profile${newPassword ? ' and changed password' : ''}`,
       req.user.username,
       req.user.username

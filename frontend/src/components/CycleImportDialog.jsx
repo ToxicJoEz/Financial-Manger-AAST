@@ -1,3 +1,4 @@
+import {recordClientFailure} from '../utils/activity';
 import CycleScheduleFields from './CycleScheduleFields';
 import { suggestCourseFee } from '../utils/importFee';
 import { useState } from 'react';
@@ -52,8 +53,8 @@ export default function CycleImportDialog({
     if (busy) return;
     setFile(selectedFile);
     setError('');
-    if (!selectedFile || !selectedFile.name.toLowerCase().endsWith('.xlsx')) return setError('Choose an .xlsx registration roster.');
-    if (selectedFile.size > 2 * 1024 * 1024) return setError('The workbook must be smaller than 2 MB.');
+    if (!selectedFile || !selectedFile.name.toLowerCase().endsWith('.xlsx')) {if(selectedFile)recordClientFailure('Rejected cycle workbook: choose an .xlsx registration roster.',selectedFile.name);return setError('Choose an .xlsx registration roster.');}
+    if (selectedFile.size > 2 * 1024 * 1024) {recordClientFailure('Rejected cycle workbook: the workbook exceeds 2 MB.',selectedFile.name);return setError('The workbook must be smaller than 2 MB.');}
     setBusy(true);
     try {
       const {

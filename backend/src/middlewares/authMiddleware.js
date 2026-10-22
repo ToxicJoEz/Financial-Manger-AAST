@@ -1,3 +1,4 @@
+import {auditActor} from '../utils/auditContext.js';
 import jwt from 'jsonwebtoken';
 import prisma from '../db/prisma.js';
 
@@ -21,6 +22,7 @@ export const protect = async (req, res, next) => {
         throw new Error('User no longer exists');
       }
       
+      auditActor(user,decoded.authMethod);
       if (user.isBanned || !user.isActive) {
          res.status(403);
          throw new Error('Account disabled or banned');

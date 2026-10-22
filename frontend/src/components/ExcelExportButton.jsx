@@ -119,8 +119,10 @@ function ExportDialog({
         downloadExcel
       } = await import('../utils/excelExport');
       downloadExcel(await createExcelBuffer(data));
+      await axios.post('/exports/events',{format:'xlsx',status:'SUCCESS'});
       onClose();
     } catch (e) {
+      await axios.post('/exports/events',{format:'xlsx',status:'FAILURE',message:'Excel generation failed in the browser.'}).catch(()=>{});
       setError(e.response?.data?.error || 'The export could not be prepared. Please try again.');
     } finally {
       setBusy(false);

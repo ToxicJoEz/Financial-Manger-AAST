@@ -96,6 +96,7 @@ export default function Finances() {
     if (exporting || !data?.monthly || data.monthly.month !== month || reportInstructors.length === 0) return;
     setExporting(true);
     try {
+      await axios.post('/exports/events',{format,status:'STARTED',month,batchId:group?.id});
       if (format === 'docx') {
         const { createSalaryWordReport } = await import('../utils/salaryWordReport');
         const blob = await createSalaryWordReport(reportInstructors, month);
@@ -103,6 +104,7 @@ export default function Finances() {
         link.href = url; link.download = `Payroll_Report_${month}${group ? '_Batch_' + group.id : ''}.docx`;
         document.body.append(link); link.click(); link.remove();
         setTimeout(() => URL.revokeObjectURL(url), 60000);
+        await axios.post('/exports/events',{format,status:'SUCCESS',month,batchId:group?.id});
         return;
       }
       // Load the report renderer only when requested, keeping normal navigation light.
@@ -165,8 +167,10 @@ export default function Finances() {
       const blob = await html2pdf().set(opt).from(element).outputPdf('blob');
       const url = URL.createObjectURL(blob), link = document.createElement('a');
       link.href = url; link.download = opt.filename; document.body.append(link); link.click(); link.remove();
+      await axios.post('/exports/events',{format,status:'SUCCESS',month,batchId:group?.id});
       setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch {
+      await axios.post('/exports/events',{format,status:'FAILURE',month,batchId:group?.id,message:'Report generation failed in the browser.'}).catch(()=>{});
       toast.error('Could not export the report. Please try again.');
     } finally {
       setExporting(false);

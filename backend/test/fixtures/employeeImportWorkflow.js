@@ -7,7 +7,7 @@ const app=express();app.use(service);const server=app.listen(0,'127.0.0.1');awai
 async function req(path,body,auth=token){const r=await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer '+auth}:{})},body:JSON.stringify(body)});return {status:r.status,data:await r.json()};}
 const ok=r=>{assert(r.status<300,JSON.stringify(r));return r.data;};
 async function workbook(rows){const wb=new ExcelJS.Workbook(),sheet=wb.addWorksheet('Sheet1');sheet.getCell('C2').value='م';sheet.getCell('D2').value='الاسم';sheet.getCell('E2').value='ألرقم الوظيفي';rows.forEach((row,i)=>{sheet.getCell(`C${i+3}`).value=i+1;sheet.getCell(`D${i+3}`).value=row[0];sheet.getCell(`E${i+3}`).value=row[1];if(row[2])sheet.getCell(`E${i+3}`).numFmt=row[2];});return Buffer.from(await wb.xlsx.writeBuffer());}
-async function preview(buffer,branch='ALAMEEN',auth=token){const response=await fetch(base+'/employees/import/preview?branch='+branch,{method:'POST',headers:{'Content-Type':'application/octet-stream',Authorization:'Bearer '+auth},body:buffer});return {status:response.status,data:await response.json()};}
+async function preview(buffer,branch='ALAMEEN',auth=token){const response=await fetch(base+'/employees/import/preview'+(branch==null?'':'?branch='+branch),{method:'POST',headers:{'Content-Type':'application/octet-stream',Authorization:'Bearer '+auth},body:buffer});return {status:response.status,data:await response.json()};}
 const commit=p=>req('/employees/import/commit',{previewToken:p.previewToken,rows:p.rows.filter(r=>r.action!=='ERROR').map(r=>r.rowNumber)});
 try{
  token=ok(await req('/auth/login',{username:'main-admin',password:'IsolatedDemoTest!123'})).token;
@@ -56,6 +56,26 @@ try{
  const results=await Promise.all([commit(race),commit(race)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);assert.equal(await prisma.instructor.count({where:{employeeId:'RACE-001'}}),1);
  assert.equal((await req('/employees',{name:'جو أحمد',employeeId:' 000123 ',branches:'FOUAD'})).status,409);
  const tampered=await req('/employees/import/commit',{previewToken:p.previewToken.slice(0,-8)+'tampered',rows:[3]});assert.equal(tampered.status,400);
+ assert.deepEqual(await prisma.user.findMany({orderBy:{id:'asc'}}),users);
+
+ const missing=ok(await preview(buffer,null));assert(missing.rows.every(r=>r.action==='ERROR'));
+ const wb=new ExcelJS.Workbook();
+ const alex=wb.addWorksheet('الإسكندرية');alex.addRow(['الاسم','الرقم الوظيفي','فرع']);
+ alex.addRow(['موظف متعدد الأوراق','SHEETS-1','اسكندرية ']);alex.addRow(['موظف بلا فرع','SHEETS-2',null]);
+ const other=wb.addWorksheet('فروع أخرى');other.addRow(['name','employee ID','branch']);
+ other.addRow(['موظف متعدد الأوراق','SHEETS-1','اسوان']);other.addRow(['موظف فرع مجهول','SHEETS-3','فرع جديد']);other.addRow(['موظف القرية','SHEETS-4','القرية الذكية']);
+ wb.addWorksheet('Empty');
+ let automatic=ok(await preview(Buffer.from(await wb.xlsx.writeBuffer()),null));assert.equal(automatic.sheetNames.length,2);assert.deepEqual(automatic.skippedSheets,['Empty']);assert.equal(automatic.sourceRowCount,5);assert.equal(automatic.rows.length,4);
+ assert.deepEqual(automatic.rows.find(r=>r.employeeId==='SHEETS-1').branches,['MIAMI','FOUAD','ABU-QEER','ASWAN']);assert.equal(automatic.rows.find(r=>r.employeeId==='SHEETS-1').sources.length,2);
+ assert.equal(automatic.rows.find(r=>r.employeeId==='SHEETS-2').action,'ERROR');assert.equal(automatic.rows.find(r=>r.employeeId==='SHEETS-3').action,'ERROR');assert.deepEqual(automatic.rows.find(r=>r.employeeId==='SHEETS-4').branches,['SMART']);
+ assert.equal((await req('/employees/import/preview',{previewToken:automatic.previewToken,branchMappings:automatic.branchMappings},junior)).status,403);
+ const mappings={...automatic.branchMappings,'اسكندرية':['FOUAD'],'':['MIAMI','SHERATON'],'فرعجديد':['ALAMEEN']};
+ assert.equal((await req('/employees/import/preview',{previewToken:automatic.previewToken,branchMappings:{...mappings,'فرعجديد':['UNKNOWN']}})).status,400);
+ assert.equal((await req('/employees/import/preview',{previewToken:automatic.previewToken,branchMappings:{...mappings,bogus:['MIAMI']}})).status,400);
+ automatic=ok(await req('/employees/import/preview',{previewToken:automatic.previewToken,branchMappings:mappings}));assert(automatic.rows.every(r=>r.action==='CREATE'));assert.equal(ok(await commit(automatic)).created,4);
+ for(const [employeeId,branches]of [['SHEETS-1','FOUAD,ASWAN'],['SHEETS-2','MIAMI,SHERATON'],['SHEETS-3','ALAMEEN'],['SHEETS-4','SMART']])assert.equal((await prisma.instructor.findUnique({where:{employeeId}})).branches,branches);
+ other.addRow(['اسم متعارض','SHEETS-1','شيراتون']);
+ const conflicts=ok(await preview(Buffer.from(await wb.xlsx.writeBuffer()),null));assert(conflicts.rows.filter(r=>r.employeeId==='SHEETS-1').every(r=>r.action==='ERROR'));
  assert.deepEqual(await prisma.user.findMany({orderBy:{id:'asc'}}),users);
  console.log('PASS: employee import headers, ID normalization/leading zeros, new records, branch merging, duplicate/name conflicts, stale previews and atomic rollback, concurrent imports, manual duplicate guard, role restrictions and preserved accounts.');
 }finally{server.closeAllConnections();await new Promise(r=>server.close(r));await prisma.$disconnect();}

@@ -36,6 +36,19 @@ export const AuthProvider = ({ children }) => {
     checkUserLoggedIn();
   }, []);
 
+  useEffect(()=>{
+    if(!user)return;
+    let timer;const fields=new Set();
+    const invalid=event=>{
+      const input=event.target;if(!input.form)return;
+      const previous=input.previousElementSibling;
+      fields.add(input.getAttribute('aria-label')||input.name||input.id||(previous?.tagName==='LABEL'?previous.textContent.slice(0,100):`${input.type||'Input'} field`));
+      clearTimeout(timer);timer=setTimeout(()=>{const invalidFields=[...fields];fields.clear();axios.post('/activity-events',{action:'FORM_VALIDATION_FAILED',message:'Form submission blocked by missing or invalid fields.',fields:invalidFields,page:window.location.pathname}).catch(()=>console.warn('Form activity could not reach the server.'));},120);
+    };
+    document.addEventListener('invalid',invalid,true);
+    return()=>{clearTimeout(timer);document.removeEventListener('invalid',invalid,true);};
+  },[user]);
+
   const login = async (username, password) => {
     const { data } = await axios.post('/auth/login', { username, password });
     localStorage.setItem('token', data.token);
@@ -44,10 +57,12 @@ export const AuthProvider = ({ children }) => {
     return data.user;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await axios.post('/auth/logout'); } finally {
     localStorage.removeItem('token');
     delete axios.defaults.headers.common['Authorization'];
     setUser(null);
+    }
   };
 
   const ssoLoginHandler = (userData, token) => {

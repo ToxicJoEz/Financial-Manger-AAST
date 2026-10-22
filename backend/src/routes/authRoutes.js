@@ -1,11 +1,12 @@
 import express from 'express';
-import { loginUser, registerUser, getUserProfile, ssoLogin } from '../controllers/authController.js';
+import { logoutUser, loginUser, registerUser, getUserProfile, ssoLogin } from '../controllers/authController.js';
 import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 // Public route: Anyone can try to login
 router.post('/login', loginUser);
+router.post('/logout',protect,logoutUser);
 
 // Public route: SSO Portal verification
 router.post('/sso', ssoLogin);

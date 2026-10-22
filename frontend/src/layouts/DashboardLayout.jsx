@@ -7,11 +7,11 @@ import { AuthContext } from '../context/AuthContext';
 import { Brand, initials } from '../components/WorkspaceUI';
 import { MotionRegion, MotionSurface } from '../components/WorkspaceMotion';
 import { AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, BookOpen, Users, Wallet, Settings2, LogOut, Bell, ChevronRight, Menu, X, Check, Search, UserRound, PanelLeftClose, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, Wallet, Settings2, ScrollText, LogOut, Bell, ChevronRight, Menu, X, Check, Search, UserRound, PanelLeftClose, GraduationCap } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-const pageNames = { '/': 'Overview', '/notifications': 'Notifications', '/courses': 'Courses', '/students': 'Students', '/employees': 'Employees', '/instructors': 'Employees', '/finances': 'Finance', '/finances/income': 'Finance / Income', '/finances/payroll': 'Finance / Payroll', '/users': 'Team & access', '/profile': 'My profile', '/register-user': 'Invite a colleague' };
+const pageNames = { '/logs':'Activity log', '/': 'Overview', '/notifications': 'Notifications', '/courses': 'Courses', '/students': 'Students', '/employees': 'Employees', '/instructors': 'Employees', '/finances': 'Finance', '/finances/income': 'Finance / Income', '/finances/payroll': 'Finance / Payroll', '/users': 'Team & access', '/profile': 'My profile', '/register-user': 'Invite a colleague' };
 const plainText = (html = '') => new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
 
 export default function DashboardLayout() {
@@ -108,9 +108,9 @@ export default function DashboardLayout() {
       <div className="nav-section-label">Workspace</div>
       <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
       <div className="nav-section-label administration-label">Settings</div>
-      <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink></nav>
+      <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{isManager&&<NavLink to="/logs" className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
       <div className="sidebar-bottom">
-        <div className="account-row"><Link to="/profile" className="account-link"><span className="avatar">{initials(user.firstName || user.username)}</span><span className="account-name">{user.firstName || user.username}<small>{user.role === 'mod' ? 'Moderator' : user.role === 'admin' ? 'Administrator' : 'Accountant'}</small></span></Link></div><button className="sidebar-logout" onClick={() => { logout(); navigate('/login'); }}><LogOut size={18} /><span>Sign out</span></button>
+        <div className="account-row"><Link to="/profile" className="account-link"><span className="avatar">{initials(user.firstName || user.username)}</span><span className="account-name">{user.firstName || user.username}<small>{user.role === 'mod' ? 'Moderator' : user.role === 'admin' ? 'Administrator' : 'Accountant'}</small></span></Link></div><button className="sidebar-logout" onClick={async () => { try { await logout(); } catch { toast.error('The sign-out activity could not be recorded.'); } finally { navigate('/login'); } }}><LogOut size={18} /><span>Sign out</span></button>
       </div>
     </aside>
     <div className="workspace-body">

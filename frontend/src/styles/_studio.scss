@@ -43,3 +43,41 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 
 .topbar .notification-trigger { width:40px; height:40px; }
 .topbar .notification-count { position:absolute; top:-3px; right:-5px; display:grid; place-items:center; min-width:23px; height:23px; padding:0 5px; border:2px solid #fff; border-radius:99px; background:#dc3545; color:#fff; font-size:11px; line-height:1; font-weight:800; font-variant-numeric:tabular-nums; box-shadow:0 2px 5px #b51e3330; pointer-events:none; }
+
+
+// Fit navigation to laptop and mobile viewport heights without shrinking the text unnecessarily.
+.sidebar {
+  height: 100dvh;
+  padding-top: clamp(12px, 3dvh, 29px);
+  padding-bottom: clamp(10px, 2dvh, 15px);
+  .sidebar-brand { margin-bottom: clamp(14px, 4dvh, 38px); flex-shrink: 0; }
+  .nav-section-label { flex-shrink: 0; }
+  .side-nav { flex-shrink: 0; }
+  .administration-label { margin-top: clamp(14px, 3dvh, 29px); }
+  .sidebar-bottom { padding-top: clamp(12px, 2.5dvh, 27px); }
+}
+
+@media (max-height: 800px) {
+  .sidebar {
+    .side-nav { gap: 3px; }
+    .side-link { min-height: 40px; padding-top: 9px; padding-bottom: 9px; }
+    .nav-section-label { margin-bottom: 8px; }
+    .account-row { padding-top: 10px; margin-bottom: 8px; }
+    .sidebar-logout { min-height: 38px; padding-top: 8px; padding-bottom: 8px; }
+  }
+}
+
+@media (max-height: 650px) {
+  .sidebar {
+    .sidebar-brand { margin-bottom: 12px; }
+    .side-nav { gap: 2px; }
+    .side-link { min-height: 34px; padding-top: 6px; padding-bottom: 6px; font-size: 12px; }
+    .side-link > svg { width: 17px; height: 17px; }
+    .administration-label { margin-top: 12px; }
+    .nav-section-label { margin-bottom: 6px; font-size: 10px; }
+    .sidebar-bottom { padding-top: 10px; }
+    .account-row { padding-top: 7px; margin-bottom: 6px; }
+    .account-link { padding-top: 2px; padding-bottom: 2px; }
+    .sidebar-logout { min-height: 34px; padding-top: 6px; padding-bottom: 6px; font-size: 12px; }
+  }
+}

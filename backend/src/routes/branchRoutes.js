@@ -1,5 +1,6 @@
 import express from 'express';
-import prisma from '../db/prisma.js';
+import prisma,{atomic} from '../db/prisma.js';
+import {protect,modOrAbove} from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.get('/colors', async (req, res) => {
   }
 });
 
-router.post('/colors', async (req, res) => {
+router.post('/colors', protect,modOrAbove,atomic(async (req, res) => {
   try {
     const { name } = req.body;
     const lowerName = name.toLowerCase().trim();
@@ -49,6 +50,6 @@ router.post('/colors', async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
-});
+}));
 
 export default router;
