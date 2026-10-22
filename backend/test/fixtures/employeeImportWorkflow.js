@@ -8,7 +8,7 @@ async function req(path,body,auth=token){const r=await fetch(base+path,{method:'
 const ok=r=>{assert(r.status<300,JSON.stringify(r));return r.data;};
 async function workbook(rows){const wb=new ExcelJS.Workbook(),sheet=wb.addWorksheet('Sheet1');sheet.getCell('C2').value='م';sheet.getCell('D2').value='الاسم';sheet.getCell('E2').value='ألرقم الوظيفي';rows.forEach((row,i)=>{sheet.getCell(`C${i+3}`).value=i+1;sheet.getCell(`D${i+3}`).value=row[0];sheet.getCell(`E${i+3}`).value=row[1];if(row[2])sheet.getCell(`E${i+3}`).numFmt=row[2];});return Buffer.from(await wb.xlsx.writeBuffer());}
 async function preview(buffer,branch='ALAMEEN',auth=token){const response=await fetch(base+'/employees/import/preview'+(branch==null?'':'?branch='+branch),{method:'POST',headers:{'Content-Type':'application/octet-stream',Authorization:'Bearer '+auth},body:buffer});return {status:response.status,data:await response.json()};}
-const commit=p=>req('/employees/import/commit',{previewToken:p.previewToken,rows:p.rows.filter(r=>r.action!=='ERROR').map(r=>r.rowNumber)});
+const commit=p=>req('/employees/import/commit',{previewToken:p.previewToken,rows:p.rows.filter(r=>['CREATE','ADD_BRANCH'].includes(r.action)).map(r=>r.rowNumber)});
 try{
  token=ok(await req('/auth/login',{username:'main-admin',password:'IsolatedDemoTest!123'})).token;
  const junior=ok(await req('/auth/login',{username:'Joe',password:'IsolatedDemoTest!123'})).token;
@@ -76,6 +76,23 @@ try{
  for(const [employeeId,branches]of [['SHEETS-1','FOUAD,ASWAN'],['SHEETS-2','MIAMI,SHERATON'],['SHEETS-3','ALAMEEN'],['SHEETS-4','SMART']])assert.equal((await prisma.instructor.findUnique({where:{employeeId}})).branches,branches);
  other.addRow(['اسم متعارض','SHEETS-1','شيراتون']);
  const conflicts=ok(await preview(Buffer.from(await wb.xlsx.writeBuffer()),null));assert(conflicts.rows.filter(r=>r.employeeId==='SHEETS-1').every(r=>r.action==='ERROR'));
+
+ // A manager chooses one competing identity; the server never imports both or overwrites an existing name.
+ const duplicateBook=await workbook([['نهي حسن السايح','CHOICE-001'],['نهى حسن السايح','CHOICE-001'],['نهي حسن السايح','CHOICE-001']]);
+ let choicePreview=ok(await preview(duplicateBook,'SMART'));
+ assert.equal(choicePreview.rows.length,2);assert(choicePreview.rows.every(row=>row.conflict&&row.action==='ERROR'));assert.equal(choicePreview.rows[0].sources.length,2);
+ const chosenRow=choicePreview.rows[1];
+ assert.equal((await req('/employees/import/preview',{previewToken:choicePreview.previewToken,branchMappings:choicePreview.branchMappings,duplicateChoices:{'CHOICE-001':99999}})).status,400);
+ choicePreview=ok(await req('/employees/import/preview',{previewToken:choicePreview.previewToken,branchMappings:choicePreview.branchMappings,duplicateChoices:{'CHOICE-001':chosenRow.rowNumber}}));
+ assert.equal(choicePreview.rows.filter(row=>row.action==='CREATE').length,1);assert.equal(choicePreview.rows.filter(row=>row.action==='SKIP').length,1);
+ assert.equal((await req('/employees/import/commit',{previewToken:choicePreview.previewToken,rows:choicePreview.rows.map(row=>row.rowNumber)})).status,409);
+ assert.equal(await prisma.instructor.count({where:{employeeId:'CHOICE-001'}}),0);
+ assert.equal(ok(await commit(choicePreview)).created,1);assert.equal((await prisma.instructor.findUnique({where:{employeeId:'CHOICE-001'}})).name,'نهى حسن السايح');
+ const existingConflict=ok(await preview(duplicateBook,'MIAMI'));
+ const wrong=existingConflict.rows.find(row=>row.name==='نهي حسن السايح');
+ const preserved=ok(await req('/employees/import/preview',{previewToken:existingConflict.previewToken,branchMappings:existingConflict.branchMappings,duplicateChoices:{'CHOICE-001':wrong.rowNumber}}));
+ assert.equal(preserved.rows.find(row=>row.rowNumber===wrong.rowNumber).action,'ERROR');
+ const cleared=ok(await req('/employees/import/preview',{previewToken:preserved.previewToken,branchMappings:preserved.branchMappings,duplicateChoices:{}}));assert(cleared.rows.every(row=>row.action==='ERROR'));
  assert.deepEqual(await prisma.user.findMany({orderBy:{id:'asc'}}),users);
  console.log('PASS: employee import headers, ID normalization/leading zeros, new records, branch merging, duplicate/name conflicts, stale previews and atomic rollback, concurrent imports, manual duplicate guard, role restrictions and preserved accounts.');
 }finally{server.closeAllConnections();await new Promise(r=>server.close(r));await prisma.$disconnect();}

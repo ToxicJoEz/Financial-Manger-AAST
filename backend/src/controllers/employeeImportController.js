@@ -23,11 +23,12 @@ function resolveMappings(parsed,input,fallback){
  if(input&&Object.keys(input).some(k=>!parsed.branchGroups.some(g=>g.key===k)))fail('Unknown branch group. Read the workbook again.');
  return mappings;
 }
-async function inspect(sourceRows,mappings){
+async function inspect(sourceRows,mappings,duplicateChoices={}){
+ if(!duplicateChoices||typeof duplicateChoices!=='object'||Array.isArray(duplicateChoices))fail('Choose valid duplicate resolutions.');
  // The same employee across worksheets represents one import, with a union of chosen branches.
  const merged=new Map(),rows=[];
  for(const source of sourceRows){
-  const branches=mappings[source.branchKey]||[],existing=source.employeeId&&merged.get(source.employeeId);
+  const branches=mappings[source.branchKey]||[],existing=source.employeeId&&merged.get(JSON.stringify([source.employeeId,source.name]));
   const location={sheetName:source.sheetName,rowNumber:source.sourceRow};
   if(existing&&existing.name===source.name){
    existing.branches=[...new Set([...existing.branches,...branches])];existing.sources.push(location);existing.issues.push(...source.issues);
@@ -35,19 +36,28 @@ async function inspect(sourceRows,mappings){
   }else{
    const row={...source,branches:[...branches],sources:[location],issues:[...source.issues]};
    if(!branches.length)row.issues.push('Choose at least one branch for this file branch group.');
-   if(existing){existing.issues.push('Employee ID has conflicting names inside this workbook.');row.issues.push('Employee ID has conflicting names inside this workbook.');}
-   else if(source.employeeId)merged.set(source.employeeId,row);
+   if(source.employeeId)merged.set(JSON.stringify([source.employeeId,source.name]),row);
    rows.push(row);
   }
+ }
+ const variants=new Map();
+ for(const row of rows)if(row.employeeId){const group=variants.get(row.employeeId)||[];group.push(row);variants.set(row.employeeId,group);}
+ for(const [id,choice] of Object.entries(duplicateChoices)){
+  const group=variants.get(id);
+  if(!group||group.length<2||!Number.isInteger(choice)||!group.some(row=>row.rowNumber===choice))fail('Invalid duplicate choice. Choose one of the displayed employee entries.');
  }
  const existing=await prisma.instructor.findMany({where:{employeeId:{in:rows.map(r=>r.employeeId).filter(Boolean)}},select:{id:true,name:true,employeeId:true,branches:true,updatedAt:true}});
  const byId=new Map(existing.map(e=>[e.employeeId,e]));
  return rows.map(row=>{
   const employee=byId.get(row.employeeId),issues=[...new Set(row.issues)];
+  const conflict=(variants.get(row.employeeId)?.length||0)>1;
+  const choice=Object.hasOwn(duplicateChoices,row.employeeId)?duplicateChoices[row.employeeId]:null;
+  const skipped=conflict&&choice!==null&&choice!==row.rowNumber;
+  if(conflict&&choice===null)issues.push('This employee ID has different names in the workbook. Choose one entry in Resolve duplicate IDs.');
   const currentBranches=(employee?.branches||'').split(',').map(b=>b.trim().toUpperCase()).filter(Boolean);
   const missingBranches=row.branches.filter(branch=>!currentBranches.includes(branch));
   if(employee){if(employeeName(employee.name)!==row.name)issues.push(`Employee ID belongs to a different name: ${employee.name}.`);else if(!missingBranches.length)issues.push('Duplicate: this employee already belongs to all selected branches.');}
-  return {...row,missingBranches,action:issues.length?'ERROR':employee?'ADD_BRANCH':'CREATE',issues,existing:employee?{id:employee.id,name:employee.name,branches:employee.branches,version:employee.updatedAt.toISOString()}:null};
+  return {...row,conflict,missingBranches,action:skipped?'SKIP':issues.length?'ERROR':employee?'ADD_BRANCH':'CREATE',issues,existing:employee?{id:employee.id,name:employee.name,branches:employee.branches,version:employee.updatedAt.toISOString()}:null};
  });
 }
 export const previewEmployees=async(req,res,next)=>{
@@ -56,10 +66,11 @@ export const previewEmployees=async(req,res,next)=>{
   const parsed=previous?.parsed||await parseEmployeeWorkbook(req.body);
   const fallback=req.query.branches!=null||req.query.branch!=null?employeeBranches(req.query.branches??req.query.branch):null;
   const mappings=resolveMappings(parsed,previous?req.body.branchMappings:null,fallback);
-  const rows=await inspect(parsed.rows,mappings);
+  const duplicateChoices=previous?(req.body.duplicateChoices??previous.duplicateChoices??{}):{};
+  const rows=await inspect(parsed.rows,mappings,duplicateChoices);
   const fileName=previous?.fileName||decodeURIComponent(String(req.headers['x-file-name']||'Employees.xlsx')).slice(0,300);
-  const previewToken=jwt.sign({purpose:'employee-import',userId:req.user.id,fileName,branchMappings:mappings,parsed,versions:Object.fromEntries(rows.map(r=>[r.rowNumber,r.existing?{id:r.existing.id,version:r.existing.version}:null]))},key(),{expiresIn:'20m',algorithm:'HS256',audience:'employee-import'});
-  res.json({branches:fallback||[],branchMappings:mappings,branchGroups:parsed.branchGroups,sheetName:parsed.sheetName,sheetNames:parsed.sheetNames,skippedSheets:parsed.skippedSheets,sourceRowCount:parsed.rows.length,rows,previewToken});
+  const previewToken=jwt.sign({purpose:'employee-import',userId:req.user.id,fileName,branchMappings:mappings,duplicateChoices,parsed,versions:Object.fromEntries(rows.map(r=>[r.rowNumber,r.existing?{id:r.existing.id,version:r.existing.version}:null]))},key(),{expiresIn:'20m',algorithm:'HS256',audience:'employee-import'});
+  res.json({branches:fallback||[],branchMappings:mappings,duplicateChoices,branchGroups:parsed.branchGroups,sheetName:parsed.sheetName,sheetNames:parsed.sheetNames,skippedSheets:parsed.skippedSheets,sourceRowCount:parsed.rows.length,rows,previewToken});
  }catch(error){res.status(error.status||400).json({error:error.message||'Employee workbook could not be read.'});}
 };
 export const commitEmployees=atomic(async(req,res,next)=>{
@@ -69,10 +80,10 @@ export const commitEmployees=atomic(async(req,res,next)=>{
   if(!Array.isArray(selected)||!selected.length||selected.length>2000||selected.some(n=>!Number.isInteger(n))||new Set(selected).size!==selected.length)fail('Select valid employee rows.');
   req.auditFileName=claim.fileName;
   const mappings=resolveMappings(claim.parsed,claim.branchMappings);
-  const rows=await inspect(claim.parsed.rows,mappings),chosen=rows.filter(r=>selected.includes(r.rowNumber));
+  const rows=await inspect(claim.parsed.rows,mappings,claim.duplicateChoices||{}),chosen=rows.filter(r=>selected.includes(r.rowNumber));
   if(chosen.length!==selected.length)fail('Unknown employee row. Read the file again.');
-  for(const row of chosen){if(row.issues.length)fail(`Row ${row.rowNumber}: ${row.issues.join(' ')}`,409);const version=claim.versions[row.rowNumber];if((row.existing?.id || null)!==(version?.id || null)||(row.existing?.version || null)!==(version?.version || null))fail('Employee records changed after preview. Read the file again before importing.',409);}
-  if(auditContext.getStore())auditContext.getStore().records=chosen.map(row=>({rowNumber:row.rowNumber,sources:row.sources,name:row.name,employeeId:row.employeeId,branchesAdded:row.missingBranches}));
+  for(const row of chosen){if(row.action==='SKIP')fail('Only the chosen entry for a duplicate employee ID can be imported.',409);if(row.issues.length)fail(`Row ${row.rowNumber}: ${row.issues.join(' ')}`,409);const version=claim.versions[row.rowNumber];if((row.existing?.id || null)!==(version?.id || null)||(row.existing?.version || null)!==(version?.version || null))fail('Employee records changed after preview. Read the file again before importing.',409);}
+  if(auditContext.getStore())auditContext.getStore().records=chosen.map(row=>({rowNumber:row.rowNumber,sources:row.sources,resolvedDuplicate:row.conflict,name:row.name,employeeId:row.employeeId,branchesAdded:row.missingBranches}));
   const newRows=chosen.filter(row=>!row.existing),branchRows=chosen.filter(row=>row.existing);
   let created=0,updated=0;
   if(newRows.length){const result=await prisma.instructor.createMany({data:newRows.map(row=>({name:row.name,employeeId:row.employeeId,branches:row.branches.join(',')}))});created=result.count;}
