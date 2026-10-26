@@ -5,14 +5,14 @@ const fail = message => { throw Object.assign(new Error(message), { status: 409 
 export function earningData(course, assignment) {
   const hours = Number(assignment.hoursTaught), rate = Number(assignment.hourlyRate);
   if (assignment.hoursTaught == null || !Number.isFinite(hours) || hours < 0 || !Number.isFinite(rate) || rate < 0) fail('Confirm the teaching hours and rates for every instructor before recording payroll.');
-  return { courseId: course.id, instructorId: assignment.instructorId, cycleName: course.name, branch: course.branch,
+  return { isPrivate:Boolean(course.parentCourse?.isPrivate),courseId: course.id, instructorId: assignment.instructorId, cycleName: course.name, branch: course.branch,
     instructorName: assignment.instructor?.name || 'Unknown instructor', employeeId: assignment.instructor?.employeeId || null,
     hours, rate, amountMinor: moneyMinor(Math.round(hours * rate * 100) / 100, 'Instructor earnings') };
 }
 
 // Completion records earnings, never a payment date or a payment month.
 export async function savePayrollRecord(courseId) {
-  const course = await prisma.cycle.findUnique({ where: { id: courseId }, include: { instructors: { include: { instructor: true } } } });
+  const course = await prisma.cycle.findUnique({ where: { id: courseId }, include: { parentCourse:true,instructors: { include: { instructor: true } } } });
   const existing = await prisma.payrollEarning.findMany({ where: { courseId } });
   const proposed = course.instructors.map(a => earningData(course, a));
   for (const earning of existing.filter(e => e.batchId)) {

@@ -26,10 +26,12 @@ export function courseView(course, user) {
   const visible = isManager(user) ? all : all.filter(entry => !entry.student?.deletedAt && !entry.deletedAt && !entry.financialArchivedAt);
   const counted = all.filter(entry => !entry.financialArchivedAt);
   const totalExpectedRevenue = counted.reduce((sum, row) => sum + row.effectiveFee, 0);
-  const totalCollectedRevenue = counted.reduce((sum, row) => sum + row.amountPaid, 0);
-  const totalBookRevenue = counted.reduce((sum, row) => sum + (row.books.status === 'PAID' ? row.books.amount : 0), 0);
+  const retainedTuition=(course.retainedIncome||[]).reduce((sum,row)=>sum+Number(row.tuitionMinor)/100,0);
+  const retainedBooks=(course.retainedIncome||[]).reduce((sum,row)=>sum+Number(row.bookMinor)/100,0);
+  const totalCollectedRevenue = retainedTuition+counted.reduce((sum, row) => sum + row.amountPaid, 0);
+  const totalBookRevenue = retainedBooks+counted.reduce((sum, row) => sum + (row.books.status === 'PAID' ? row.books.amount : 0), 0);
   const { isPaid: legacyPaid, payrollMonth: legacyMonth, ...currentCourse } = course;
-  return hidePayroll({ ...currentCourse, enrollments: visible, totalEnrolled: visible.filter(entry => !entry.deletedAt && !entry.student?.deletedAt && !entry.financialArchivedAt).length, totalExpectedRevenue, totalCollectedRevenue, totalBookRevenue, totalIncome: totalCollectedRevenue + totalBookRevenue,
+  return hidePayroll({ ...Object.fromEntries(Object.entries(currentCourse).filter(([key])=>key!=='retainedIncome')), enrollments: visible,isPrivate:Boolean(course.parentCourse?.isPrivate),privateSeatOccupied:Boolean(course.parentCourse?.isPrivate&&all.length),effectiveBookPrice:course.parentCourse?.isPrivate?course.bookPrice||0:course.parentCourse?.bookPrice||0, totalEnrolled: visible.filter(entry => !entry.deletedAt && !entry.student?.deletedAt && !entry.financialArchivedAt).length, totalExpectedRevenue, retainedTuition, retainedBooks, totalCollectedRevenue, totalBookRevenue, totalIncome: totalCollectedRevenue + totalBookRevenue,
     // Sum each student's debt separately; historical credits never offset another student's debt.
     totalRemainingBalance: counted.reduce((sum, row) => sum + row.remainingBalance, 0) }, user);
 }

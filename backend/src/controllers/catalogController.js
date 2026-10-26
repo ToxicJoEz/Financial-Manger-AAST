@@ -17,6 +17,7 @@ const summary = (course, user) => {
     name: course.name,
     code: course.code,
     bookPrice: course.bookPrice,
+    isPrivate:course.isPrivate,
     archivedAt: course.archivedAt,
     nextCycleNumber: highest < 2147483647 ? highest + 1 : null,
     cycleCount: visible.length,
@@ -84,6 +85,7 @@ export const getCourse = async (req, res, next) => {
 };
 export const createCourse = atomic(async (req, res, next) => {
   try {
+    if(req.body.isPrivate!==undefined&&typeof req.body.isPrivate!=='boolean')return res.status(400).json({error:'Private course must be a toggle value.'});
     const name = clean(req.body.name, 'Course name'),
       code = clean(req.body.code, 'Course code');
     if (await prisma.course.findUnique({
@@ -95,7 +97,8 @@ export const createCourse = atomic(async (req, res, next) => {
     });
     const course = await prisma.course.create({
       data: {
-        bookPrice: Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
+        isPrivate:req.body.isPrivate===true,
+        bookPrice:req.body.isPrivate===true?0:Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price'))/100,
         name,
         code
       }
@@ -116,6 +119,9 @@ export const editCourse = atomic(async (req, res, next) => {
     if (!current) return res.status(404).json({
       error: 'Course not found.'
     });
+    if(req.body.isPrivate!==undefined&&typeof req.body.isPrivate!=='boolean')return res.status(400).json({error:'Private course must be a toggle value.'});
+    const isPrivate=req.body.isPrivate??current.isPrivate;
+    if(isPrivate!==current.isPrivate&&await prisma.cycle.count({where:{parentCourseId:current.id}}))return res.status(409).json({error:'Course type cannot change once cycles exist. Create a separate umbrella for the other type.'});
     const name = clean(req.body.name ?? current.name, 'Course name'),
       code = clean(req.body.code ?? current.code, 'Course code');
     const duplicate = await prisma.course.findUnique({
@@ -131,7 +137,8 @@ export const editCourse = atomic(async (req, res, next) => {
         id: current.id
       },
       data: {
-        bookPrice: Number(moneyMinor(req.body.bookPrice ?? current.bookPrice, 'Book price')) / 100,
+        isPrivate,
+        bookPrice:isPrivate?0:Number(moneyMinor(req.body.bookPrice??current.bookPrice,'Book price'))/100,
         name,
         code
       }
@@ -146,7 +153,7 @@ export const editCourse = atomic(async (req, res, next) => {
         cycleNumber: true
       }
     });
-    for (const cycle of cycles) await prisma.cycle.update({
+    if(!course.isPrivate)for (const cycle of cycles) await prisma.cycle.update({
       where: {
         id: cycle.id
       },

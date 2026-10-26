@@ -1,3 +1,4 @@
+import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { activeBookInclude } from '../utils/bookPayments.js';
 import { enrollmentView, hidePayroll } from '../utils/courseView.js';
 import { queueStudentRequest } from '../utils/studentRequests.js';
@@ -15,9 +16,10 @@ export const getStudents = async (req, res, next) => {
     if (req.query.pickerCourseId !== undefined) {
       const courseId = req.query.pickerCourseId;
       if (typeof courseId !== 'string' || !courseId || (req.query.search !== undefined && typeof req.query.search !== 'string') || (req.query.cursor !== undefined && typeof req.query.cursor !== 'string')) return res.status(400).json({error:'Invalid student search.'});
-      const cycle = await prisma.cycle.findUnique({where:{id:courseId},select:{archivedAt:true,parentCourse:{select:{archivedAt:true}}}});
+      const cycle = await prisma.cycle.findUnique({where:{id:courseId},select:{archivedAt:true,parentCourse:{select:{archivedAt:true,isPrivate:true}},_count:{select:{enrollments:true}}}});
       if (!cycle || (!isManager(req.user) && (cycle.archivedAt || cycle.parentCourse.archivedAt))) return res.status(404).json({error:'Cycle not found.'});
-      const q = (req.query.search || '').trim().slice(0,160);
+      if(cycle.parentCourse.isPrivate&&cycle._count.enrollments)return res.json({students:[],nextCursor:null,seatFull:true});
+        const q = (req.query.search || '').trim().slice(0,160);
       const rows = await prisma.student.findMany({
         where:{deletedAt:null,enrollments:{none:{courseId}},...(q?{OR:['name','englishName','registrationNumber','mobile'].map(field=>({[field]:{contains:q,mode:'insensitive'}}))}:{})},
         select:{id:true,name:true,englishName:true,registrationNumber:true,mobile:true},
@@ -60,17 +62,13 @@ export const createStudentHandler = async (req, res, next) => {
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Student full name is required.' });
     }
-    if (!registrationNumber || !registrationNumber.trim()) {
-      return res.status(400).json({ error: 'Registration number is required.' });
-    }
 
-    const cleanReg = registrationNumber.trim();
+    if(registrationNumber!=null&&typeof registrationNumber!=='string')return res.status(400).json({error:'Registration number must be text or empty.'});
+    const cleanReg = typeof registrationNumber==='string'?registrationNumber.trim()||null:null;
     const cleanName = name.trim();
     const cleanMobile = mobile ? mobile.trim() : null;
 
-    const existing = await prisma.student.findUnique({
-      where: { registrationNumber: cleanReg }
-    });
+    const existing = cleanReg ? await prisma.student.findUnique({where:{registrationNumber:cleanReg}}) : null;
 
     if (existing) {
       return res.status(400).json({ error: existing.deletedAt && !isManager(req.user) ? 'This registration number is unavailable. Contact an administrator.' : `A student with registration number '${cleanReg}' already exists (${existing.name}).` });
@@ -113,11 +111,12 @@ export const updateStudent = atomic(async (req, res, next) => {
       return res.status(404).json({ error: 'Student not found.' });
     }
 
-    const cleanReg = registrationNumber ? registrationNumber.trim() : student.registrationNumber;
+    if(registrationNumber!=null&&typeof registrationNumber!=='string')return res.status(400).json({error:'Registration number must be text or empty.'});
+    const cleanReg = registrationNumber===undefined?student.registrationNumber:typeof registrationNumber==='string'?registrationNumber.trim()||null:null;
     const cleanName = name ? name.trim() : student.name;
     const cleanMobile = mobile !== undefined ? (mobile ? mobile.trim() : null) : student.mobile;
 
-    if (cleanReg !== student.registrationNumber) {
+    if (cleanReg && cleanReg !== student.registrationNumber) {
       const duplicate = await prisma.student.findUnique({ where: { registrationNumber: cleanReg } });
       if (duplicate && duplicate.id !== id) {
         return res.status(400).json({ error: 'This registration number is unavailable.' });
@@ -190,3 +189,20 @@ export const getStudentDetails = async (req, res, next) => {
     res.json({student,enrollments:enrollments.map(enrollment=>hidePayroll(enrollmentView(enrollment,enrollment.course),req.user))});
   } catch(error) {next(error);}
 };
+
+export const archiveStudent = atomic(async(req,res,next)=>{
+ try{
+  const student=await prisma.student.findUnique({where:{id:req.params.id}});if(!student)return res.status(404).json({error:'Student not found.'});
+  const archived=req.body.archived!==false;
+  const result=await prisma.student.update({where:{id:student.id},data:{deletedAt:archived?new Date():null,deletedBy:archived?req.user.username:null}});
+  await logAction(archived?'ARCHIVE_STUDENT':'RESTORE_STUDENT',`${archived?'Archived':'Restored'} ${student.name}; financial totals unchanged.`,req.user.username);res.json(result);
+ }catch(error){next(error);}
+});
+export const permanentlyDeleteStudent = atomic(async(req,res,next)=>{
+ try{
+  if(req.body.confirm!==true)return res.status(400).json({error:'Confirm permanent deletion.'});
+  const student=await prisma.student.findUnique({where:{id:req.params.id},include:{enrollments:{include:{course:true,student:true}}}});if(!student)return res.status(404).json({error:'Student not found.'});
+  for(const enrollment of student.enrollments)await permanentlyRemoveEnrollment(enrollment,req.user,{mode:'KEEP',reason:'Student permanently deleted; previously collected income retained. Use enrollment removal first to record refunds or corrections.'});
+  await prisma.student.delete({where:{id:student.id}});await logAction('PERMANENT_DELETE_STUDENT',`Permanently deleted ${student.name}; income and audit/payment history retained.`,req.user.username);res.json({message:'Student permanently deleted. Financial history retained.'});
+ }catch(error){next(error);}
+});

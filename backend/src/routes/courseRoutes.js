@@ -1,3 +1,4 @@
+import {getRemovedEnrollments,adjustRemovedEnrollment} from '../controllers/removedEnrollmentController.js';
 import { deletionPreview, permanentlyDelete } from '../controllers/permanentDeletionController.js';
 import { getPayments, recordPayment, reversePayment } from '../controllers/paymentController.js';
 import { updateBookStatus } from '../controllers/bookController.js';
@@ -24,6 +25,8 @@ import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 router.use(protect);
+router.get('/:id/removed-enrollments',modOrAbove,getRemovedEnrollments);
+router.post('/:id/removed-enrollments/:removalId/adjust',modOrAbove,adjustRemovedEnrollment);
 router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
 router.delete('/:id/permanent', modOrAbove, permanentlyDelete('cycle'));
 
@@ -45,7 +48,7 @@ router.post('/:id/enrollments/:enrollmentId/books', updateBookStatus);
 router.get('/:id/enrollments', getCourseEnrollments);
 router.post('/:id/enrollments', enrollStudent);
 router.put('/:id/enrollments/:enrollmentId', updateEnrollment);
-router.delete('/:id/enrollments/:enrollmentId', removeEnrollment);
+router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
 
 router.get('/:id/enrollments/:enrollmentId/payments', getPayments);
 router.post('/:id/enrollments/:enrollmentId/payments', modOrAbove, recordPayment);

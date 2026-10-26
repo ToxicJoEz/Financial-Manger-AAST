@@ -1,6 +1,6 @@
 import { getIncome, getYearlyOverview } from '../controllers/incomeController.js';
 import express from 'express';
-import { getFinances, initiatePayment, completePayment, initiateCoursePayment, completeCoursePayments, initiateSalarySelection, completeDailyBatch } from '../controllers/financeController.js';
+import { returnProcessingToUnpaid, getFinances, initiatePayment, completePayment, initiateCoursePayment, completeCoursePayments, initiateSalarySelection, completeDailyBatch } from '../controllers/financeController.js';
 import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.get('/income', getIncome);
 router.get('/overview', getYearlyOverview);
 
 router.get('/', getFinances);
+router.post('/return-to-unpaid',returnProcessingToUnpaid);
 router.post('/batches', initiatePayment);
 router.post('/selected-payments', initiateSalarySelection);
 router.post('/course-payments', initiateCoursePayment);

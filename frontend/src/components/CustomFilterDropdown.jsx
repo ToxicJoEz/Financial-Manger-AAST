@@ -1,8 +1,9 @@
+import EmployeePicker from './EmployeePicker';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import '../styles/_customSelect.scss';
-export default function CustomFilterDropdown({ value, onChange, options, placeholder = 'Select an option', allowClear = true, id: providedId, required = false, disabled = false, className = '' }) {
+function Dropdown({ value, onChange, options, placeholder = 'Select an option', allowClear = true, id: providedId, required = false, disabled = false, className = '', searchable = false }) {
   const generatedId = useId(), id = providedId || generatedId;
   const trigger = useRef(null), menu = useRef(null), search = useRef({ text: '', time: 0 });
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [position, setPosition] = useState(null);
@@ -59,3 +60,5 @@ export default function CustomFilterDropdown({ value, onChange, options, placeho
     {open && createPortal(<div ref={menu} id={`${id}-list`} role="listbox" aria-label={placeholder} className="themed-select-menu" style={{ position: 'fixed', visibility: position ? 'visible' : 'hidden', ...position }} onMouseDown={event => event.preventDefault()}>{items.map((item, index) => <div id={`${id}-option-${index}`} key={item.value} role="option" data-index={index} aria-selected={String(item.value) === String(value ?? '')} aria-disabled={item.disabled || undefined} className={`themed-select-option ${index === active ? 'is-active' : ''}`} onPointerMove={() => setActive(index)} onClick={() => choose(index)}><span>{item.label}</span>{String(item.value) === String(value ?? '') && <Check size={15} />}</div>)}</div>, target)}
   </div>;
 }
+
+export default function CustomFilterDropdown(props){return props.searchable?<EmployeePicker {...props}/>:<Dropdown {...props}/>;}

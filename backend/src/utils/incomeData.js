@@ -13,7 +13,7 @@ export function incomeReport(cycles) {
     exempt = 0;
   const branches = new Map();
   const rows = cycles.map(cycle => {
-    let collected = 0n, books = 0n;
+    let collected = (cycle.retainedIncome||[]).reduce((sum,r)=>sum+r.tuitionMinor,0n), books = (cycle.retainedIncome||[]).reduce((sum,r)=>sum+r.bookMinor,0n);
     const counts = {
       full: 0,
       discounted: 0,
@@ -47,6 +47,7 @@ export function incomeReport(cycles) {
       id: cycle.id,
       parentCourseId: cycle.parentCourseId,
       name: cycle.name,
+      isPrivate:Boolean(cycle.parentCourse.isPrivate),
       courseCode: cycle.parentCourse.code,
       branch: cycle.branch,
       startDate: cycle.startDate,

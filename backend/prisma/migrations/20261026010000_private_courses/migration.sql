@@ -1,0 +1,4 @@
+ALTER TABLE "Course" ADD COLUMN "isPrivate" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Cycle" ADD COLUMN "bookPrice" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "Cycle" ADD CONSTRAINT "private_book_price_nonnegative" CHECK ("bookPrice">=0 AND "bookPrice"<='90071992547409.91');
+ALTER TABLE "PayrollEarning" ADD COLUMN "isPrivate" BOOLEAN NOT NULL DEFAULT false;

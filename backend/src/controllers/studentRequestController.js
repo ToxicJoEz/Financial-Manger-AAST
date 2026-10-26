@@ -10,7 +10,8 @@ export const getStudentRequest = async (req, res, next) => {
     if (!request) return res.status(404).json({ error: 'Student request no longer exists.' });
     if (request.status !== 'PENDING') return res.status(409).json({ error: 'This request has already been processed. Refresh your notifications.' });
     const submittedBy = await prisma.user.findUnique({ where: { id: request.submittedById }, select: { username: true, firstName: true, lastName: true } });
-    res.json({ ...request, payload: JSON.parse(request.payload), snapshot: JSON.parse(request.snapshot), submittedBy, kind: 'STUDENT' });
+    const snapshot=JSON.parse(request.snapshot);if(snapshot.course){const cycle=await prisma.cycle.findUnique({where:{id:request.courseId},select:{parentCourse:{select:{isPrivate:true}}}});snapshot.course.isPrivate=Boolean(cycle?.parentCourse.isPrivate);}
+    res.json({ ...request, payload: JSON.parse(request.payload), snapshot, submittedBy, kind: 'STUDENT' });
   } catch (error) { next(error); }
 };
 
@@ -29,7 +30,7 @@ export const decideStudentRequest = atomic(async (req, res, next) => {
     const claimed = await prisma.studentRequest.updateMany({ where: { id: request.id, status: 'PENDING' }, data: { status: approve ? 'APPROVED' : 'REJECTED', resolvedById: req.user.id, pendingKey: null } });
     if (claimed.count !== 1) return res.status(409).json({ error: 'Another reviewer already processed this request.' });
     if (approve) {
-      const handlers = { CREATE_STUDENT: createStudentHandler, DELETE_STUDENT: deleteStudentHandler, ENROLL_STUDENT: enrollStudentHandler, REMOVE_ENROLLMENT: removeEnrollmentHandler };
+      const handlers = { CREATE_STUDENT: createStudentHandler, DELETE_STUDENT: deleteStudentHandler, CREATE_AND_ENROLL: enrollStudentHandler, ENROLL_STUDENT: enrollStudentHandler, REMOVE_ENROLLMENT: removeEnrollmentHandler };
       const handler = handlers[request.action];
       if (!handler) throw new Error('Unsupported student request action.');
       let result, status = 200;

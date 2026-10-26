@@ -24,5 +24,5 @@ export function Status({ complete, children }) {
 
 export const money = (value = 0) => new Intl.NumberFormat('en-EG', { maximumFractionDigits: 2 }).format(value);
 export const localMonth = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-export const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(n => n[0]).join('').toUpperCase();
+export const initials = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(n => n[0]).join(' ').toUpperCase();
 

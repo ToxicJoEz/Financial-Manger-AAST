@@ -1,3 +1,4 @@
+import {salaryReportTitle} from './salaryReportTitle';
 import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, HeadingLevel, VerticalAlign, TableLayoutType, BorderStyle } from 'docx';
 
 // Native, editable Word table using the same paid salary rows as the PDF.
@@ -18,7 +19,7 @@ export async function createSalaryWordReport(instructors, month) {
     ...instructors.filter(row => row.totalPaid > 0).map((row, index) => new TableRow({ cantSplit: true, children: [index + 1, row.name, row.employeeId || '-', row.totalPaid.toLocaleString() + ' جنيهاً'].map((text, i) => cell(text, widths[i], false, index % 2 === 1)) }))];
   const document = new Document({ styles: { default: { document: { run: { font: 'Arial', size: 21 } } } }, sections: [{
     properties: { page: { size: { width: pageWidth, height: 15840 }, margin: { top: margin, bottom: margin, left: margin, right: margin } } },
-    children: [new Paragraph({ heading: HeadingLevel.TITLE, bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: `تقرير المدفوعات لشهر ${month}`, bold: true, color: '000000', size: 32, font: 'Arial', rightToLeft: true })] }),
+    children: [new Paragraph({ heading: HeadingLevel.TITLE, bidirectional: true, alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [new TextRun({ text: salaryReportTitle(month), bold: true, color: '000000', size: 32, font: 'Arial', rightToLeft: true })] }),
       new Table({ visuallyRightToLeft: true, alignment: AlignmentType.CENTER, layout: TableLayoutType.FIXED, width: { size: contentWidth, type: WidthType.DXA }, columnWidths: widths, borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border }, rows })]
   }] });
   return Packer.toBlob(document);

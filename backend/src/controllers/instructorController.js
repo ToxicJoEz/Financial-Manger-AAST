@@ -7,6 +7,7 @@ export const getInstructors = async (req, res) => {
   try {
     const isJunior = req.user.role === 'user';
     const instructors = await prisma.instructor.findMany({
+      where:{archivedAt:null},
       include: {
         courseAssignments: {
           include: { course: true }
@@ -124,16 +125,9 @@ export const deleteInstructor = atomic(async (req, res) => {
       return res.status(404).json({ error: 'Employee not found' });
     }
 
-    // Protect historical payroll: block deletion if assigned to any completed or paid course
-    if (await prisma.payrollEarning.count({ where: { instructorId: id } })) return res.status(409).json({ error: 'This instructor has recorded earnings. Their payroll history must be preserved.' });
-    const completedAssignments = instructor.courseAssignments.filter(ca => ca.course.isFinished);
-    if (completedAssignments.length > 0) {
-      const courseNames = [...new Set(completedAssignments.map(ca => ca.course.name))].join(', ');
-      return res.status(400).json({
-        error: `Cannot delete instructor '${instructor.name}'. They have completed payroll history on course(s): ${courseNames}. Deleting them would destroy historical payroll and accounting records.`
-      });
-    }
-
+    // Paid and processing salary must retain their employee identity. Unpaid salary may be removed explicitly.
+    if(await prisma.payrollEarning.count({where:{instructorId:id,batch:{status:{in:['PAID','PROCESSING']}}}}))return res.status(409).json({error:'This employee has paid or processing payroll history. Archive them instead, or return processing items to unpaid first.'});
+    await prisma.payrollEarning.deleteMany({where:{instructorId:id,batchId:null}});
     await prisma.instructor.delete({ where: { id } });
     await logAction('DELETE_INSTRUCTOR', `Deleted instructor ${instructor.name}`, req.user.username);
     res.json({ message: 'Employee deleted successfully' });
@@ -150,14 +144,14 @@ export const getEmployeeDirectory = async (req,res) => {
   const search=String(req.query.search||'').trim().slice(0,160);
   const branches=req.query.branches ? employeeBranches(req.query.branches) : [];
   const status=String(req.query.status||'all'),sort=String(req.query.sort||'name');
-  if(!['all','active','inactive'].includes(status)||!['name','employeeId','active'].includes(sort))return res.status(400).json({error:'Invalid directory filter.'});
+  if(!['all','active','inactive','archived'].includes(status)||!['name','employeeId','active'].includes(sort))return res.status(400).json({error:'Invalid directory filter.'});
   const directory=Prisma.sql`WITH directory AS (
-   SELECT i.id,i.name,i."employeeId",i.mobile,i.branches,
+   SELECT i.id,i.name,i."employeeId",i.mobile,i.branches,i."archivedAt",
     COUNT(c.id) FILTER (WHERE NOT c."isFinished" AND c."archivedAt" IS NULL AND p."archivedAt" IS NULL)::int AS "activeCount",
     COUNT(c.id) FILTER (WHERE c."isFinished")::int AS "completedCount"
    FROM "Instructor" i LEFT JOIN "CourseInstructor" a ON a."instructorId"=i.id
    LEFT JOIN "Cycle" c ON c.id=a."courseId" LEFT JOIN "Course" p ON p.id=c."parentCourseId"
-   WHERE (${search}='' OR strpos(lower(i.name),lower(${search}))>0 OR strpos(lower(COALESCE(i."employeeId",'')),lower(${search}))>0 OR strpos(COALESCE(i.mobile,''),${search})>0)
+   WHERE (${status==='archived'} = (i."archivedAt" IS NOT NULL)) AND (${search}='' OR strpos(lower(i.name),lower(${search}))>0 OR strpos(lower(COALESCE(i."employeeId",'')),lower(${search}))>0 OR strpos(COALESCE(i.mobile,''),${search})>0)
    AND (${branches.length===0} OR string_to_array(i.branches,',') && string_to_array(${branches.join(',')},','))
    GROUP BY i.id
   )`;
@@ -172,10 +166,15 @@ export const getEmployeeDirectory = async (req,res) => {
 };
 export const getEmployeeDetails = async (req,res) => {
  try {
-  const employee=await prisma.instructor.findUnique({where:{id:req.params.id},select:{id:true,name:true,employeeId:true,mobile:true,branches:true,
-   courseAssignments:{orderBy:{course:{startDate:'desc'}},select:{id:true,hoursTaught:true,course:{select:{id:true,name:true,branch:true,startDate:true,endDate:true,isFinished:true,archivedAt:true,venue:true,classStartTime:true,classEndTime:true,parentCourse:{select:{id:true,name:true,code:true,archivedAt:true}}}}}}
+  const employee=await prisma.instructor.findUnique({where:{id:req.params.id},select:{id:true,name:true,employeeId:true,mobile:true,branches:true,archivedAt:true,
+   courseAssignments:{orderBy:{course:{startDate:'desc'}},select:{id:true,hoursTaught:true,course:{select:{id:true,name:true,branch:true,startDate:true,endDate:true,isFinished:true,archivedAt:true,venue:true,classStartTime:true,classEndTime:true,parentCourse:{select:{id:true,name:true,code:true,archivedAt:true,isPrivate:true}}}}}}
   }});
   if(!employee)return res.status(404).json({error:'Employee not found.'});
-  res.json(employee);
+  const payments=await prisma.payrollEarning.findMany({where:{instructorId:employee.id,batch:{status:'PAID'}},include:{batch:true},orderBy:{batch:{actualPaymentDate:'desc'}}});
+    res.json({...employee,paidPayments:payments.map(({amountMinor,...row})=>({...row,amount:Number(amountMinor)/100}))});
  }catch{res.status(500).json({error:'Employee details could not be loaded.'});}
 };
+
+export const archiveEmployee=atomic(async(req,res,next)=>{
+ try{const row=await prisma.instructor.update({where:{id:req.params.id},data:{archivedAt:req.body.archived===false?null:new Date(),archivedBy:req.body.archived===false?null:req.user.username}});await logAction(req.body.archived===false?'RESTORE_EMPLOYEE':'ARCHIVE_EMPLOYEE',row.name,req.user.username);res.json(row);}catch(error){next(error);}
+});

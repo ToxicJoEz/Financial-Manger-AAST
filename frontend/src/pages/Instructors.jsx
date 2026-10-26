@@ -1,3 +1,4 @@
+import ArchiveControls from '../components/ArchiveControls';
 import EmployeeDetailsDialog from '../components/EmployeeDetailsDialog';
 import {MotionRegion} from '../components/WorkspaceMotion';
 import '../styles/_employeeDirectory.scss';
@@ -121,7 +122,7 @@ const Instructors = () => {
   };
   const filtered=instructors;
   const branchBadges=inst=><div className="directory-branches">{(inst.branches||'').split(',').filter(Boolean).map(b=><span className="branch-label" key={b}><i style={{background:getBranchColor(b.trim())}}/>{b.trim()}</span>)}</div>;
-  const actions=inst=><div className="directory-actions"><button className="icon-button" aria-label={'Edit '+inst.name} onClick={()=>setEditingInst({...inst,branchesArray:inst.branches.split(',').map(b=>b.trim())})}><Edit2 size={15}/></button><button className="icon-button danger" aria-label={'Delete '+inst.name} onClick={()=>setDeleteId(inst.id)}><Trash2 size={15}/></button></div>;
+  const actions=inst=><div className="directory-actions"><button className="icon-button" aria-label={'Edit '+inst.name} onClick={()=>setEditingInst({...inst,branchesArray:inst.branches.split(',').map(b=>b.trim())})}><Edit2 size={15}/></button><ArchiveControls entity="employees" record={inst} onSaved={fetchInstructors}/></div>;
   if(user?.role==='user')return <Navigate to="/courses" replace/>;
   return <div className="instructor-directory">
       <PageHeading eyebrow="EMPLOYEE DIRECTORY" title="Employees" description="Your academy team, across roles and branches.">
@@ -131,7 +132,7 @@ const Instructors = () => {
       <AnimatePresence>{profileId&&<EmployeeDetailsDialog key={profileId} employeeId={profileId} onClose={()=>setProfileId(null)}/>}</AnimatePresence>
       <div className="employee-directory-controls">
        <div className="directory-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Search employees" placeholder="Search name, employee ID, or mobile…" value={searchTerm} onChange={e=>{setSearchTerm(e.target.value);setPage(1);}}/></div><div className="employee-directory-select"><CustomFilterDropdown value={sort} onChange={v=>{setSort(v);setPage(1);}} allowClear={false} placeholder="Sort employees" options={[{value:'name',label:'Name'},{value:'employeeId',label:'Employee ID'},{value:'active',label:'Most active cycles'}]}/></div></div>
-       <div className="employee-status-filters" aria-label="Filter employees by availability">{[['all','All employees'],['inactive','Free employees'],['active','With ongoing courses']].map(([value,label])=><button type="button" key={value} aria-pressed={status===value} className={status===value?'active':''} onClick={()=>{setStatus(value);setPage(1);}}><span className={'availability-dot availability-'+value}/>{label}</button>)}<span className="employee-status-help">Free = no ongoing cycles</span></div>
+       <div className="employee-status-filters" aria-label="Filter employees by availability">{[['all','Active employees'],['inactive','Free employees'],['active','With ongoing courses'],['archived','Archived employees']].map(([value,label])=><button type="button" key={value} aria-pressed={status===value} className={status===value?'active':''} onClick={()=>{setStatus(value);setPage(1);}}><span className={'availability-dot availability-'+value}/>{label}</button>)}<span className="employee-status-help">Free = no ongoing cycles</span></div>
        <div className="employee-branch-filters" aria-label="Filter employees by branch"><span>Branches</span>{BRANCHES.map(b=><button key={b} aria-pressed={branchFilter.includes(b)} className={branchFilter.includes(b)?'active':''} style={{'--branch-color':getBranchColor(b)}} onClick={()=>{setBranchFilter(old=>old.includes(b)?old.filter(x=>x!==b):[...old,b]);setPage(1);}}><i/>{b}</button>)}</div>
        <div className="employee-directory-meta"><span aria-live="polite">{loading?'Updating directory…':`${total} employees`}</span>{(searchTerm||branchFilter.length>0||status!=='all'||sort!=='name')&&<button className="text-button" onClick={clearFilters}>Clear filters</button>}<div className="view-switch" aria-label="Employee view"><button aria-label="Card view" aria-pressed={view==='grid'} className={view==='grid'?'active':''} onClick={()=>changeView('grid')}><LayoutGrid size={17}/></button><button aria-label="List view" aria-pressed={view==='list'} className={view==='list'?'active':''} onClick={()=>changeView('list')}><List size={17}/></button></div></div>
       </div>

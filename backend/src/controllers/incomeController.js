@@ -11,9 +11,10 @@ const incomeCycleSelect = {
           courseFee: true,
           parentCourse: {
             select: {
-              code: true
+              code: true,isPrivate:true
             }
           },
+          retainedIncome: {select:{tuitionMinor:true,bookMinor:true}},
           enrollments: {
             select: {
               bookPayments: { where: { reversedAt: null, status: 'PAID' }, select: { amountMinor: true } },

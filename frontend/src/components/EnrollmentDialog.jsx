@@ -1,37 +1,41 @@
+import PrivateBadge from './PrivateBadge';
 import { toast } from 'react-hot-toast';
 import PaymentFields from './PaymentFields';
 import { useState } from 'react';
 import axios from 'axios';
 import Dialog from './Dialog';
+import StudentProfileFields from './StudentProfileFields';
 import EnrollmentStudentPicker from './EnrollmentStudentPicker';
 
 export default function EnrollmentDialog({ course, manager, onClose, onSaved }) {
+  const [creating,setCreating]=useState(false),[newStudent,setNewStudent]=useState({name:'',registrationNumber:'',mobile:''});
   const [metadata,setMetadata] = useState({});
-  const [studentId, setStudentId] = useState(''), [paid, setPaid] = useState(false), [exempt, setExempt] = useState(false);
-  const [amount, setAmount] = useState(String(course.courseFee || 0)), [fee, setFee] = useState(String(course.courseFee || 0));
+  const [studentId, setStudentId] = useState('');
+  const [tuitionType,setTuitionType]=useState(Number(course.courseFee||0)>0?'FULL':'EXEMPT');
+  const [discountedAmount,setDiscountedAmount]=useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const effectiveFee = exempt ? 0 : manager && fee !== '' ? Number(fee) : Number(course.courseFee || 0);
+  const effectiveFee=tuitionType==='EXEMPT'?0:tuitionType==='DISCOUNTED'?Number(discountedAmount):Number(course.courseFee||0);
   const submit = async e => {
     e.preventDefault(); setError('');
-    if (!studentId) return setError('Choose a student.');
-    if (paid && !exempt && Number(amount) > effectiveFee) return setError(`The tuition fee is ${effectiveFee.toLocaleString()} EGP. You cannot record ${Number(amount).toLocaleString()} EGP paid.`);
+    if (!studentId&&!creating) return setError('Choose a student.');
+    if(creating&&!newStudent.name.trim())return setError('Enter the student name.');
+    if(tuitionType==='DISCOUNTED'&&(!discountedAmount||!Number.isFinite(effectiveFee)||effectiveFee<=0||effectiveFee>=Number(course.courseFee)))return setError('Enter a discounted amount above zero and below the standard tuition. Choose Exempt for a free student.');
     setBusy(true);
-    try { const { data } = await axios.post(`/cycles/${course.id}/enrollments`, { studentId, ...metadata, recordPayment: paid && !exempt, exempt: paid && exempt, amountPaid: paid && !exempt ? amount : undefined, customFee: manager && fee !== '' && Number(fee) !== Number(course.courseFee || 0) && !exempt ? fee : undefined }); if (data.pending) toast.success(data.message); window.dispatchEvent(new Event('notifications-updated')); onSaved(); onClose(); }
+    try { const { data } = await axios.post(`/cycles/${course.id}/enrollments`, { studentId:creating?undefined:studentId,newStudent:creating?newStudent:undefined, ...metadata, tuitionType,recordPayment:tuitionType!=='EXEMPT',exempt:tuitionType==='EXEMPT',amountPaid:effectiveFee,customFee:tuitionType==='FULL'?undefined:effectiveFee }); if (data.pending) toast.success(data.message); window.dispatchEvent(new Event('notifications-updated')); onSaved(); onClose(); }
     catch (e) { setError(e.response?.data?.error || e.response?.data?.message || 'Enrollment could not be saved.'); }
     finally { setBusy(false); }
   };
   return <Dialog title="Enroll student" onClose={busy ? () => {} : onClose}><div className="modal-content card enrollment-dialog">
-    <h3>{manager ? 'Enroll a student' : 'Request student enrollment'}</h3>{!manager && <p className="policy-note">An admin or moderator must approve this enrollment. No payment is recorded until approval.</p>}<p className="muted">{course.name} · Tuition: {Number(course.courseFee || 0).toLocaleString()} EGP</p>
+    <h3>{manager ? 'Enroll a student' : 'Request student enrollment'}</h3>{!manager && <p className="policy-note">An admin or moderator must approve this enrollment. No payment is recorded until approval.</p>}<p className="muted">{course.name}<PrivateBadge record={course}/> · Tuition: {Number(course.courseFee || 0).toLocaleString()} EGP</p>
     <form onSubmit={submit} className="enrollment-policy-form">
-      <EnrollmentStudentPicker courseId={course.id} onChange={setStudentId} disabled={busy} />
-      {manager && <><label htmlFor="enrollment-custom-fee">Tuition fee (EGP)</label><input id="enrollment-custom-fee" className="input-field" type="number" min="0" max={course.courseFee || 0} step="0.01" placeholder="Standard tuition fee" value={fee} onChange={e => { setFee(e.target.value); if (paid) setAmount(e.target.value === '' ? String(course.courseFee || 0) : e.target.value); }} /><small className="policy-note">Prefilled with the standard tuition. You can lower it for a discounted student.</small></>}
-      <label className="policy-check"><input type="checkbox" checked={paid} onChange={e => { setPaid(e.target.checked); setExempt(false); setAmount(String(effectiveFee)); }} />Record payment or exemption now</label>
-      {!paid && <p className="policy-note">The student will be enrolled as unpaid. No payment will be recorded.</p>}
-      {paid && <div className="payment-choice-panel"><label className="policy-check"><input type="checkbox" checked={exempt} onChange={e => setExempt(e.target.checked)} />Exempt — this student does not need to pay</label>
-        {exempt ? <p className="policy-note">Tuition is waived for this student. Amount due: 0 EGP. No cash payment is recorded.</p> : <><label htmlFor="enrollment-paid">Amount received (EGP)</label><input id="enrollment-paid" className="input-field" type="number" min="0" max={effectiveFee} step="0.01" required value={amount} onChange={e => { setAmount(e.target.value); setError(Number(e.target.value) > effectiveFee ? `The tuition fee is ${effectiveFee.toLocaleString()} EGP. You cannot record ${Number(e.target.value).toLocaleString()} EGP paid.` : ''); }} /><PaymentFields prefix="enrollment" value={metadata} onChange={setMetadata}/><small>Leave the full fee, enter a partial payment, or choose exemption above.</small></>}
-      </div>}
+      <div className="section-tabs"><button type="button" className={!creating?'active':''} onClick={()=>setCreating(false)}>Existing student</button><button type="button" className={creating?'active':''} onClick={()=>setCreating(true)}>Create new student</button></div>
+      {creating?<div className="management-choice"><label>Full name *<input className="input-field" required value={newStudent.name} onChange={e=>setNewStudent({...newStudent,name:e.target.value})}/></label><label>Registration ID (optional)<input className="input-field" value={newStudent.registrationNumber} onChange={e=>setNewStudent({...newStudent,registrationNumber:e.target.value})}/></label><label>Mobile<input className="input-field" value={newStudent.mobile} onChange={e=>setNewStudent({...newStudent,mobile:e.target.value})}/></label><StudentProfileFields prefix="inline-student" value={newStudent} onChange={setNewStudent}/></div>:<EnrollmentStudentPicker courseId={course.id} onChange={setStudentId} disabled={busy} />}
+
+      <fieldset className="management-choice" disabled={busy}><legend>Tuition status *</legend>{[['FULL','Full payment'],['DISCOUNTED','Discounted'],['EXEMPT','Exempt']].map(([value,label])=><label className="policy-check" key={value}><input type="radio" name="enrollment-tuition-type" value={value} checked={tuitionType===value} disabled={value!=='EXEMPT'&&Number(course.courseFee||0)===0} onChange={()=>{setTuitionType(value);setError('');}}/>{label}{value==='FULL'?` · ${Number(course.courseFee||0).toLocaleString()} EGP`:value==='EXEMPT'?' · No tuition payment':''}</label>)}</fieldset>
+      {tuitionType==='DISCOUNTED'&&<><label htmlFor="enrollment-discounted-amount">Discounted amount paid (EGP) *</label><input id="enrollment-discounted-amount" className="input-field" type="number" min="0.01" max={Math.max(0,Number(course.courseFee||0)-0.01)} step="0.01" required value={discountedAmount} onChange={e=>setDiscountedAmount(e.target.value)}/><p className="policy-note">This is the student's full discounted tuition, not a partial payment. Nothing remains due.</p></>}
+      {tuitionType==='EXEMPT'?<p className="policy-note">Tuition is waived. No money is recorded.</p>:<div className="payment-choice-panel"><p><strong>{Number(effectiveFee||0).toLocaleString()} EGP</strong> will be recorded as paid{!manager?' when approved':''}.</p><PaymentFields prefix="enrollment" value={metadata} onChange={setMetadata}/></div>}
       {error && <div className="alert-error" role="alert">{error}</div>}
-      <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="submit" className="btn-primary" disabled={busy || !studentId}>{busy ? 'Submitting…' : manager ? 'Enroll student' : 'Submit for approval'}</button></div>
+      <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="submit" className="btn-primary" disabled={busy || (!creating&&!studentId)}>{busy ? 'Submitting…' : manager ? 'Enroll student' : 'Submit for approval'}</button></div>
     </form>
   </div></Dialog>;
 }

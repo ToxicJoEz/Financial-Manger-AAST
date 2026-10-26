@@ -31,6 +31,7 @@ export const approveAssignment = atomic(async (req, res) => {
 
     // Atomic transaction: status update, assignment mutation, notifications
     await prisma.$transaction(async (tx) => {
+      if(!isRemoval&&pending.instructor?.archivedAt)throw Object.assign(new Error('This employee is archived. Restore them before approving an assignment.'),{status:409});
       // 1. Concurrency Guard: Atomically claim and approve the request
       const updateResult = await tx.pendingAssignment.updateMany({
         where: { id, status: 'PENDING' },
@@ -238,7 +239,7 @@ export const getAssignmentReview = async (req, res, next) => {
     const request = await prisma.pendingAssignment.findUnique({ where: { id: req.params.id }, select: {
       id: true, type: true, status: true, courseId: true,
       instructor: { select: { id: true, name: true } },
-      course: { select: { id: true, name: true, branch: true } },
+      course: { select: { id: true, name: true, branch: true,parentCourse:{select:{isPrivate:true}} } },
       submittedBy: { select: { username: true, firstName: true, lastName: true } }
     } });
     if (!request) return res.status(404).json({ error: 'This request no longer exists.' });

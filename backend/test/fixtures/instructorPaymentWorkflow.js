@@ -56,7 +56,7 @@ try {
   assert.equal(rows.filter(e=>e.status==='PROCESSING').length,3); assert.equal(rows.filter(e=>e.status==='UNPAID').length,2);
   assert(rows.filter(e=>e.status==='PROCESSING').every(e=>e.batch.initiatedDate.slice(0,10)===yesterday && e.batch.actualPaymentDate===null));
   assert.equal((await req('/finances/batches','POST',{...body,idempotencyKey:'payroll-duplicate-earnings'})).status,409);
-  assert.equal((await req('/finances/batches/'+batch.id+'/pay','POST',{actualPaymentDate:'1900-01-01'})).status,400);
+  assert.equal((await req('/finances/batches/'+batch.id+'/pay','POST',{actualPaymentDate:'2026-02-30'})).status,400);
   ok(await req('/finances/batches/'+batch.id+'/pay','POST',{actualPaymentDate:today}));
   assert.equal((await req('/finances/batches/'+batch.id+'/pay','POST',{actualPaymentDate:today})).status,409);
   const paid=ok(await req('/finances')).batches.find(b=>b.id===batch.id);assert.equal(paid.amount,3000);assert.equal(paid.initiatedDate.slice(0,10),yesterday);assert.equal(paid.actualPaymentDate.slice(0,10),today);
@@ -116,7 +116,7 @@ try {
   ok(await req('/finances/batches/'+dailyIds[0]+'/pay','POST',{actualPaymentDate:today}));
   assert.equal((await req('/finances/payment-days/'+today+'/pay','POST',{batchIds:dailyIds,actualPaymentDate:today})).status,409);
   const remaining=dailyIds.slice(1);
-  assert.equal((await req('/finances/payment-days/'+today+'/pay','POST',{batchIds:remaining,actualPaymentDate:yesterday})).status,400);
+  assert.equal((await req('/finances/payment-days/'+today+'/pay','POST',{batchIds:remaining,actualPaymentDate:'not-a-date'})).status,400);
   assert.equal(await prisma.instructorPaymentBatch.count({where:{id:{in:remaining},status:'PROCESSING'}}),remaining.length);
   ok(await req('/finances/payment-days/'+today+'/pay','POST',{batchIds:remaining,actualPaymentDate:today}));
   assert.equal(await prisma.instructorPaymentBatch.count({where:{id:{in:dailyIds},status:'PAID'}}),dailyIds.length);

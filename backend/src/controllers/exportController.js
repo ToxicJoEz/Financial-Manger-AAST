@@ -1,3 +1,4 @@
+import {privateLabel} from '../utils/privateCourses.js';
 import prisma from '../db/prisma.js';
 import { allowedSheets, buildExport, managerRole } from '../utils/exportData.js';
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
@@ -9,7 +10,7 @@ export const exportOptions = async (req, res, next) => {
       },
       select: {
         id: true,
-        parentCourseId: true,
+        parentCourseId: true,parentCourse:{select:{isPrivate:true}},
         name: true,
         branch: true,
         archivedAt: true
@@ -30,7 +31,7 @@ export const exportOptions = async (req, res, next) => {
     }) : [];
     res.set('Cache-Control', 'no-store').json({
       sheets: allowedSheets(req.user),
-      courses,
+      courses:courses.map(c=>({...c,name:privateLabel(c.name,c.parentCourse?.isPrivate)})),
       branches: [...new Set([...courses, ...snapshots].map(row => row.branch))].sort()
     });
   } catch (error) {
@@ -60,9 +61,9 @@ export const prepareExport = async (req, res, next) => {
     });
     if (filters.salaryMonth !== undefined) {
       if (!managerRole(req.user)) return res.status(403).json({ error: 'Only managers can export salary reports.' });
-      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(filters.salaryMonth) || Number(filters.salaryMonth.slice(0,4)) < 1900 || Number(filters.salaryMonth.slice(0,4)) > 9998 || Object.keys(sheets).length !== 1 || !sheets.payroll) return res.status(400).json({ error: 'Choose a valid month and the salary worksheet only.' });
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(filters.salaryMonth) || Number(filters.salaryMonth.slice(0,4)) < 1 || Number(filters.salaryMonth.slice(0,4)) > 9999 || Object.keys(sheets).length !== 1 || !sheets.payroll) return res.status(400).json({ error: 'Choose a valid month and the salary worksheet only.' });
       filters.from = filters.salaryMonth + '-01';
-      filters.to = new Date(Date.UTC(Number(filters.salaryMonth.slice(0,4)), Number(filters.salaryMonth.slice(5,7)), 0)).toISOString().slice(0,10);
+      const lastDay=new Date(filters.from+'T00:00:00Z');lastDay.setUTCMonth(lastDay.getUTCMonth()+1);lastDay.setUTCDate(0);filters.to=lastDay.toISOString().slice(0,10);
       filters.payrollDateBasis = 'actualPaymentDate';
       filters.payrollStatus = 'PAID';
       filters.includeArchived = true;
@@ -113,7 +114,7 @@ export const prepareExport = async (req, res, next) => {
       const courses = await tx.cycle.findMany({
         where,
         include: {
-          parentCourse: true,
+          parentCourse: true, retainedIncome:true,
           enrollments: {
             include: {
               student: true,

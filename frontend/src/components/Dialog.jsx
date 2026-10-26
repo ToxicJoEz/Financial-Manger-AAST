@@ -43,7 +43,7 @@ export default function Dialog({ title, onClose, children }) {
       }
     });
     const controls = () => [...dialog.querySelectorAll('button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex="0"]')].filter(el => el.getClientRects().length);
-    const frame = requestAnimationFrame(() => (controls()[0] || dialog).focus());
+    const frame = requestAnimationFrame(() => { if(!dialog.contains(document.activeElement)) (controls()[0] || dialog).focus(); });
     const onKey = e => {
       if (e.key === 'Escape' && !e.target.closest('[role=combobox][aria-expanded=true]')) { e.preventDefault(); closeRef.current(); }
       if (e.key === 'Tab') {

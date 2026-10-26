@@ -1,3 +1,4 @@
+import PrivateBadge from './PrivateBadge';
 import {recordClientFailure} from '../utils/activity';
 import CycleScheduleFields from './CycleScheduleFields';
 import { suggestCourseFee } from '../utils/importFee';
@@ -26,7 +27,7 @@ export default function CycleImportDialog({
     [error, setError] = useState(''),
     [result, setResult] = useState(null);
   const [form, setForm] = useState({
-    cycleNumber: String(parent.nextCycleNumber || ''),
+    cycleNumber: String(parent.nextCycleNumber || ''),name:'',bookPrice:'0',
     branch: '',
     courseFee: '',
     venue: '', classStartTime: '', classEndTime: '',
@@ -73,7 +74,7 @@ export default function CycleImportDialog({
         startDate: data.startDate,
         endDate: data.endDate
       }));
-      setChoices(Object.fromEntries(data.rows.map(row => [row.registrationNumber, {
+      setChoices(Object.fromEntries(data.rows.map(row => [row.registrationNumber||row.rowKey, {
         profile: row.differences.length ? '' : 'fill',
         feeMode: '',
         customFee: String(row.amount),
@@ -109,15 +110,15 @@ export default function CycleImportDialog({
     rows = preview?.rows || [];
   const blocked = preview?.courseMismatch || rows.some(r => r.issues.length);
   function reviewReasons(row) {
-    const c = choices[row.registrationNumber] || {};
+    const c = choices[row.registrationNumber||row.rowKey] || {};
     const reasons = [];
     if (!c.profile) reasons.push('Choose how to handle the existing student details.');
     if (row.sameName && !c.confirmSameName) reasons.push('Confirm this student is different from the matching name with another registration number.');
     if (form.courseFee !== '') {
       if (row.amount > fee) reasons.push(`Payment exceeds the standard fee of ${money(fee)} EGP.`);
-      if (row.amount < fee && !c.feeMode) reasons.push(`Paid ${money(row.amount)} of ${money(fee)} EGP: choose partial payment or a discounted fee.`);
+      if (row.amount < fee && !['discount','exempt'].includes(c.feeMode)) reasons.push(`Paid ${money(row.amount)} of ${money(fee)} EGP: choose discounted tuition or exemption.`);
       if (c.feeMode === 'discount' && !manager) reasons.push('A manager must confirm this discount.');
-      if (c.feeMode === 'discount' && (c.customFee === '' || !Number.isFinite(Number(c.customFee)) || Number(c.customFee) < row.amount || Number(c.customFee) > fee)) reasons.push(`Enter a discounted fee between ${money(row.amount)} and ${money(fee)} EGP.`);
+      if (c.feeMode === 'discount' && (c.customFee === '' || !Number.isFinite(Number(c.customFee)) || Number(c.customFee) !== row.amount || Number(c.customFee) > fee)) reasons.push(`Discounted tuition must equal the amount paid: ${money(row.amount)} EGP.`);
       if (c.feeMode === 'exempt' && row.amount !== 0) reasons.push('An exemption cannot include a positive payment.');
     }
     return reasons;
@@ -133,7 +134,7 @@ export default function CycleImportDialog({
     }));
   }
   const missingFields = [];
-  if (!form.cycleNumber) missingFields.push('Cycle number');
+  if(parent.isPrivate){if(!form.name.trim())missingFields.push('Private cycle name');if(rows.length!==1)missingFields.push('Exactly one student for a private cycle');}else if (!form.cycleNumber) missingFields.push('Cycle number');
   if (!form.branch) missingFields.push('Branch');
   if (!form.startDate) missingFields.push('Start date');
   if (!form.endDate) missingFields.push('End date');
@@ -142,12 +143,12 @@ export default function CycleImportDialog({
   const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en', {timeZone:'Africa/Cairo', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date()).map(part => [part.type, part.value]));
   const finishesOnImport = Boolean(form.endDate && form.endDate <= `${dateParts.year}-${dateParts.month}-${dateParts.day}`);
   const expected = rows.reduce((sum, row) => {
-    const c = choices[row.registrationNumber];
+    const c = choices[row.registrationNumber||row.rowKey];
     return sum + (c?.feeMode === 'discount' ? Number(c.customFee || 0) : c?.feeMode === 'exempt' ? 0 : fee);
   }, 0);
   return <Dialog title="Import cycle from Excel" onClose={busy ? () => {} : onClose}><div className="modal-content card cycle-import">
   <div className="import-heading"><span className="import-symbol"><FileSpreadsheet size={24} /></span><div><span className="eyebrow">REGISTRATION IMPORT</span><h3>{result ? 'Cycle ready' : 'Import cycle from Excel'}</h3></div><button className="icon-button" aria-label="Close import" disabled={busy} onClick={onClose}><X size={20} /></button></div>
-  {result ? <div className="import-success"><CheckCircle2 size={40} /><h3>{result.cycleName} was created</h3><p>{result.enrolled} students enrolled · {result.created} new · {result.reused} existing</p><p className="muted">{result.isFinished ? "Marked completed automatically because its end date is today or earlier. " : "Imported as an active cycle. "}Payments and student details are saved. {form.instructorId && !manager ? "The employee request is awaiting manager approval." : ''}</p><button className="btn-primary" onClick={() => onSaved(result)}>View cycle</button></div> : <>
+  {result ? <div className="import-success"><CheckCircle2 size={40} /><h3>{result.cycleName}<PrivateBadge record={parent}/> was created</h3><p>{result.enrolled} students enrolled · {result.created} new · {result.reused} existing</p><p className="muted">{result.isFinished ? "Marked completed automatically because its end date is today or earlier. " : "Imported as an active cycle. "}Payments and student details are saved. {form.instructorId && !manager ? "The employee request is awaiting manager approval." : ''}</p><button className="btn-primary" onClick={() => onSaved(result)}>View cycle</button></div> : <>
   <div className="student-form-group"><label htmlFor="import-parent">Course umbrella</label><input id="import-parent" className="input-field" readOnly value={`${parent.name} · ${parent.code}`} /></div>
   <p className="muted">One registration roster creates one cycle. Fields marked <Required /> are required; other fields are optional.</p>
   {error && <div className="alert-error" role="alert">{error}</div>}
@@ -157,8 +158,8 @@ export default function CycleImportDialog({
               setError('');
             }}>Change file</button></div>
    {preview.courseMismatch && <div className="alert-error" role="alert">The file course code ({preview.courseCode || 'missing'}) does not match {parent.code}. Choose the correct umbrella or correct the source file.</div>}
-   <h4>Cycle details</h4><div className="import-form-grid">
-    <Field label="Cycle number" id="import-number"><input id="import-number" className="input-field" required type="number" min="1" max="2147483647" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
+   {parent.isPrivate && rows.length!==1 && <p className="alert-error" role="alert">A private cycle can contain only one student. Upload a single-student roster or create an empty cycle manually.</p>}<h4>Cycle details {parent.isPrivate?'· Private':''}</h4><div className="import-form-grid">
+    {parent.isPrivate ? <><Field label="Private cycle name" id="import-private-name"><input id="import-private-name" className="input-field" required maxLength={200} value={form.name} onChange={e=>set('name',e.target.value)}/></Field><Field label="Book price (EGP)" id="import-private-books"><input id="import-private-books" className="input-field" required type="number" min="0" step="0.01" value={form.bookPrice} onChange={e=>set('bookPrice',e.target.value)}/></Field></> : <Field label="Cycle number" id="import-number"><input id="import-number" className="input-field" required type="number" min="1" max="2147483647" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>}
     <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={BRANCH_OPTIONS} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
     <Field label="Start date · from Excel" id="import-start"><input id="import-start" className="input-field" required type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
     <Field label="End date · from Excel" id="import-end"><input id="import-end" className="input-field" required type="date" min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>
@@ -168,39 +169,38 @@ export default function CycleImportDialog({
               }} /></Field>
     <CycleScheduleFields value={form} onChange={setForm} />
     <Field label="Total teaching hours · optional" id="import-hours"><input id="import-hours" className="input-field" type="number" min="0.01" step="0.01" value={form.totalHours} onChange={e => set('totalHours', e.target.value)} /></Field>
-    <Field label="Employee · optional" id="import-instructor"><CustomFilterDropdown id="import-instructor" options={instructors.map(i => ({
+    <Field label="Employee · optional" id="import-instructor"><CustomFilterDropdown searchable id="import-instructor" options={instructors.map(i => ({
                 value: i.id,
                 label: i.name
-              }))} value={form.instructorId} onChange={value => set('instructorId', value)} placeholder="Assign later" /></Field>
+              }))} value={form.instructorId} onChange={value => set('instructorId', value)} placeholder="Search employees by name or ID…" /></Field>
     {manager && form.instructorId && <Field label="Employee hourly rate (EGP)" id="import-rate"><input id="import-rate" className="input-field" required type="number" min="0" step="0.01" value={form.hourlyRate} onChange={e => set('hourlyRate', e.target.value)} /></Field>}
-    <Field label="Actual payment date · optional, applies to this roster" id="import-payment-date"><input id="import-payment-date" className="input-field" type="date" max={new Date().toISOString().slice(0, 10)} value={form.paymentDate} onChange={e => set('paymentDate', e.target.value)} /></Field>
    </div><p className="policy-note" role="status">{finishesOnImport ? "This cycle will be marked completed: its end date is today or earlier in Cairo. Employee payment is not recorded automatically." : 'This cycle will remain active because its end date is in the future.'}</p><p className="policy-note">Leave payment date empty if unknown. Imported opening balances will be labelled with the import date, not an assumed payment date.{!manager && " Employee selections require manager approval. Only managers can confirm discounted fees."}</p>
    <Field label="Description · optional" id="import-description"><textarea id="import-description" className="input-field" maxLength={2000} value={form.details} onChange={e => set('details', e.target.value)} /></Field>
    <div className="import-summary"><div><small>Students</small><strong>{rows.length}</strong></div><div><small>Expected tuition</small><strong>{money(expected)} EGP</strong></div><div><small>Collected</small><strong>{money(rows.reduce((sum, r) => sum + r.amount, 0))} EGP</strong></div><div><small>Remaining</small><strong>{money(Math.max(0, expected - rows.reduce((sum, r) => sum + r.amount, 0)))} EGP</strong></div></div>
    <h4>Review students & payments</h4><p className="muted">Matching registration numbers reuse existing students. Conflicting names must be corrected before importing.</p>
    {manager && <div className="import-bulk-discount"><div><strong>Discount lower payments together</strong><p>Sets each discounted fee to the amount already paid, leaving no remaining balance. You can still edit individual students.</p></div><button className="btn-secondary" type="button" disabled={busy || form.courseFee === '' || !rows.some(row => row.amount < fee)} onClick={() => setChoices(old => {
      const next = {...old};
-     for (const row of rows) if (row.amount < fee) next[row.registrationNumber] = {...next[row.registrationNumber], feeMode: 'discount', customFee: String(row.amount)};
+     for (const row of rows) if (row.amount < fee) next[row.registrationNumber||row.rowKey] = {...next[row.registrationNumber||row.rowKey], feeMode: row.amount===0?'exempt':'discount', customFee: String(row.amount)};
      return next;
    })}>Discount all lower payments ({form.courseFee === '' ? 0 : rows.filter(row => row.amount < fee).length})</button></div>}
    <div className="import-roster">{rows.slice(page * 25, (page + 1) * 25).map((row, index) => {
-              const c = choices[row.registrationNumber] || {};
+              const c = choices[row.registrationNumber||row.rowKey] || {};
               const below = form.courseFee !== '' && row.amount < fee;
               const reasons = reviewReasons(row);
               return <article id={`import-student-${page * 25 + index}`} tabIndex={-1} className={`import-student ${row.issues.length ? 'has-conflict' : reasons.length ? 'needs-review' : ''}`} key={row.row}>
-    <div className="import-student-heading"><div><strong dir="auto">{row.name}</strong><small>{row.englishName || 'No English name'} · {row.registrationNumber} · Excel row {row.row}</small></div><span className="import-badge">{row.existing ? 'Existing student' : 'New student'}</span></div>
+    <div className="import-student-heading"><div><strong dir="auto">{row.name}</strong><small>{row.englishName || 'No English name'} · {row.registrationNumber||'Not issued'} · Excel row {row.row}</small></div><span className="import-badge">{row.existing ? 'Existing student' : 'New student'}</span></div>
     {reasons.length > 0 && <div className="import-review-reasons"><strong>Action needed</strong><ul>{reasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
     <div className="import-student-facts"><span>Paid <b>{money(row.amount)} EGP</b></span><span>{row.paymentMethod === 'CASH' ? 'Cash' : row.paymentMethod === 'ONLINE' ? 'Online' : 'Unknown method'}</span><span>رقم الحافظة: {row.receiptNumber || '—'}</span><span>Mobile: {row.mobile || '—'}</span><span>Born: {row.dateOfBirth || '—'}</span><span>Nationality: {row.nationality || '—'}</span><span>Birthplace: {row.placeOfBirth || '—'}</span></div>
     {row.issues.map(issue => <p className="alert-error" key={issue}><AlertTriangle size={14} />{issue}{row.existing && <span> Existing record: {row.existing.name}</span>}</p>)}
     {row.amount > fee && form.courseFee !== '' && <p className="alert-error">The course fee is {money(fee)} EGP. A payment of {money(row.amount)} EGP cannot be imported.</p>}
-    {row.sameName && <label className="policy-check"><input type="checkbox" checked={c.confirmSameName || false} onChange={e => choice(row.registrationNumber, 'confirmSameName', e.target.checked)} />A student with this name has another registration number. I verified these are separate students.</label>}
+    {row.sameName && <label className="policy-check"><input type="checkbox" checked={c.confirmSameName || false} onChange={e => choice(row.registrationNumber||row.rowKey, 'confirmSameName', e.target.checked)} />A student with this name has another registration number. I verified these are separate students.</label>}
     {row.existing && !row.issues.length && <><label htmlFor={`profile-${index}`}>Existing student details<Required /></label>{row.differences.length > 0 && <div className="policy-note">{row.differences.map(d => <p key={d.field}>{{
                         englishName: 'English name',
                         mobile: 'Mobile',
                         dateOfBirth: 'Date of birth',
                         nationality: 'Nationality',
                         placeOfBirth: 'Place of birth'
-                      }[d.field]}: existing “{d.existing}” → Excel “{d.incoming}”</p>)}</div>}<CustomFilterDropdown required id={`profile-${index}`} value={c.profile} onChange={value => choice(row.registrationNumber, 'profile', value)} allowClear={true} placeholder="Resolve student details" options={[{
+                      }[d.field]}: existing “{d.existing}” → Excel “{d.incoming}”</p>)}</div>}<CustomFilterDropdown required id={`profile-${index}`} value={c.profile} onChange={value => choice(row.registrationNumber||row.rowKey, 'profile', value)} allowClear={true} placeholder="Resolve student details" options={[{
                     value: 'keep',
                     label: 'Keep existing details'
                   }, {
@@ -210,16 +210,7 @@ export default function CycleImportDialog({
                     value: 'replace',
                     label: 'Update provided details from Excel'
                   }]} /></>}
-    {below && <div className="import-fee-choice"><label htmlFor={`fee-${index}`}>Payment is below the standard fee<Required /></label><CustomFilterDropdown required id={`fee-${index}`} value={c.feeMode} onChange={value => choice(row.registrationNumber, 'feeMode', value)} allowClear={true} placeholder="Choose partial payment or discount" options={[{
-                    value: 'partial',
-                    label: `Partial payment · ${money(fee - row.amount)} EGP still owed`
-                  }, ...(manager ? [{
-                    value: 'discount',
-                    label: 'Discounted student · set applicable fee'
-                  }] : []), ...(row.amount === 0 ? [{
-                    value: 'exempt',
-                    label: 'Exempt · no tuition owed'
-                  }] : [])]} />{c.feeMode === 'discount' && <Field label="Applicable discounted fee (EGP)" id={`custom-${index}`}><input id={`custom-${index}`} className="input-field" required type="number" min={row.amount} max={fee} step="0.01" value={c.customFee} onChange={e => choice(row.registrationNumber, 'customFee', e.target.value)} /></Field>}</div>}
+    {below&&<div className="import-fee-choice"><label htmlFor={`fee-${index}`}>Tuition status<Required/></label><CustomFilterDropdown required id={`fee-${index}`} value={c.feeMode} onChange={value=>choice(row.registrationNumber||row.rowKey,'feeMode',value)} allowClear placeholder="Choose tuition status" options={row.amount===0?[{value:'exempt',label:'Exempt · no tuition payment'}]:[{value:'discount',label:`Discounted · ${money(row.amount)} EGP fully paid`}]}/>{c.feeMode==='discount'&&<p className="policy-note">Discounted tuition is fully settled at {money(row.amount)} EGP.</p>}</div>}
    </article>;
             })}</div>
    {rows.length > 25 && <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={page === 0} onClick={() => setPage(page - 1)}>Previous students</button><span>Page {page + 1} of {Math.ceil(rows.length / 25)}</span><button type="button" className="btn-secondary" disabled={(page + 1) * 25 >= rows.length} onClick={() => setPage(page + 1)}>Next students</button></div>}

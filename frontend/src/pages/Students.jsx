@@ -1,3 +1,4 @@
+import ArchiveControls from '../components/ArchiveControls';
 import StudentDetailsDialog from '../components/StudentDetailsDialog';
 import { AuthContext } from '../context/AuthContext';
 import StudentProfileFields from '../components/StudentProfileFields';
@@ -16,6 +17,7 @@ export default function Students() {
   const [viewingStudent, setViewingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [archivedView,setArchivedView]=useState(false);
 
   // Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -57,8 +59,8 @@ export default function Students() {
   };
   const handleAddSubmit = async e => {
     e.preventDefault();
-    if (!addName.trim() || !addRegNumber.trim()) {
-      toast.error('Please enter student name and registration number.');
+    if (!addName.trim()) {
+      toast.error('Please enter the student name.');
       return;
     }
     try {
@@ -82,15 +84,15 @@ export default function Students() {
   };
   const handleEditSubmit = async e => {
     e.preventDefault();
-    if (!editingStudent.name.trim() || !editingStudent.registrationNumber.trim()) {
-      toast.error('Student name and registration number cannot be empty.');
+    if (!editingStudent.name.trim()) {
+      toast.error('Student name cannot be empty.');
       return;
     }
     try {
       setSubmitting(true);
       const res = await axios.put(`/students/${editingStudent.id}`, {
         name: editingStudent.name.trim(),
-        registrationNumber: editingStudent.registrationNumber.trim(),
+        registrationNumber: (editingStudent.registrationNumber||'').trim(),
         mobile: editingStudent.mobile ? editingStudent.mobile.trim() : null,
         englishName: editingStudent.englishName || null, dateOfBirth: editingStudent.dateOfBirth?.slice(0,10) || null, nationality: editingStudent.nationality || null, placeOfBirth: editingStudent.placeOfBirth || null
       });
@@ -119,8 +121,9 @@ export default function Students() {
     }
   };
   const filtered = students.filter(s => {
+    if(Boolean(s.deletedAt)!==archivedView)return false;
     const q = searchTerm.toLowerCase();
-    return (s.englishName || '').toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || s.registrationNumber.toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
+    return (s.englishName || '').toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || (s.registrationNumber||'').toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
   });
   return <div className="students-container">
       <PageHeading eyebrow="ACADEMIC DIRECTORY" title="Students" description="Comprehensive directory of registered students across all academic branches.">
@@ -132,7 +135,8 @@ export default function Students() {
         </button>
       </PageHeading>
 
-      {!manager && <p className="payment-view-note">Student additions and removals require approval from an admin or moderator. Pending requests appear in Notifications.</p>}
+      {!manager && <p className="payment-view-note">Student additions require approval from an admin or moderator. Archiving and deletion are available only to managers. Pending requests appear in Notifications.</p>}
+      {manager&&<div className="section-tabs"><button className={!archivedView?'active':''} onClick={()=>setArchivedView(false)}>Active students</button><button className={archivedView?'active':''} onClick={()=>setArchivedView(true)}>Archived students</button></div>}
       <div className="students-toolbar">
         <div className="students-search">
           <Search size={16} />
@@ -183,13 +187,13 @@ export default function Students() {
                       <div className="student-info-cell">
                         <span className="student-avatar">{initials(student.name)}</span>
                         <div className="student-name-block">
-                          <button type="button" className="student-name-link" onClick={()=>setViewingStudent(student)}>{student.name}</button> {student.deletedAt && <span className="deleted-tag">Deleted</span>}
+                          <button type="button" className="student-name-link" onClick={()=>setViewingStudent(student)}>{student.name}</button> {student.deletedAt && <span className="deleted-tag">Archived</span>}
                           <span>{student.englishName || `ID: ${student.id.slice(0, 8)}…`}</span><small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?.slice(0,10)].filter(Boolean).join(" · ")}</small>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span className="student-reg-badge">{student.registrationNumber}</span>
+                      <span className="student-reg-badge">{student.registrationNumber||'Not issued'}</span>
                     </td>
                     <td>
                       {student.mobile ? <a href={`tel:${student.mobile}`} className="student-contact-link">
@@ -213,9 +217,8 @@ export default function Students() {
                   })}>
                           <Edit2 size={15} />
                         </button>
-                        <button className="student-action-btn danger" aria-label={`Delete ${student.name}`} title="Delete student" disabled={!!student.deletedAt} onClick={() => setDeleteTarget(student)}>
-                          <Trash2 size={15} />
-                        </button>
+                        {manager&&<ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>}
+
                       </div>
                     </td>
                   </tr>)}
@@ -243,9 +246,9 @@ export default function Students() {
                   <input type="text" required placeholder="e.g. Sarah Mohamed Ali" value={addName} onChange={e => setAddName(e.target.value)} />
                 </div>
                 <div className="student-form-group">
-                  <label>Registration Number (ID) *</label>
-                  <input type="text" required placeholder="e.g. 21100567" value={addRegNumber} onChange={e => setAddRegNumber(e.target.value)} />
-                  <small>Must be unique across all students</small>
+                  <label>Registration Number (optional)</label>
+                  <input type="text" placeholder="e.g. 21100567" value={addRegNumber} onChange={e => setAddRegNumber(e.target.value)} />
+                  <small>Leave blank if not issued; unique when provided</small>
                 </div>
                 <div className="student-form-group">
                   <label>Mobile Number</label>
@@ -286,12 +289,12 @@ export default function Students() {
               })} />
                 </div>
                 <div className="student-form-group">
-                  <label>Registration Number (ID) *</label>
-                  <input type="text" required value={editingStudent.registrationNumber} onChange={e => setEditingStudent({
+                  <label>Registration Number (optional)</label>
+                  <input type="text" value={editingStudent.registrationNumber||''} onChange={e => setEditingStudent({
                 ...editingStudent,
                 registrationNumber: e.target.value
               })} />
-                  <small>Must be unique across all students</small>
+                  <small>Leave blank if not issued; unique when provided</small>
                 </div>
                 <div className="student-form-group">
                   <label>Mobile Number</label>

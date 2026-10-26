@@ -171,7 +171,7 @@ try {
     choices: {
       'IMPORT-1': {
         profile: 'keep',
-        feeMode: 'partial'
+        feeMode: 'discount',customFee:1000
       }
     }
   }));
@@ -184,6 +184,8 @@ try {
   }));
   const pay = ok(await request(`/cycles/${partial.cycleId}/enrollments`));
   const e = pay.enrollments.find(e => e.studentId === student.id);
+  // Existing pre-policy partial balances still support the immutable payment ledger.
+  await prisma.enrollment.update({where:{id:e.id},data:{customFee:1800}});
   const paymentBody = {
     amount: 100,
     kind: 'PAYMENT',
@@ -258,7 +260,7 @@ try {
     choices: {
       'IMPORT-1': {
         profile: 'replace',
-        feeMode: 'partial'
+        feeMode: 'discount',customFee:1000
       }
     }
   })).status, 409);

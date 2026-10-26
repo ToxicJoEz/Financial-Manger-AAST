@@ -81,3 +81,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
     .sidebar-logout { min-height: 34px; padding-top: 6px; padding-bottom: 6px; font-size: 12px; }
   }
 }
+
+.employee-search-picker{position:relative;width:100%;}.employee-search-results{max-height:240px;overflow:auto;border:1px solid #dce3ef;border-radius:10px;background:#fff;box-shadow:0 8px 20px #23355212;margin-top:6px;button{display:block;width:100%;text-align:start;padding:11px 13px;background:transparent;border:0;color:#344b72;font-size:13px;&:hover,&.is-active{background:#eef1ff;}}p{padding:12px;color:#73819a;}}
+.management-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0;}.management-actions button{font-size:12px;}.management-choice{display:grid;gap:12px;margin:14px 0;}.management-choice label{font-size:12px;color:#536887;}.management-choice .policy-check{display:flex;gap:8px;}.management-danger{color:#c02f47!important;border-color:#efc3ca!important;}
+
+.removed-enrollments{margin-top:24px;border:1px solid #dce3ef;border-radius:12px;background:#fafbff;}.removed-enrollments-heading{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:start;padding:16px 18px;border:0;border-radius:12px;background:transparent;color:#425b80;strong{font-size:14px;}small{display:block;font-size:11px;font-weight:400;color:#7b8ca5;margin-top:5px;}strong small{display:inline;}}.removed-enrollments-content{padding:0 18px 16px;}.removed-enrollment-row{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:16px 0;border-top:1px solid #e1e7f0;>div{display:grid;gap:7px;min-width:0;}strong{font-size:13px;}small{font-size:11px;color:#7b8ca5;}span{font-size:12px;color:#526886;}.btn-secondary{font-size:11px;flex-shrink:0;}}@media(max-width:650px){.removed-enrollment-row{align-items:flex-start;flex-direction:column;}}
+
+.private-course-badge {display:inline-flex;align-items:center;vertical-align:middle;margin-inline:8px;padding:3px 9px;border-radius:6px;border:1px solid #a78bfa66;background:#8b5cf618;color:#7c3aed;font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.025em;white-space:nowrap;}
+.private-type-choice {display:flex;align-items:center;gap:10px;padding:14px;border:1px solid var(--border-color,#cbd5e1);border-radius:12px;margin:14px 0;}
+
+.cycle-facts .cycle-private-books {display:block;margin-top:5px;font-size:11px;line-height:1.4;}

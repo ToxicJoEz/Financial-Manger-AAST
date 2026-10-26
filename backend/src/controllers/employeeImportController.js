@@ -46,7 +46,7 @@ async function inspect(sourceRows,mappings,duplicateChoices={}){
   const group=variants.get(id);
   if(!group||group.length<2||!Number.isInteger(choice)||!group.some(row=>row.rowNumber===choice))fail('Invalid duplicate choice. Choose one of the displayed employee entries.');
  }
- const existing=await prisma.instructor.findMany({where:{employeeId:{in:rows.map(r=>r.employeeId).filter(Boolean)}},select:{id:true,name:true,employeeId:true,branches:true,updatedAt:true}});
+ const existing=await prisma.instructor.findMany({where:{employeeId:{in:rows.map(r=>r.employeeId).filter(Boolean)}},select:{id:true,name:true,employeeId:true,branches:true,updatedAt:true,archivedAt:true}});
  const byId=new Map(existing.map(e=>[e.employeeId,e]));
  return rows.map(row=>{
   const employee=byId.get(row.employeeId),issues=[...new Set(row.issues)];
@@ -56,6 +56,7 @@ async function inspect(sourceRows,mappings,duplicateChoices={}){
   if(conflict&&choice===null)issues.push('This employee ID has different names in the workbook. Choose one entry in Resolve duplicate IDs.');
   const currentBranches=(employee?.branches||'').split(',').map(b=>b.trim().toUpperCase()).filter(Boolean);
   const missingBranches=row.branches.filter(branch=>!currentBranches.includes(branch));
+  if(employee?.archivedAt)issues.push('This employee is archived. Restore them before importing new branches.');
   if(employee){if(employeeName(employee.name)!==row.name)issues.push(`Employee ID belongs to a different name: ${employee.name}.`);else if(!missingBranches.length)issues.push('Duplicate: this employee already belongs to all selected branches.');}
   return {...row,conflict,missingBranches,action:skipped?'SKIP':issues.length?'ERROR':employee?'ADD_BRANCH':'CREATE',issues,existing:employee?{id:employee.id,name:employee.name,branches:employee.branches,version:employee.updatedAt.toISOString()}:null};
  });

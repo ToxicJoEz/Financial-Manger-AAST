@@ -65,6 +65,8 @@ model Instructor {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
+  archivedAt DateTime?
+  archivedBy String?
   payrollEarnings PayrollEarning[]
   courseAssignments  CourseInstructor[]
   pendingAssignments PendingAssignment[]
@@ -72,6 +74,7 @@ model Instructor {
 
 // Umbrella: no branch, teaching defaults, enrollment, or financial state.
 model Course {
+  isPrivate Boolean @default(false)
   id String @id @default(uuid())
   name String
   code String @unique
@@ -84,6 +87,7 @@ model Course {
 }
 
 model Cycle {
+  bookPrice Float @default(0)
   parentCourseId String
   parentCourse Course @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
   cycleNumber Int
@@ -111,6 +115,7 @@ model Cycle {
 
   instructors  CourseInstructor[]
   pendingAssignments PendingAssignment[]
+  retainedIncome RetainedEnrollmentIncome[]
   enrollments  Enrollment[]
 
   @@unique([parentCourseId, cycleNumber])
@@ -178,7 +183,7 @@ model Student {
   dateOfBirth        DateTime?
   nationality        String?
   placeOfBirth       String?
-  registrationNumber String       @unique
+  registrationNumber String?      @unique
   mobile             String?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
@@ -289,6 +294,7 @@ model StudentRequest {
 }
 
 model PayrollEarning {
+  isPrivate Boolean @default(false)
   id String @id @default(uuid())
   courseId String
   course Cycle @relation(fields: [courseId], references: [id], onDelete: Restrict)
@@ -338,4 +344,18 @@ model BookPayment {
   reversedAt DateTime?
   reversedBy String?
   @@index([enrollmentId])
+}
+
+model RetainedEnrollmentIncome {
+ id String @id @default(uuid())
+ courseId String
+ course Cycle @relation(fields:[courseId],references:[id],onDelete:Cascade)
+ sourceEnrollmentId String @unique
+ tuitionMinor BigInt
+ bookMinor BigInt
+ reason String
+ snapshot Json
+ recordedBy String
+ createdAt DateTime @default(now())
+ @@index([courseId])
 }

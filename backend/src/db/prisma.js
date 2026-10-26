@@ -8,7 +8,7 @@ import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment','courseInstructor','importBatch','notification','branchColor']);
+const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment','retainedEnrollmentIncome','courseInstructor','importBatch','notification','branchColor']);
 
 // Controllers use the same client inside atomic(), including their existing transaction callbacks.
 const prisma = new Proxy(base, {

@@ -1,3 +1,6 @@
+import PrivateBadge from '../components/PrivateBadge';
+import RemovedEnrollments from '../components/RemovedEnrollments';
+import EnrollmentRemovalFields from '../components/EnrollmentRemovalFields';
 import CycleScheduleFields, { classTimeLabel } from '../components/CycleScheduleFields';
 import '../styles/_cycleDetails.scss';
 import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
@@ -44,6 +47,9 @@ const Courses = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [replacementAssignmentId, setReplacementAssignmentId] = useState(null);
+  const removalBusy=useRef(false);
+  const [removalSaving,setRemovalSaving]=useState(false);
+  const [removalOptions,setRemovalOptions]=useState({mode:'KEEP',tuitionReduction:0,bookReduction:0,confirm:false});
   const [keepEnrollmentFinancials, setKeepEnrollmentFinancials] = useState(true);
   const [confirmEnrollmentRemoval, setConfirmEnrollmentRemoval] = useState(false);
 
@@ -58,6 +64,7 @@ const Courses = () => {
   // Form states
 
   const [name, setName] = useState('');
+  const [privateCycleName,setPrivateCycleName]=useState(''),[privateBookPrice,setPrivateBookPrice]=useState('0');
   const [branch, setBranch] = useState(BRANCHES[0]);
   const [totalHours, setTotalHours] = useState('');
   const [courseFee, setCourseFee] = useState('');
@@ -75,6 +82,7 @@ const Courses = () => {
   // Enrollment State
 
   const [enrollingCourse, setEnrollingCourse] = useState(null);
+  const [enrollSession,setEnrollSession]=useState(0);
 
   // Edit Enrollment State
 
@@ -89,6 +97,7 @@ const Courses = () => {
   // Assign state
 
   const [assignCourseId, setAssignCourseId] = useState(null);
+  const [newInstructorId,setNewInstructorId]=useState(''),[newInstructorRate,setNewInstructorRate]=useState('');
   const [selectedInstructorId, setSelectedInstructorId] = useState('');
   const [hourlyRate, setHourlyRate] = useState('');
 
@@ -129,7 +138,7 @@ const Courses = () => {
     e.preventDefault();
     try {
       await axios.post('/cycles', {
-        ...schedule, parentCourseId: parentId, cycleNumber: name,
+        ...schedule, name:privateCycleName,bookPrice:privateBookPrice,parentCourseId: parentId, cycleNumber: name,instructorId:newInstructorId||undefined,hourlyRate:newInstructorId?newInstructorRate:undefined,
         branch,
         details,
         startDate: startDate || null,
@@ -152,7 +161,7 @@ const Courses = () => {
     try {
       await axios.put(`/cycles/${editingCourse.id}`, {
         venue: editingCourse.venue, classStartTime: editingCourse.classStartTime, classEndTime: editingCourse.classEndTime,
-        cycleNumber: editingCourse.cycleNumber,
+        cycleNumber: editingCourse.cycleNumber,name:editingCourse.name,bookPrice:editingCourse.bookPrice,
         branch: editingCourse.branch,
         details: editingCourse.details,
         startDate: editingCourse.startDate || null,
@@ -258,7 +267,8 @@ const Courses = () => {
     }
   };
   const resetForm = () => {
-    setName('');
+    setNewInstructorId('');setNewInstructorRate('');
+    setName('');setPrivateCycleName('');setPrivateBookPrice('0');
     setBranch(BRANCHES[0]);
     setTotalHours('');
     setCourseFee(''); setSchedule({});
@@ -266,7 +276,7 @@ const Courses = () => {
     setStartDate('');
     setEndDate('');
   };
-  const handleOpenEnroll = course => setEnrollingCourse(course);
+  const handleOpenEnroll = course => {setEnrollSession(n=>n+1);setEnrollingCourse(course);};
   const handleOpenEditEnrollment = (course, enrollment) => {
     setEditingEnrollment({
       courseId: course.id,
@@ -300,6 +310,7 @@ const Courses = () => {
     }
   };
   const handleRequestRemoveEnrollment = (course, enrollment) => {
+    setRemovalOptions({mode:'KEEP',tuitionReduction:0,bookReduction:0,confirm:false});
     setKeepEnrollmentFinancials(true);
     setConfirmEnrollmentRemoval(false);
     setRemovingEnrollment({
@@ -309,7 +320,8 @@ const Courses = () => {
     });
   };
   const handleConfirmRemoveEnrollment = async () => {
-    if (!removingEnrollment) return;
+    if (!removingEnrollment||removalBusy.current) return;
+    removalBusy.current=true;setRemovalSaving(true);
     try {
       const {
         courseId,
@@ -317,8 +329,7 @@ const Courses = () => {
       } = removingEnrollment;
       const res = await axios.delete(`/cycles/${courseId}/enrollments/${enrollment.id}`, {
         data: {
-          keepFinancialRecords: keepEnrollmentFinancials,
-          confirm: confirmEnrollmentRemoval
+          ...removalOptions
         }
       });
       toast.success(res.data.pending ? res.data.message : `Removed ${enrollment.student.name} from course`);
@@ -326,8 +337,8 @@ const Courses = () => {
       setRemovingEnrollment(null);
       fetchData();
     } catch (error) {
-      toast.error(error.response?.data?.error || 'Failed to remove student');
-    }
+      toast.error(error.response?.data?.error || error.response?.data?.message || 'Failed to remove student');
+    }finally{removalBusy.current=false;setRemovalSaving(false);}
   };
   const isAnyFilterActive = Boolean(filterName || filterBranch || filterStatus);
   const clearAllFilters = () => {
@@ -382,7 +393,7 @@ const Courses = () => {
   const editForm = editingCourse ? (
             <form onSubmit={handleEditSubmit} className="cycle-inline-edit">
 
-              <div>
+              {editingCourse.isPrivate||editingCourse.parentCourse?.isPrivate ? <><div><label className="input-label" htmlFor="edit-private-name">Private cycle name *</label><input id="edit-private-name" className="input-field" required maxLength={200} value={editingCourse.name} onChange={e=>setEditingCourse({...editingCourse,name:e.target.value})}/></div><div><label className="input-label" htmlFor="edit-private-books">Book price (EGP) *</label><input id="edit-private-books" className="input-field" required type="number" min="0" step="0.01" value={editingCourse.bookPrice??0} onChange={e=>setEditingCourse({...editingCourse,bookPrice:e.target.value})}/><small className="muted">Previous payments keep their original price.</small></div></> : <div>
 
                 <label className="input-label appearance-text-emerald-900">Cycle number</label>
 
@@ -391,7 +402,7 @@ const Courses = () => {
                 cycleNumber: e.target.value
               })} required />
 
-              </div>
+              </div>}
 
               <div>
 
@@ -484,9 +495,9 @@ const Courses = () => {
       <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
 
         <ExcelExportButton parentCourseId={parentId} />
-        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
+        <PrivateBadge record={parentCourse}/>{user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
 
-        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary" onClick={() => setImportOpen(true)}>Import cycle from Excel</button>}
+        <PrivateBadge record={parentCourse}/>{user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary" onClick={() => setImportOpen(true)}>Import cycle from Excel</button>}
       </PageHeading>
 
       <div className="section-tabs" aria-label="Course status">
@@ -594,13 +605,13 @@ const Courses = () => {
 
             <form onSubmit={handleAddSubmit} className="flex flex-col gap-4">
 
-              <div>
+              {parentCourse?.isPrivate ? <><div><label className="input-label" htmlFor="private-cycle-name">Private cycle name *</label><input id="private-cycle-name" className="input-field" required maxLength={200} value={privateCycleName} onChange={e=>setPrivateCycleName(e.target.value)} placeholder="e.g. Private KET · Ahmed"/></div><div><label className="input-label" htmlFor="private-book-price">Book price (EGP) *</label><input id="private-book-price" className="input-field" type="number" min="0" step="0.01" required value={privateBookPrice} onChange={e=>setPrivateBookPrice(e.target.value)}/><small className="muted">Applies to new purchases only.</small></div></> : <div>
 
                 <label className="input-label appearance-text-emerald-900">Cycle number</label>
 
                 <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required /><small className="muted">Suggested next number. You can enter another unused number; numbering is shared across branches.</small>
 
-              </div>
+              </div>}
 
               <div>
 
@@ -639,6 +650,7 @@ const Courses = () => {
               </div>
 
               <CycleScheduleFields value={schedule} onChange={setSchedule} />
+              <label>Employee (optional)<CustomFilterDropdown searchable value={newInstructorId} onChange={setNewInstructorId} placeholder="Search employees by name or ID…" options={instructorsList.map(i=>({value:i.id,label:`${i.name}${i.employeeId?' · '+i.employeeId:''}`}))}/></label>{newInstructorId&&<label>Hourly rate (EGP) *<input className="input-field" type="number" min="0" step="0.01" required value={newInstructorRate} onChange={e=>setNewInstructorRate(e.target.value)}/></label>}
 <div className="flex gap-4">
 
                 <div className="flex-1">
@@ -709,7 +721,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Select Employee</label>
 
-                <CustomFilterDropdown value={selectedInstructorId} onChange={setSelectedInstructorId} required placeholder="Choose employee" options={instructorsList.filter(inst => {
+                <CustomFilterDropdown searchable value={selectedInstructorId} onChange={setSelectedInstructorId} required placeholder="Search employees by name or ID…" options={instructorsList.filter(inst => {
                   const targetCourse = courses.find(c => c.id === assignCourseId);
                   return !(targetCourse?.instructors?.map(ci => ci.instructorId) || []).includes(inst.id);
                 }).map(inst => ({value:inst.id,label:inst.name}))} />
@@ -877,7 +889,7 @@ const Courses = () => {
 
 
 
-      <AnimatePresence>{enrollingCourse && <EnrollmentDialog course={enrollingCourse} manager={user.role !== 'user'} onClose={() => setEnrollingCourse(null)} onSaved={fetchData} />}</AnimatePresence>
+      <AnimatePresence>{enrollingCourse && <EnrollmentDialog key={enrollSession} course={enrollingCourse} manager={user.role !== 'user'} onClose={() => setEnrollingCourse(null)} onSaved={fetchData} />}</AnimatePresence>
 
 
 
@@ -977,9 +989,9 @@ const Courses = () => {
 
         <p>{removingEnrollment.courseName} · {Number(removingEnrollment.enrollment.amountPaid || 0).toLocaleString()} EGP collected</p>
 
-        <FinancialRemovalChoice keep={keepEnrollmentFinancials} onKeep={setKeepEnrollmentFinancials} confirmed={confirmEnrollmentRemoval} onConfirm={setConfirmEnrollmentRemoval} />
+        <EnrollmentRemovalFields value={removalOptions} onChange={setRemovalOptions} enrollment={removingEnrollment.enrollment}/>
 
-        <div className="payment-entry-actions"><button type="button" className="btn-secondary" onClick={() => setRemovingEnrollment(null)}>Cancel</button><button type="button" className="btn-primary" disabled={!confirmEnrollmentRemoval} onClick={handleConfirmRemoveEnrollment}>{user.role === 'user' ? 'Request removal' : 'Archive enrollment'}</button></div>
+        <div className="payment-entry-actions"><button type="button" className="btn-secondary" onClick={() => setRemovingEnrollment(null)}>Cancel</button><button type="button" className="btn-primary" disabled={removalSaving||!removalOptions.confirm} onClick={handleConfirmRemoveEnrollment}>Permanently remove enrollment</button></div>
 
       </div></Dialog>}</AnimatePresence>
 
@@ -1016,13 +1028,13 @@ function CourseRows({
 
     <tr className={expanded ? 'expanded-row' : ''}>
 
-      <td><button className="table-title course-name" onClick={onExpand} aria-expanded={expanded}>{course.name}</button><small>{course.startDate ? date(course.startDate) : 'Dates not set'}{course.endDate ? ' — ' + date(course.endDate) : ''}</small></td>
+      <td><button className="table-title course-name" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course}/></button><small>{course.startDate ? date(course.startDate) : 'Dates not set'}{course.endDate ? ' — ' + date(course.endDate) : ''}</small></td>
 
       <td><span className="branch-label"><span style={{
             "--runtime-background": getBranchColor(course.branch)
           }} className="courses-presentation-2" />{course.branch}</span></td>
 
-      <td>{course.instructors.length ? <span className="instructor-cell"><span className="mini-avatar">{course.instructors[0].instructor.name.slice(0, 1)}</span><span>{course.instructors[0].instructor.name}{course.instructors.length > 1 && <small>+{course.instructors.length - 1} additional employee</small>}</span></span> : <span className="muted">Unassigned</span>}</td>
+      <td>{course.instructors.length ? <span className="instructor-cell"><span className="mini-avatar">{initials(course.instructors[0].instructor.name)}</span><span>{course.instructors[0].instructor.name}{course.instructors.length > 1 && <small>+{course.instructors.length - 1} additional employee</small>}</span></span> : <span className="muted">Unassigned</span>}</td>
 
       <td>
 
@@ -1114,8 +1126,8 @@ export function CourseDetail({
   return <div className="course-detail cycle-detail-layout">
 
       <section className="cycle-overview">
-        <div className="cycle-overview-heading"><div className="cycle-heading-identity"><span className="eyebrow">{course.parentCourse?.code || course.branch}</span><h3>{course.name}</h3><Status complete={course.isFinished}>{course.archivedAt ? 'Archived' : course.isFinished ? 'Completed' : 'In progress'}</Status>{course.details && <p>{course.details}</p>}</div><div className="cycle-date-range"><CalendarDays size={19}/><div><span>Start date</span><strong>{date(course.startDate)}</strong></div><span className="cycle-date-separator" aria-hidden="true">→</span><div><span>End date</span><strong>{date(course.endDate)}</strong></div></div></div>
-        <div className="cycle-facts"><div className="cycle-fact-venue"><MapPin size={19}/><div><span>Venue / room</span><strong>{course.venue || 'Not set'}</strong></div></div><div className="cycle-fact-time"><Clock3 size={19}/><div><span>Class time</span><strong>{classTimeLabel(course) || 'Not set'}</strong></div></div><div className="cycle-fact-tuition"><DollarSign size={19}/><div><span>Standard tuition</span><strong>{Number(course.courseFee || 0).toLocaleString()} <small>EGP</small></strong></div></div><div className="cycle-fact-hours"><BookOpen size={19}/><div><span>Teaching hours</span><strong>{course.totalHours ?? 'Not set'}{course.totalHours != null && <small> hours</small>}</strong></div></div></div>
+        <div className="cycle-overview-heading"><div className="cycle-heading-identity"><span className="eyebrow">{course.parentCourse?.code || course.branch}</span><h3>{course.name}<PrivateBadge record={course}/></h3><Status complete={course.isFinished}>{course.archivedAt ? 'Archived' : course.isFinished ? 'Completed' : 'In progress'}</Status>{course.details && <p>{course.details}</p>}</div><div className="cycle-date-range"><CalendarDays size={19}/><div><span>Start date</span><strong>{date(course.startDate)}</strong></div><span className="cycle-date-separator" aria-hidden="true">→</span><div><span>End date</span><strong>{date(course.endDate)}</strong></div></div></div>
+        <div className="cycle-facts"><div className="cycle-fact-venue"><MapPin size={19}/><div><span>Venue / room</span><strong>{course.venue || 'Not set'}</strong></div></div><div className="cycle-fact-time"><Clock3 size={19}/><div><span>Class time</span><strong>{classTimeLabel(course) || 'Not set'}</strong></div></div><div className="cycle-fact-tuition"><DollarSign size={19}/><div><span>Standard tuition</span><strong>{Number(course.courseFee || 0).toLocaleString()} <small>EGP</small></strong>{course.isPrivate && <small className="cycle-private-books">Books · {Number(course.bookPrice||0).toLocaleString()} EGP</small>}</div></div><div className="cycle-fact-hours"><BookOpen size={19}/><div><span>Teaching hours</span><strong>{course.totalHours ?? 'Not set'}{course.totalHours != null && <small> hours</small>}</strong></div></div></div>
         {manager && !readOnly && <div className="cycle-action-bar"><div className="cycle-primary-actions">{course.archivedAt ? <button className="btn-secondary" onClick={onRestore}><RotateCcw size={15}/>Restore cycle</button> : <><button className="btn-secondary" onClick={onEdit}><Edit2 size={15}/>Edit details</button>{course.isFinished && !course.payrollEarnings?.length && course.instructors.length > 0 && <button className="btn-primary" onClick={onFinish}>Confirm teaching hours</button>}{course.isFinished ? <button className="btn-secondary" onClick={onRevert}><RotateCcw size={15}/>Reopen cycle</button> : <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={15}/>Complete cycle</button>}</>}</div><div className="cycle-danger-actions">{!course.archivedAt && <button className="btn-secondary" onClick={onDelete}><Archive size={15}/>Archive</button>}<button className="btn-secondary cycle-delete-action" onClick={onPermanentDelete}><Trash2 size={15}/>Permanently delete</button></div></div>}
       </section>
       <section className="cycle-roster-panel">
@@ -1187,7 +1199,7 @@ export function CourseDetail({
 
               <div className="summary-stats">
 
-                <span>Enrolled: <strong>{enrollments.length} Students</strong></span>
+                <span>Enrolled: <strong>{enrollments.length} Students</strong></span>{(course.retainedTuition>0||course.retainedBooks>0)&&<span>Retained from removed enrollments: <strong>{Number((course.retainedTuition||0)+(course.retainedBooks||0)).toLocaleString()} EGP</strong></span>}
 
                 {<>
 
@@ -1199,9 +1211,9 @@ export function CourseDetail({
 
               </div>
 
-              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt} onClick={onEnroll}>
+              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?"This private cycle already has a student":""} onClick={onEnroll}>
 
-                <Plus size={13} /> Enroll student
+                <Plus size={13} /> {course.privateSeatOccupied ? "Private place filled" : "Enroll student"}
 
               </button>}
 
@@ -1267,7 +1279,7 @@ export function CourseDetail({
 
                 </p>
 
-                {enrollments.length === 0 && !readOnly ? <button className="text-button" disabled={!!course.archivedAt} onClick={onEnroll}>
+                {enrollments.length === 0 && !readOnly ? <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?"This private cycle already has a student":""} onClick={onEnroll}>
 
                     <Plus size={13} /> Enroll first student
 
@@ -1284,6 +1296,7 @@ export function CourseDetail({
 
                 {filteredEnrollments.map(enr => <StudentTuitionRow key={enr.id} course={course} enrollment={enr} manager={manager} readOnly={readOnly} onBooksChanged={onPaymentsChanged} onEdit={() => onEditEnrollment(enr)} onRemove={() => onRemoveEnrollment(enr)} />)}
               </div>}
+              {manager&&!readOnly&&<RemovedEnrollments courseId={course.id} refreshKey={(course.enrollments||[]).map(row=>row.id).join(',')} onSaved={onPaymentsChanged}/>}
 
           </div>}
 
@@ -1316,7 +1329,7 @@ function CourseTile(props) {
           "--runtime-background": color
         }} className="courses-presentation-9" />{course.branch}</span><Status complete={course.isFinished}>{course.isFinished ? 'Completed' : 'In progress'}</Status></div>
 
-  <button className="course-tile-title" onClick={onExpand} aria-expanded={expanded}>{course.name}</button>
+  <button className="course-tile-title" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course}/></button>
 
   <div className="course-tile-date"><CalendarDays size={14} />{date(course.startDate)}{course.endDate ? ' — ' + date(course.endDate) : ''}</div>
 
@@ -1376,7 +1389,7 @@ function CourseTile(props) {
 
   {(course.venue || classTimeLabel(course)) && <div className="cycle-schedule-summary">{course.venue && <span>Venue: <strong>{course.venue}</strong></span>}{classTimeLabel(course) && <span>Class: <strong>{classTimeLabel(course)}</strong></span>}</div>}<div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Cycle details'}<ChevronRight size={16} /></button></div>
 
-  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>{props.editForm ? 'Edit cycle details' : 'Cycle details'}</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div>{props.editForm ? <div className="cycle-edit-view"><div className="cycle-edit-intro"><h3>{course.name}</h3><p>Update this cycle’s details, location and schedule.</p></div>{props.editForm}</div> : <CourseDetail {...props} onEdit={props.onEdit} onPermanentDelete={() => { onExpand(); props.onPermanentDelete(); }} onDelete={() => {
+  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>{props.editForm ? 'Edit cycle details' : 'Cycle details'}</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div>{props.editForm ? <div className="cycle-edit-view"><div className="cycle-edit-intro"><h3>{course.name}<PrivateBadge record={course}/></h3><p>Update this cycle’s details, location and schedule.</p></div>{props.editForm}</div> : <CourseDetail {...props} onEdit={props.onEdit} onPermanentDelete={() => { onExpand(); props.onPermanentDelete(); }} onDelete={() => {
             onExpand();
             props.onDelete();
           }} onRevert={() => {
@@ -1395,13 +1408,10 @@ function CourseTile(props) {
             onExpand();
             props.onRemove(id);
           }} onEnroll={() => {
-            onExpand();
             props.onEnroll();
           }} onEditEnrollment={enr => {
-            onExpand();
             props.onEditEnrollment(enr);
           }} onRemoveEnrollment={enr => {
-            onExpand();
             props.onRemoveEnrollment(enr);
           }} />}</div></Dialog>}</AnimatePresence>
 

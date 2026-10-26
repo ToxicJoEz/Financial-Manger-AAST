@@ -16,13 +16,13 @@ export const updateBookStatus = atomic(async (req, res, next) => {
     } else {
       if (row.deletedAt || row.financialArchivedAt || row.student.deletedAt || row.course.archivedAt || row.course.parentCourse.archivedAt) fail('Restore this student and cycle before recording book status.');
       if (current) fail('Books already have a status. An admin or moderator must undo it first.', 409);
-      const price = moneyMinor(row.course.parentCourse.bookPrice, 'Book price');
-      if (status === 'PAID' && (price <= 0n || moneyMinor(expectedPrice, 'Displayed book price') !== price)) fail('The book price changed or is not set. Refresh and check the umbrella price before recording payment.', 409);
+      const price = moneyMinor(row.course.parentCourse.isPrivate?row.course.bookPrice:row.course.parentCourse.bookPrice,'Book price');
+      if (status === 'PAID' && (price <= 0n || moneyMinor(expectedPrice, 'Displayed book price') !== price)) fail('The book price changed or is not set. Refresh and check the current book price before recording payment.', 409);
       await prisma.bookPayment.create({ data: { enrollmentId: row.id, activeKey: row.id, status, amountMinor: status === 'PAID' ? price : 0n, recordedBy: req.user.username } });
     }
     // Also update the enrollment version for deletion previews and concurrent edits.
     await prisma.enrollment.update({ where: { id: row.id }, data: { updatedAt: new Date() } });
-    await logAction('BOOK_' + status, `${row.student.name} / ${row.course.name}: ${status}; ${status === 'PAID' ? row.course.parentCourse.bookPrice : 0} EGP`, req.user.username);
+    await logAction('BOOK_' + status, `${row.student.name} / ${row.course.name}: ${status}; ${status === 'PAID' ? (row.course.parentCourse.isPrivate?row.course.bookPrice:row.course.parentCourse.bookPrice) : 0} EGP`, req.user.username);
     res.json({ message: status === 'UNPAID' ? 'Book status undone.' : status === 'PAID' ? 'Book payment recorded.' : 'Books marked not required.' });
   } catch (error) { if (error.code === 'P2002') return res.status(409).json({ error: 'Book status changed. Refresh and review before trying again.' }); next(error); }
 });

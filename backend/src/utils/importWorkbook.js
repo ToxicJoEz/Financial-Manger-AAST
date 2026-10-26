@@ -112,11 +112,11 @@ export async function parseStudentsWorkbook(buffer) {
       }
       for (const [key, label] of Object.entries(aliases)) if (normalize(value) === normalize(label) || key === 'receiptNumber' && normalize(value) === normalize('رقم الحافظة')) {
         columns[key] = cell.col;
-        if (key === 'registrationNumber') header = row.number;
+        if (key === 'registrationNumber'||key === 'name') header = Math.max(header||0,row.number);
       }
     });
   });
-  for (const key of ['name', 'registrationNumber', 'amount', 'paymentMethod']) if (!columns[key]) throw importError(`Missing required column: ${aliases[key]}.`);
+  for (const key of ['name', 'amount']) if (!columns[key]) throw importError(`Missing required column: ${aliases[key]}.`);
   if (!startDate || !endDate || endDate < startDate) throw importError('Valid cycle dates could not be found after فترة الانعقاد.');
   const rows = [];
   for (let index = header + 1; index <= sheet.rowCount; index++) {
@@ -124,7 +124,7 @@ export async function parseStudentsWorkbook(buffer) {
       read = key => columns[key] ? text(row.getCell(columns[key])) : '';
     const registrationNumber = digits(read('registrationNumber'));
     if (!registrationNumber && !read('name')) continue;
-    if (!registrationNumber || !read('name')) throw importError(`Excel row ${index}: student name and registration number are required.`);
+    if (!read('name')) throw importError(`Excel row ${index}: student name is required.`);
     if (columns.currency && !['جنيه مصري', 'EGP'].includes(read('currency'))) throw importError(`Excel row ${index}: only EGP payments are supported.`);
     const method = read('paymentMethod');
     const amount = Number(moneyMinor(digits(read('amount')), `Excel row ${index} amount`)) / 100;
@@ -132,7 +132,7 @@ export async function parseStudentsWorkbook(buffer) {
     const dateOfBirth = birthCell?.value instanceof Date ? birthCell.value.toISOString().slice(0, 10) : read('dateOfBirth') ? isoDate(read('dateOfBirth'), `Excel row ${index} date of birth`) : null;
     const student = {
       name: normalizedName(read('name')),
-      registrationNumber,
+      registrationNumber: registrationNumber || null,
       mobile: read('mobile') || null,
       englishName: read('englishName') || null,
       dateOfBirth,
@@ -142,6 +142,7 @@ export async function parseStudentsWorkbook(buffer) {
     profileFields(student);
     if (student.name.length > 200 || registrationNumber.length > 100 || (student.mobile?.length || 0) > 50) throw importError(`Excel row ${index}: a student field is too long.`);
     rows.push({
+      rowKey: registrationNumber || `row:${index}`,
       row: index,
       ...student,
       amount,
@@ -156,9 +157,9 @@ export async function parseStudentsWorkbook(buffer) {
     startDate,
     endDate,
     rows: rows.map(({
-      row,
+      row, rowKey,
       ...data
-    }) => data).sort((a, b) => a.registrationNumber.localeCompare(b.registrationNumber))
+    }) => data).sort((a, b) => (a.registrationNumber||a.name).localeCompare(b.registrationNumber||b.name))
   };
   return {
     courseCode,

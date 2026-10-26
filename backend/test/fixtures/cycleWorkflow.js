@@ -101,12 +101,14 @@ try {
   const enrollmentRequest = ok(await req('/cycles/' + cycle.id + '/enrollments', 'POST', {
     studentId: 'demo-student-1',
     recordPayment: true,
-    amountPaid: 400
+    amountPaid: 400,tuitionType:'DISCOUNTED',customFee:400
   }, junior));
   assert(enrollmentRequest.pending);
   ok(await req('/student-requests/' + enrollmentRequest.requestId + '/approve', 'POST'));
   const enrollment = await prisma.enrollment.findUnique({ where: { courseId_studentId: { courseId: cycle.id, studentId: 'demo-student-1' } } });
   assert.equal(enrollment.amountPaid, 400);
+  // Preserve coverage of a pre-policy outstanding balance without creating one through the enrollment API.
+  await prisma.enrollment.update({where:{id:enrollment.id},data:{customFee:1000}});
   const payments = '/cycles/' + cycle.id + '/enrollments/' + enrollment.id + '/payments';
   assert.equal((await req(payments, 'POST', {
     amount: 601,

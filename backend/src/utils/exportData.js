@@ -1,3 +1,4 @@
+import {privateLabel} from './privateCourses.js';
 export const EXPORT_COLUMNS = {
   courses: {
     course: 'Cycle',
@@ -78,11 +79,11 @@ export function buildExport(courses, user, selection, filters) {
     const financial = c.enrollments.filter(e => !e.financialArchivedAt);
     const visible = e => manager || !e.student.deletedAt && !e.deletedAt && !e.financialArchivedAt;
     const expected = money(financial.reduce((sum, e) => sum + (e.customFee ?? c.courseFee), 0));
-    const collected = money(financial.reduce((sum, e) => sum + e.amountPaid, 0));
-    const bookIncome = money(financial.reduce((sum,e) => sum + (e.bookPayments || []).filter(p=>p.status === 'PAID').reduce((n,p)=>n+Number(p.amountMinor)/100,0),0));
+    const collected = money((c.retainedIncome||[]).reduce((sum,row)=>sum+Number(row.tuitionMinor)/100,0)+financial.reduce((sum, e) => sum + e.amountPaid, 0));
+    const bookIncome = money((c.retainedIncome||[]).reduce((sum,row)=>sum+Number(row.bookMinor)/100,0)+financial.reduce((sum,e) => sum + (e.bookPayments || []).filter(p=>p.status === 'PAID').reduce((n,p)=>n+Number(p.amountMinor)/100,0),0));
     const remaining = money(financial.reduce((sum, e) => sum + Math.max(0, money((e.customFee ?? c.courseFee) - e.amountPaid)), 0));
     if ((!filters.branch || c.branch === filters.branch) && within(c.startDate || c.createdAt, filters) && (!filters.tuitionStatus || financial.some(e => visible(e) && tuitionStatus(e.customFee ?? c.courseFee, e.amountPaid) === filters.tuitionStatus))) rows.courses.push({
-      course: c.name, courseName: c.parentCourse?.name || c.name, courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
+      course: privateLabel(c.name,c.parentCourse?.isPrivate), courseName: privateLabel(c.parentCourse?.name || c.name,c.parentCourse?.isPrivate), courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
       branch: c.branch,
       venue: c.venue || '', classStartTime: c.classStartTime || '', classEndTime: c.classEndTime || '',
       startDate: day(c.startDate),
@@ -105,7 +106,7 @@ export function buildExport(courses, user, selection, filters) {
         englishName: e.student.englishName || '', mobile: e.student.mobile || '', dateOfBirth: day(e.student.dateOfBirth), nationality: e.student.nationality || '', placeOfBirth: e.student.placeOfBirth || '',
         paymentMethods: [...new Set((e.payments || []).filter(p => p.kind === 'PAYMENT' && !p.reversal).map(p => p.paymentMethod || 'UNSPECIFIED'))].join(', '),
         receiptNumbers: [...new Set((e.payments || []).filter(p => p.kind === 'PAYMENT' && !p.reversal && p.receiptNumber).map(p => p.receiptNumber))].join(', '),
-        course: c.name, courseName: c.parentCourse?.name || c.name, courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
+        course: privateLabel(c.name,c.parentCourse?.isPrivate), courseName: privateLabel(c.parentCourse?.name || c.name,c.parentCourse?.isPrivate), courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
         branch: c.branch,
         enrolledAt: day(e.enrolledAt),
         fee,
@@ -120,7 +121,7 @@ export function buildExport(courses, user, selection, filters) {
       const status = earning.batch?.status || 'UNPAID';
       const date = filters.payrollDateBasis === 'initiatedDate' ? earning.batch?.initiatedDate : filters.payrollDateBasis === 'actualPaymentDate' ? earning.batch?.actualPaymentDate : earning.createdAt;
       if (filters.branch && earning.branch !== filters.branch || filters.payrollStatus && status !== filters.payrollStatus || !within(date, filters)) continue;
-      rows.payroll.push({ course: earning.cycleName, courseName: c.parentCourse?.name || '', courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
+      rows.payroll.push({ course: privateLabel(earning.cycleName,earning.isPrivate), courseName: privateLabel(c.parentCourse?.name || '',c.parentCourse?.isPrivate), courseCode: c.parentCourse?.code || '', cycleNumber: c.cycleNumber,
         branch: earning.branch, instructor: earning.instructorName, employeeId: earning.employeeId || '',
         recordedAt: day(earning.createdAt), initiatedDate: day(earning.batch?.initiatedDate), actualPaymentDate: day(earning.batch?.actualPaymentDate), batchId: earning.batchId || '', initiatedBy: earning.batch?.initiatedBy || '', paidBy: earning.batch?.paidBy || '',
         hours: earning.hours, rate: earning.rate, earned: Number(earning.amountMinor) / 100, status });

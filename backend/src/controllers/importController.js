@@ -1,3 +1,4 @@
+import {privateName,cycleNumberFor} from '../utils/privateCourses.js';
 import {auditContext} from '../utils/auditContext.js';
 import { cycleSchedule } from '../utils/cycleSchedule.js';
 import { savePayrollRecord } from '../utils/payrollRecord.js';
@@ -19,7 +20,7 @@ async function inspect(parsed, user) {
     where: {
       OR: [{
         registrationNumber: {
-          in: parsed.rows.map(r => r.registrationNumber)
+          in: parsed.rows.map(r => r.registrationNumber).filter(Boolean)
         }
       }, {
         name: {
@@ -30,18 +31,21 @@ async function inspect(parsed, user) {
   });
   const seen = new Set();
   return parsed.rows.map(row => {
-    const existing = students.find(s => s.registrationNumber === row.registrationNumber);
+    const candidates=students.filter(s=>!s.deletedAt&&normalizedName(s.name)===normalizedName(row.name)&&((row.mobile&&s.mobile===row.mobile)||(row.dateOfBirth&&dateOnly(s.dateOfBirth)===row.dateOfBirth)));
+    const existing = row.registrationNumber?students.find(s => s.registrationNumber === row.registrationNumber):candidates.length===1?candidates[0]:null;
     const issues = [];
-    if (seen.has(row.registrationNumber)) issues.push('Duplicate registration number inside this workbook.');
+    if(existing&&seen.has('student:'+existing.id))issues.push('This existing student appears more than once in this workbook.');
+    if(existing)seen.add('student:'+existing.id);
+    if (row.registrationNumber&&seen.has(row.registrationNumber)) issues.push('Duplicate registration number inside this workbook.');
     seen.add(row.registrationNumber);
-    if (row.paymentMethod === 'UNSPECIFIED') issues.push(`Unknown payment-method code: ${row.methodCode || '(blank)'}. Correct the source workbook.`);
+    if (row.amount>0&&row.paymentMethod === 'UNSPECIFIED') issues.push(`Unknown payment-method code: ${row.methodCode || '(blank)'}. Correct the source workbook.`);
     if (existing?.deletedAt) issues.push('This registration number belongs to a deleted student. Ask a manager to resolve the record before importing.');else if (existing && normalizedName(existing.name) !== normalizedName(row.name)) issues.push('Registration number already belongs to a different student name. Correct the source or student directory first.');
     const differences = existing && !existing.deletedAt ? fields.filter(key => existing[key] && row[key] && normalizedName(dateOnly(existing[key])) !== normalizedName(row[key])).map(key => ({
       field: key,
       existing: dateOnly(existing[key]),
       incoming: row[key]
     })) : [];
-    const sameName = students.some(s => !s.deletedAt && normalizedName(s.name) === normalizedName(row.name) && s.registrationNumber !== row.registrationNumber);
+    const sameName = students.some(s => s.id!==existing?.id && !s.deletedAt && normalizedName(s.name) === normalizedName(row.name) && s.registrationNumber !== row.registrationNumber);
     return {
       ...row,
       existing: existing ? {
@@ -86,7 +90,7 @@ export const previewImport = async (req, res, next) => {
       parentId: parent.id,
       parsed,
       fileName,
-      studentVersions: Object.fromEntries(rows.map(r => [r.registrationNumber, r.existing ? {
+      studentVersions: Object.fromEntries(rows.map(r => [r.registrationNumber||r.rowKey, r.existing ? {
         id: r.existing.id,
         updatedAt: r.existing.updatedAt
       } : null]))
@@ -103,6 +107,7 @@ export const previewImport = async (req, res, next) => {
       parent: {
         id: parent.id,
         name: parent.name,
+        isPrivate:parent.isPrivate,
         code: parent.code
       }
     });
@@ -137,9 +142,8 @@ export const commitImport = atomic(async (req, res, next) => {
       error: 'This roster was already imported.',
       cycleId: prior.cycleId
     });
-    const number = numberValue(req.body.cycleNumber, 'Cycle number', {
-      positive: true
-    });
+    if(parent.isPrivate&&parsed.rows.length!==1)throw importError('A private cycle roster must contain exactly one student. No records were imported.');
+    const number = parent.isPrivate?await cycleNumberFor(parent):numberValue(req.body.cycleNumber,'Cycle number',{positive:true});
     if (!Number.isInteger(number) || number > 2147483647) throw importError('Cycle number must be a positive whole number up to 2,147,483,647.');
     if (await prisma.cycle.findUnique({
       where: {
@@ -165,7 +169,7 @@ export const commitImport = atomic(async (req, res, next) => {
       rows
     });
     for (const row of rows) {
-      const previous = claim.studentVersions[row.registrationNumber];
+      const previous = claim.studentVersions[row.registrationNumber||row.rowKey];
       if ((previous?.id || null) !== (row.existing?.id || null) || (previous?.updatedAt || null) !== (row.existing?.updatedAt || null)) throw importError('A student record changed after this preview. Upload again to review the latest details.', 409);
     }
     const choices = req.body.choices;
@@ -174,23 +178,20 @@ export const commitImport = atomic(async (req, res, next) => {
     if (paymentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !Number.isFinite(Date.parse(paymentDate)) || new Date(paymentDate).toISOString().slice(0, 10) !== paymentDate || paymentDate > new Date().toISOString().slice(0, 10))) throw importError('Actual payment date must be valid and not in the future.');
     if (req.body.details != null && (typeof req.body.details !== 'string' || req.body.details.length > 2000)) throw importError('Description must be text of up to 2,000 characters.');
     const instructorId = req.body.instructorId || null;
-    if (instructorId && !(await prisma.instructor.findUnique({
-      where: {
-        id: instructorId
-      }
-    }))) throw importError('Selected instructor no longer exists.');
+    if (instructorId && !(await prisma.instructor.findFirst({where:{id:instructorId,archivedAt:null}}))) throw importError('Selected instructor no longer exists.');
     const rate = instructorId && isManager(req.user) ? numberValue(req.body.hourlyRate, 'Hourly rate') : null;
     // Validate every row before writing; atomic() also rolls back all work on errors.
     for (const row of rows) {
-      const c = choices[row.registrationNumber];
+      const c = choices[row.registrationNumber||row.rowKey];
       if (!c || !['keep', 'fill', 'replace'].includes(c.profile)) throw importError(`Review student details for registration ${row.registrationNumber}.`);
       if (row.sameName && c.confirmSameName !== true) throw importError(`Review the matching name with another registration number for ${row.registrationNumber}.`);
+      if(c.feeMode==='partial')throw importError('Partial enrollments are not allowed. Choose discounted tuition or exemption.');
       if (row.amount > fee) throw importError(`Registration ${row.registrationNumber}: the course fee is ${fee} EGP; you cannot record ${row.amount} EGP paid.`);
-      if (row.amount < fee && !['partial', 'discount', 'exempt'].includes(c.feeMode)) throw importError(`Registration ${row.registrationNumber}: choose partial payment or a discounted fee.`);
-      if (c.feeMode === 'discount' && !isManager(req.user)) throw importError('Only admins and mods can confirm discounted fees. Ask a manager to import this roster, or record it as partial payment.', 403);
+      if (row.amount < fee && !['discount', 'exempt'].includes(c.feeMode)) throw importError(`Registration ${row.registrationNumber}: choose discounted tuition or exemption.`);
+      if (c.feeMode === 'discount' && !isManager(req.user)) throw importError('Only admins and mods can confirm discounted fees. Ask a manager to import this roster.', 403);
       if (c.feeMode === 'exempt' && row.amount !== 0) throw importError('An exempt student cannot have a positive payment.');
       const custom = c.feeMode === 'exempt' ? 0 : c.feeMode === 'discount' ? Number(moneyMinor(c.customFee, 'Discounted fee')) / 100 : null;
-      if (custom !== null && (custom < row.amount || custom > fee)) throw importError(`Registration ${row.registrationNumber}: discounted fee must be between the payment and standard fee.`);
+      if (custom !== null && (custom !== row.amount || custom > fee)) throw importError(`Registration ${row.registrationNumber}: discounted tuition must equal the amount paid and cannot exceed the standard fee.`);
     }
     const isFinished = importedCycleFinished(endDate);
     const cycle = await prisma.cycle.create({
@@ -198,7 +199,8 @@ export const commitImport = atomic(async (req, res, next) => {
         ...cycleSchedule(req.body),
         parentCourseId: parent.id,
         cycleNumber: number,
-        name: `${parent.name} ${number}`,
+        name:parent.isPrivate?privateName(req.body.name):`${parent.name} ${number}`,
+        bookPrice:parent.isPrivate?Number(moneyMinor(req.body.bookPrice??0,'Book price'))/100:0,
         branch,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
@@ -218,10 +220,10 @@ export const commitImport = atomic(async (req, res, next) => {
         studentCount: rows.length
       }
     });
-    if(auditContext.getStore())auditContext.getStore().records=rows.map(({existing,...row})=>({...row,selectedChoice:choices[row.registrationNumber]}));
+    if(auditContext.getStore())auditContext.getStore().records=rows.map(({existing,...row})=>({...row,selectedChoice:choices[row.registrationNumber||row.rowKey]}));
     let created = 0;
     for (const row of rows) {
-      const choice = choices[row.registrationNumber];
+      const choice = choices[row.registrationNumber||row.rowKey];
       const incoming = {
         name: row.name,
         registrationNumber: row.registrationNumber,
@@ -265,7 +267,7 @@ export const commitImport = atomic(async (req, res, next) => {
         receiptNumber: row.receiptNumber,
         paymentDateKnown: Boolean(paymentDate),
         occurredAt: paymentDate ? new Date(paymentDate) : new Date(),
-        idempotencyKey: `import:${batch.id}:${row.registrationNumber}`,
+        idempotencyKey: `import:${batch.id}:${row.registrationNumber||row.rowKey}`,
         importBatchId: batch.id
       });
     }

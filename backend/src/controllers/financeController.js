@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
 import prisma, { atomic } from '../db/prisma.js';
 import { earningView } from '../utils/payrollRecord.js';
-import { cairoToday } from '../utils/academyDate.js';
 import { logAction } from '../utils/logger.js';
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const paymentDate = (value, label) => {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value || value > cairoToday() || value < '1900-01-01') fail(`Choose a valid ${label}, no later than today.`);
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value || value < '0001-01-01') fail(`Choose a valid ${label}.`);
   return new Date(value + 'T00:00:00Z');
 };
 
@@ -16,13 +15,13 @@ export const getFinances = async (req, res, next) => {
     const records = await prisma.payrollEarning.findMany({ include: { batch: true }, orderBy: [{ instructorName: 'asc' }, { createdAt: 'desc' }], take: 10001 });
     if (records.length > 10000) return res.status(413).json({ error: 'Payroll exceeds the interactive limit. Contact your administrator to archive old records.' });
     const earnings = records.map(earningView);
-    const batches = await prisma.instructorPaymentBatch.findMany({ include: { earnings: { orderBy: { cycleName: 'asc' } } }, orderBy: { createdAt: 'desc' }, take: 10000 });
+    const batches = await prisma.instructorPaymentBatch.findMany({ where:{status:{not:'CANCELLED'}}, include: { earnings: { orderBy: { cycleName: 'asc' } } }, orderBy: { createdAt: 'desc' }, take: 10000 });
     const amounts = { totalPayroll: 0n, totalPaid: 0n, totalProcessing: 0n, totalUnpaid: 0n };
     for (const row of records) {
       amounts.totalPayroll += row.amountMinor;
       amounts[row.batch?.status === 'PAID' ? 'totalPaid' : row.batch ? 'totalProcessing' : 'totalUnpaid'] += row.amountMinor;
     }
-    const needsAllocation = await prisma.cycle.findMany({ where: { isFinished: true, archivedAt: null, payrollEarnings: { none: {} } }, select: { id: true, name: true, parentCourseId: true, branch: true } });
+    const needsAllocation = await prisma.cycle.findMany({ where: { isFinished: true, archivedAt: null, payrollEarnings: { none: {} } }, select: { id: true, name: true, parentCourseId: true, branch: true,parentCourse:{select:{isPrivate:true}} } });
     const monthlyRows = month ? records.filter(e => e.batch?.status === 'PAID' && e.batch.actualPaymentDate?.toISOString().slice(0, 7) === month) : [];
     const monthlyInstructors = new Map();
     for (const row of monthlyRows) {
@@ -31,7 +30,7 @@ export const getFinances = async (req, res, next) => {
     }
     const monthly = month ? { month, instructorsPaid: monthlyInstructors.size, cyclesPaid: new Set(monthlyRows.map(row => row.courseId)).size, paymentsCompleted: new Set(monthlyRows.map(row => row.batchId)).size, totalPaid: Number(monthlyRows.reduce((sum, row) => sum + row.amountMinor, 0n)) / 100, instructors: [...monthlyInstructors.values()].sort((a,b) => Number(b.amountMinor-a.amountMinor)).map(({amountMinor,...row}) => ({ ...row, totalPaid: Number(amountMinor)/100 })) } : null;
     res.json({ monthly, summary: monthly ? { totalPaid: monthly.totalPaid, instructorsPaid: monthly.instructorsPaid, cyclesPaid: monthly.cyclesPaid, paymentsCompleted: monthly.paymentsCompleted } : Object.fromEntries(Object.entries(amounts).map(([key, value]) => [key, Number(value) / 100])), earnings,
-      batches: batches.map(batch => ({ ...batch, earnings: batch.earnings.map(earningView), amount: Number(batch.earnings.reduce((sum, e) => sum + e.amountMinor, 0n)) / 100 })), needsAllocation });
+      batches: batches.map(batch => ({ ...batch, earnings: batch.earnings.map(e=>({...earningView(e),status:batch.status})), amount: Number(batch.earnings.reduce((sum, e) => sum + e.amountMinor, 0n)) / 100 })), needsAllocation });
   } catch (error) { next(error); }
 };
 
@@ -67,7 +66,6 @@ export const completePaymentHandler = async (req, res, next) => {
     const batch = await prisma.instructorPaymentBatch.findUnique({ where: { id: req.params.id } });
     if (!batch) fail('Payment batch not found.', 404);
     if (batch.status !== 'PROCESSING') fail('This batch has already been paid.', 409);
-    if (date < batch.initiatedDate) fail('Actual payment date cannot be earlier than the initiation date.');
     const claimed = await prisma.instructorPaymentBatch.updateMany({ where: { id: batch.id, status: 'PROCESSING' }, data: { status: 'PAID', actualPaymentDate: date, paidBy: req.user.username } });
     if (claimed.count !== 1) fail('Another reviewer already processed this payment.', 409);
     await logAction('COMPLETE_INSTRUCTOR_PAYMENT', `Batch ${batch.id} for ${batch.instructorName} paid on ${req.body.actualPaymentDate}. Initiation date preserved.`, req.user.username);
@@ -150,4 +148,19 @@ export const completeDailyBatch = atomic(async (req, res, next) => {
     await logAction('COMPLETE_DAILY_PAYMENT_BATCH', `Confirmed ${batchIds.length} payments initiated ${req.params.day}; actual payment date ${req.body.actualPaymentDate}.`, req.user.username);
     res.json({ message: `Batch confirmed: ${batchIds.length} payments marked as paid.` });
   } catch (error) { next(error); }
+});
+
+export const returnProcessingToUnpaid=atomic(async(req,res,next)=>{
+ try{
+  const {earningIds,versions}=req.body;
+  if(!Array.isArray(earningIds)||!earningIds.length||earningIds.length>1000||earningIds.some(id=>typeof id!=='string')||new Set(earningIds).size!==earningIds.length)fail('Select valid, unique processing salary items (up to 1,000).');
+  const rows=await prisma.payrollEarning.findMany({where:{id:{in:earningIds}},include:{batch:true}});
+  if(rows.length!==earningIds.length||rows.some(row=>row.batch?.status!=='PROCESSING'))fail('Only processing payments can return to unpaid. Some records changed; refresh and try again.',409);
+  if(!versions||rows.some(row=>versions[row.id]!==row.updatedAt.toISOString()))fail('These payments changed after selection. Refresh and select again.',409);
+  const result=await prisma.payrollEarning.updateMany({where:{id:{in:earningIds},batchId:{in:[...new Set(rows.map(row=>row.batchId))]}},data:{batchId:null}});
+  if(result.count!==rows.length)fail('Another reviewer changed these payments.',409);
+  for(const id of new Set(rows.map(row=>row.batchId)))if(!await prisma.payrollEarning.count({where:{batchId:id}}))await prisma.instructorPaymentBatch.update({where:{id},data:{status:'CANCELLED'}});
+  await logAction('RETURN_PAYROLL_TO_UNPAID',`${rows.length} salary items returned to unpaid.`,req.user.username);
+  res.json({message:`${rows.length} salary items returned to unpaid. Processing totals updated.`});
+ }catch(error){next(error);}
 });

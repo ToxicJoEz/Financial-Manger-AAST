@@ -42,3 +42,7 @@ test('Instructor earnings use selected-cycle batches and separate payment dates'
 test('Employee Excel imports merge branches and preserve unique identities',()=>fixture('employeeImportWorkflow.js'));
 
 test('Audit history survives failures and deletions with role-scoped access',()=>fixture('auditWorkflow.js'));
+
+test('Management corrections preserve balances, identity and access boundaries',()=>fixture('managementWorkflow.js'));
+
+test('Private cycles preserve naming, capacity, book prices and finance metadata',()=>fixture('privateCourseWorkflow.js'));
