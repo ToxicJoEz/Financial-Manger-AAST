@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import { useContext, useEffect, useRef, useState, useId } from 'react';
 import axios from 'axios';
 import { FileSpreadsheet, ChevronDown } from 'lucide-react';
@@ -144,8 +145,8 @@ function ExportDialog({
               value: c.id,
               label: `${c.name} · ${c.branch}${c.archivedAt ? ' (archived)' : ''}`
             }))]} />
-          {!salaryMonth && <><label>From date<input className="input-field" type="date" value={filters.from} onChange={e => change('from', e.target.value)} /></label>
-          <label>Through date<input className="input-field" type="date" value={filters.to} onChange={e => change('to', e.target.value)} /></label>
+          {!salaryMonth && <><label>From date<DateInput className="input-field"  value={filters.from} onChange={e => change('from', e.target.value)} /></label>
+          <label>Through date<DateInput className="input-field"  value={filters.to} onChange={e => change('to', e.target.value)} /></label>
           <ExportSelect label="Student payment status" value={filters.tuitionStatus} onChange={v => change('tuitionStatus', v)} options={[...all, ...['PAID', 'PARTIAL', 'UNPAID', 'EXEMPT'].map(value => ({
               value,
               label: value

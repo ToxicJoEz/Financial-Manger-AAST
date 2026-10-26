@@ -1,3 +1,5 @@
+import DateInput from '../components/DateInput';
+import PrivateCycleImportDialog from '../components/PrivateCycleImportDialog';
 import PrivateBadge from '../components/PrivateBadge';
 import RemovedEnrollments from '../components/RemovedEnrollments';
 import EnrollmentRemovalFields from '../components/EnrollmentRemovalFields';
@@ -390,6 +392,7 @@ const Courses = () => {
   }, [loading, location.state, courses, navigate, location.pathname, user.role]);
   if (loading) return <div className="loading-state"><span className="loading-spinner" />Loading cycles…</div>;
   if (loadError) return <section className="panel"><EmptyState title="Courses couldn’t be loaded" description="Check your connection and try again."><button className="btn-primary" onClick={fetchData}>Try again</button></EmptyState></section>;
+  const ImportDialog = parentCourse?.isPrivate ? PrivateCycleImportDialog : CycleImportDialog;
   const editForm = editingCourse ? (
             <form onSubmit={handleEditSubmit} className="cycle-inline-edit">
 
@@ -432,7 +435,7 @@ const Courses = () => {
 
                   <label className="input-label appearance-text-emerald-900">Start Date</label>
 
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.startDate ? editingCourse.startDate.split('T')[0] : ''} onChange={e => setEditingCourse({
+                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.startDate ? editingCourse.startDate.split('T')[0] : ''} onChange={e => setEditingCourse({
                   ...editingCourse,
                   startDate: e.target.value
                 })} />
@@ -443,7 +446,7 @@ const Courses = () => {
 
                   <label className="input-label appearance-text-emerald-900">End Date</label>
 
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.endDate ? editingCourse.endDate.split('T')[0] : ''} onChange={e => setEditingCourse({
+                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.endDate ? editingCourse.endDate.split('T')[0] : ''} onChange={e => setEditingCourse({
                   ...editingCourse,
                   endDate: e.target.value
                 })} />
@@ -592,7 +595,7 @@ const Courses = () => {
 
       {/* Add Course Modal */}
 
-      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
+      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <ImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
       <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
 
           <div className="modal-content card max-w-lg w-full relative">
@@ -635,7 +638,7 @@ const Courses = () => {
 
                   <label className="input-label appearance-text-emerald-900">Start Date</label>
 
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
 
                 </div>
 
@@ -643,7 +646,7 @@ const Courses = () => {
 
                   <label className="input-label appearance-text-emerald-900">End Date</label>
 
-                  <input type="date" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={endDate} onChange={e => setEndDate(e.target.value)} />
+                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={endDate} onChange={e => setEndDate(e.target.value)} />
 
                 </div>
 
@@ -997,7 +1000,8 @@ const Courses = () => {
 
     </div>;
 };
-function CourseRows({
+function CourseRows(props) {
+ const {
   course,
   expanded,
   user,
@@ -1016,12 +1020,12 @@ function CourseRows({
   onReplace,
   onRestore,
   onPaymentsChanged
-}) {
+}=props;
   const manager = user.role !== 'user';
   const date = value => value ? new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
   }) : 'Not set';
   const studentCount = course.totalEnrolled ?? course.enrollments?.length ?? 0;
   return <>
@@ -1056,24 +1060,7 @@ function CourseRows({
 
     </tr>
 
-    {expanded && <tr className="course-detail-row"><td colSpan="7"><CourseDetail {...{
-          course,
-          user,
-          onEdit,
-          onDelete,
-          onPermanentDelete,
-          onRevert,
-          onRemove,
-          onReview,
-          onFinish,
-          onAssign,
-          onEnroll,
-          onEditEnrollment,
-          onRemoveEnrollment,
-          onPaymentsChanged,
-          onReplace,
-          onRestore
-        }} /></td></tr>}
+    <CycleDetailsModal {...props} />
 
   </>;
 }
@@ -1102,9 +1089,9 @@ export function CourseDetail({
   const [studentSearch, setStudentSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const date = value => value ? new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
   }) : 'Not set';
   const enrollments = course.enrollments || [];
   const expectedTotal = course.totalExpectedRevenue || 0;
@@ -1304,6 +1291,35 @@ export function CourseDetail({
 
     </div>;
 }
+function CycleDetailsModal(props) {
+ const {course,expanded,onExpand}=props;
+ return <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>{props.editForm ? 'Edit cycle details' : 'Cycle details'}</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div>{props.editForm ? <div className="cycle-edit-view"><div className="cycle-edit-intro"><h3>{course.name}<PrivateBadge record={course}/></h3><p>Update this cycle’s details, location and schedule.</p></div>{props.editForm}</div> : <CourseDetail {...props} onEdit={props.onEdit} onPermanentDelete={() => { onExpand(); props.onPermanentDelete(); }} onDelete={() => {
+            onExpand();
+            props.onDelete();
+          }} onRevert={() => {
+            onExpand();
+            props.onRevert();
+          }} onReview={pa => {
+            onExpand();
+            props.onReview(pa);
+          }} onFinish={() => {
+            onExpand();
+            props.onFinish();
+          }} onAssign={() => {
+            onExpand();
+            props.onAssign();
+          }} onRemove={id => {
+            onExpand();
+            props.onRemove(id);
+          }} onEnroll={() => {
+            props.onEnroll();
+          }} onEditEnrollment={enr => {
+            props.onEditEnrollment(enr);
+          }} onRemoveEnrollment={enr => {
+            props.onRemoveEnrollment(enr);
+          }} />}</div></Dialog>}</AnimatePresence>;
+}
+
 function CourseTile(props) {
   const {
     course,
@@ -1313,9 +1329,9 @@ function CourseTile(props) {
   } = props;
   const manager = user.role !== 'user';
   const color = getBranchColor(course.branch);
-  const date = value => value ? new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short'
+  const date = value => value ? new Date(value).toLocaleDateString('en-GB', { year:'2-digit',
+    day: '2-digit',
+    month: '2-digit'
   }) : 'Dates to be confirmed';
   const studentCount = course.totalEnrolled ?? course.enrollments?.length ?? 0;
   const expectedTotal = course.totalExpectedRevenue ?? 0;
@@ -1389,31 +1405,7 @@ function CourseTile(props) {
 
   {(course.venue || classTimeLabel(course)) && <div className="cycle-schedule-summary">{course.venue && <span>Venue: <strong>{course.venue}</strong></span>}{classTimeLabel(course) && <span>Class: <strong>{classTimeLabel(course)}</strong></span>}</div>}<div className="course-tile-footer"><span><Clock3 size={15} /><strong>{course.totalHours || '—'}</strong>hours</span><button className="text-button" onClick={onExpand} aria-expanded={expanded}>{expanded ? 'Close details' : 'Cycle details'}<ChevronRight size={16} /></button></div>
 
-  <AnimatePresence>{expanded && <Dialog title={course.name} onClose={onExpand}><div className="modal-content card course-detail-modal"><div className="detail-modal-heading"><span className="course-tile-icon"><BookOpen size={23} /></span><div><span className="eyebrow">{course.branch}</span><h2>{props.editForm ? 'Edit cycle details' : 'Cycle details'}</h2></div><button className="icon-button" aria-label="Close cycle details" onClick={onExpand}><X size={20} /></button></div>{props.editForm ? <div className="cycle-edit-view"><div className="cycle-edit-intro"><h3>{course.name}<PrivateBadge record={course}/></h3><p>Update this cycle’s details, location and schedule.</p></div>{props.editForm}</div> : <CourseDetail {...props} onEdit={props.onEdit} onPermanentDelete={() => { onExpand(); props.onPermanentDelete(); }} onDelete={() => {
-            onExpand();
-            props.onDelete();
-          }} onRevert={() => {
-            onExpand();
-            props.onRevert();
-          }} onReview={pa => {
-            onExpand();
-            props.onReview(pa);
-          }} onFinish={() => {
-            onExpand();
-            props.onFinish();
-          }} onAssign={() => {
-            onExpand();
-            props.onAssign();
-          }} onRemove={id => {
-            onExpand();
-            props.onRemove(id);
-          }} onEnroll={() => {
-            props.onEnroll();
-          }} onEditEnrollment={enr => {
-            props.onEditEnrollment(enr);
-          }} onRemoveEnrollment={enr => {
-            props.onRemoveEnrollment(enr);
-          }} />}</div></Dialog>}</AnimatePresence>
+  <CycleDetailsModal {...props} />
 
  </article>;
 }

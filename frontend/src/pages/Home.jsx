@@ -65,9 +65,9 @@ export default function Home() {
     return map;
   }, {})).sort((a, b) => b[1] - a[1]);
   const dateLabel = new Date().toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
   });
   const firstName = user.firstName || user.username;
   return <div className="overview-page">

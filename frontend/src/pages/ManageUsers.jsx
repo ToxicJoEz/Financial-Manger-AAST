@@ -142,9 +142,9 @@ const ManageUsers = () => {
                   </td>
                   <td>
                     <span className="appearance-text-xs text-muted">
-                      {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
+                      {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-GB', { year:'2-digit',
+                  day: '2-digit',
+                  month: '2-digit',
                   hour: '2-digit',
                   minute: '2-digit'
                 }) : 'Never'}

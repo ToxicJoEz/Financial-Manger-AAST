@@ -46,3 +46,5 @@ test('Audit history survives failures and deletions with role-scoped access',()=
 test('Management corrections preserve balances, identity and access boundaries',()=>fixture('managementWorkflow.js'));
 
 test('Private cycles preserve naming, capacity, book prices and finance metadata',()=>fixture('privateCourseWorkflow.js'));
+
+test('Private workbooks import separate paid cycles with reviewed employee and phone mapping',()=>fixture('privateWorkbookWorkflow.js'));

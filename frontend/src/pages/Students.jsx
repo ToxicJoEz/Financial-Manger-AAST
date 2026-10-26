@@ -1,3 +1,4 @@
+import {dateText} from '../utils/dates';
 import ArchiveControls from '../components/ArchiveControls';
 import StudentDetailsDialog from '../components/StudentDetailsDialog';
 import { AuthContext } from '../context/AuthContext';
@@ -188,7 +189,7 @@ export default function Students() {
                         <span className="student-avatar">{initials(student.name)}</span>
                         <div className="student-name-block">
                           <button type="button" className="student-name-link" onClick={()=>setViewingStudent(student)}>{student.name}</button> {student.deletedAt && <span className="deleted-tag">Archived</span>}
-                          <span>{student.englishName || `ID: ${student.id.slice(0, 8)}…`}</span><small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?.slice(0,10)].filter(Boolean).join(" · ")}</small>
+                          <span>{student.englishName || `ID: ${student.id.slice(0, 8)}…`}</span><small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?dateText(student.dateOfBirth):null].filter(Boolean).join(" · ")}</small>
                         </div>
                       </div>
                     </td>
@@ -204,9 +205,9 @@ export default function Students() {
                     <td>
                       <span className="muted">
                         {new Date(student.createdAt).toLocaleDateString('en-GB', {
-                    day: 'numeric',
-                    month: 'short',
-                    year: 'numeric'
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit'
                   })}
                       </span>
                     </td>

@@ -40,9 +40,9 @@ export default function Income() {
   const visibleIncome = cycles.reduce((total, cycle) => total + cycle.income, 0);
   const monthLabel = new Date(`${month}-01T12:00:00`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
   const date = value => new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
   });
   return <section className="income-page"><PageHeading eyebrow="TUITION & BOOKS" title="Course income" description="All recorded student payments belong to the cycle’s start month."><label className="month-control"><Calendar size={15} /><input type="month" aria-label="Income month" required value={month} onChange={e => {
           if (e.target.value) {

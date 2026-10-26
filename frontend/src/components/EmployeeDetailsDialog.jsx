@@ -12,7 +12,7 @@ import {CourseDetail} from '../pages/Courses';
 import {classTimeLabel} from './CycleScheduleFields';
 import {getBranchColor} from '../utils/branchColors';
 import '../styles/_studentDetails.scss';
-const date=value=>value?new Date(value).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'Not set';
+const date=value=>value?new Date(value).toLocaleDateString('en-GB',{day: '2-digit',month: '2-digit',year: '2-digit'}):'Not set';
 export default function EmployeeDetailsDialog({employeeId,onClose}){
  const {user}=useContext(AuthContext),panel=useRef(null),scroll=useRef(0);
  const [reportBusy,setReportBusy]=useState(false);

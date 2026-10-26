@@ -23,7 +23,7 @@ export const summarizeAction=(req)=>{
  let action=({POST:'CREATE',PUT:'UPDATE',PATCH:'UPDATE',DELETE:'DELETE',GET:'READ'})[req.method]||req.method;
  if(/auth\/login$/.test(path))action='LOGIN_LOCAL';else if(/auth\/sso$/.test(path))action='LOGIN_SSO';else if(/auth\/logout$/.test(path))action='LOGOUT';
  else if(path==='exports/events')action='EXPORT_REPORT';else if(path==='exports')action='PREPARE_EXCEL_EXPORT';
- else if(path.includes('import'))action=tail==='preview'?'PREVIEW_IMPORT':'IMPORT_DATA';
+ else if(path.includes('import'))action=['preview','review'].includes(tail)?'PREVIEW_IMPORT':'IMPORT_DATA';
  else if(tail==='permanent')action='PERMANENT_DELETE';else if(tail==='finish')action='COMPLETE_CYCLE';else if(tail==='revert')action='REOPEN_CYCLE';else if(tail==='restore')action='RESTORE';
  else if(tail==='approve')action='APPROVE_REQUEST';else if(tail==='reject')action='REJECT_REQUEST';
  else if(req.method==='DELETE'&&['courses','cycles'].includes(parts[0]))action='ARCHIVE';
@@ -41,13 +41,13 @@ export async function auditData(client,audit,req,status,body){
   const username=audit.notes.find(n=>/^LOGIN_/.test(n.action))?.actorUsername||req.body?.username;
   if(typeof username==='string')actor=await client.user.findUnique({where:{username},select:{id:true,username:true,role:true}});
  }
- const previewErrors=Array.isArray(body?.rows)?body.rows.filter(row=>row.action==='ERROR'||row.issues?.length):[];
+ const previewErrors=Array.isArray(body?.rows)?body.rows.filter(row=>row.action==='ERROR'||row.issues?.length||row.errors?.length):[];
  const failed=status>=400||previewErrors.length>0||audit.clientResult==='FAILURE';
  const notes=audit.notes,primary=notes.at(-1);
  const submitted=Buffer.isBuffer(req.body)?{fileBytes:req.body.length}:safeAudit(req.body||{});
  const fileName=req.auditFileName||audit.fileName;
  const result={};for(const key of ['message','created','updated','enrolled','reused','cycleName','cycleId','importId','membershipsAdded'])if(body?.[key]!==undefined)result[key]=body[key];
- if(previewErrors.length)result.validationErrors=previewErrors.map(r=>({row:r.rowNumber,name:r.name,employeeId:r.employeeId,issues:r.issues}));
+ if(previewErrors.length)result.validationErrors=previewErrors.map(r=>({row:r.rowNumber,name:r.name,employeeId:r.employeeId,issues:r.issues||r.errors}));
  const details=safeAudit({identityVerified:Boolean(req.user||audit.verified||audit.notes.some(n=>/^LOGIN_/.test(n.action))),importedRows:audit.records,submitted,query:req.query,fileName,notes,changes:audit.changes,committed:!failed,result,error:status>=400?{status,message:body?.error||body?.message||'The action failed.'}:undefined,method:req.method,path:req.originalUrl.split('?')[0]});
  let description=primary?.description||route.description;
  if(fileName&&!description.includes(fileName))description+=' · '+fileName;

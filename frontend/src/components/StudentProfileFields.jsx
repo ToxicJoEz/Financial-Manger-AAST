@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 export const studentProfileFields = [{
   key: 'englishName',
   label: 'English name',
@@ -20,8 +21,8 @@ export default function StudentProfileFields({
   onChange,
   prefix
 }) {
-  return studentProfileFields.map(field => <div className="student-form-group" key={field.key}><label htmlFor={`${prefix}-${field.key}`}>{field.label}</label><input className="input-field" id={`${prefix}-${field.key}`} type={field.type} max={field.type === 'date' ? new Date().toISOString().slice(0, 10) : undefined} maxLength={200} value={value[field.key]?.slice?.(0, field.type === 'date' ? 10 : 200) || ''} onChange={e => onChange({
+  return studentProfileFields.map(field => {const Input=field.type==='date'?DateInput:'input';return <div className="student-form-group" key={field.key}><label htmlFor={`${prefix}-${field.key}`}>{field.label}</label><Input className="input-field" id={`${prefix}-${field.key}`} type={field.type} max={field.type === 'date' ? new Date().toISOString().slice(0, 10) : undefined} maxLength={200} value={value[field.key]?.slice?.(0, field.type === 'date' ? 10 : 200) || ''} onChange={e => onChange({
       ...value,
       [field.key]: e.target.value
-    })} /></div>);
+    })} /></div>;});
 }

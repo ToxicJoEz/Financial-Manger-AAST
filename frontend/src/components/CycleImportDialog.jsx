@@ -1,3 +1,4 @@
+import DateInput from './DateInput';
 import PrivateBadge from './PrivateBadge';
 import {recordClientFailure} from '../utils/activity';
 import CycleScheduleFields from './CycleScheduleFields';
@@ -161,8 +162,8 @@ export default function CycleImportDialog({
    {parent.isPrivate && rows.length!==1 && <p className="alert-error" role="alert">A private cycle can contain only one student. Upload a single-student roster or create an empty cycle manually.</p>}<h4>Cycle details {parent.isPrivate?'· Private':''}</h4><div className="import-form-grid">
     {parent.isPrivate ? <><Field label="Private cycle name" id="import-private-name"><input id="import-private-name" className="input-field" required maxLength={200} value={form.name} onChange={e=>set('name',e.target.value)}/></Field><Field label="Book price (EGP)" id="import-private-books"><input id="import-private-books" className="input-field" required type="number" min="0" step="0.01" value={form.bookPrice} onChange={e=>set('bookPrice',e.target.value)}/></Field></> : <Field label="Cycle number" id="import-number"><input id="import-number" className="input-field" required type="number" min="1" max="2147483647" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>}
     <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={BRANCH_OPTIONS} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
-    <Field label="Start date · from Excel" id="import-start"><input id="import-start" className="input-field" required type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
-    <Field label="End date · from Excel" id="import-end"><input id="import-end" className="input-field" required type="date" min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>
+    <Field label="Start date · from Excel" id="import-start"><DateInput id="import-start" className="input-field" required  value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
+    <Field label="End date · from Excel" id="import-end"><DateInput id="import-end" className="input-field" required  min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>
     <Field label="Standard tuition fee (EGP)" id="import-fee" hint="Suggested from the most common payment amount. You can edit it."><input id="import-fee" className="input-field" required type="number" min="0" step="0.01" value={form.courseFee} onChange={e => {
                 set('courseFee', e.target.value);
 

@@ -8,7 +8,7 @@ import { money, Status } from './WorkspaceUI';
 import { CourseDetail } from '../pages/Courses';
 import { getBranchColor } from '../utils/branchColors';
 import '../styles/_studentDetails.scss';
-const date = value => value ? new Date(value).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : 'Not set';
+const date = value => value ? new Date(value).toLocaleDateString('en-GB',{day: '2-digit',month: '2-digit',year: '2-digit'}) : 'Not set';
 export default function StudentDetailsDialog({ studentId, onClose }) {
   const { user }=useContext(AuthContext);
   const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0);

@@ -18,9 +18,10 @@ export async function createExcelBuffer(report) {
     }));
     for (const values of data.rows) {
       // ExcelJS string values are literal cells, never formula objects or hyperlinks.
-      const row = sheet.addRow(data.columns.map(column => values[column.key] ?? ''));
+      const row = sheet.addRow(data.columns.map(column => ((/date|^start$|^end$|enrolled|earnedAt|recordedAt/i.test(column.key)&&/^\d{4}-\d{2}-\d{2}(?:T.*)?$/.test(String(values[column.key]||'')))?new Date(values[column.key]):values[column.key] ?? '')));
       row.eachCell(cell => {
-        if (typeof cell.value === 'number') cell.numFmt = '#,##0.00;[Red](#,##0.00)';
+        if (cell.value instanceof Date) cell.numFmt='dd/mm/yy';
+        else if (typeof cell.value === 'number') cell.numFmt = '#,##0.00;[Red](#,##0.00)';
       });
     }
     sheet.views = [{
