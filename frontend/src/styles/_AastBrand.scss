@@ -1,3 +1,4 @@
+@font-face { font-family:'Libre Baskerville'; src:url('../assets/branding/fonts/LibreBaskerville.ttf') format('truetype'); font-style:normal; font-weight:400 700; font-display:swap; }
 /* Shared AAST/IEC family lockup. Application accents are supplied below. */
 :root { --aast-brand-title:#203362; --aast-brand-accent:#3459cb; --aast-brand-inverse-title:#eef4ff; --aast-brand-inverse-accent:#b6c9ff; }
 [data-theme='dark'] { --aast-brand-title:var(--aast-brand-inverse-title); --aast-brand-accent:var(--aast-brand-inverse-accent); }
@@ -7,7 +8,7 @@
 .aast-app-brand-logo { display:block; width:72px; height:52px; object-fit:contain; }
 .aast-app-brand-wordmark { display:flex; flex-direction:column; align-items:flex-end; gap:5px; font-family:Manrope,'Segoe UI',sans-serif; }
 .aast-app-brand-wordmark>strong { font-size:27px; line-height:1; font-weight:800; letter-spacing:2px; }
-.aast-app-brand-wordmark>span { color:var(--aast-brand-accent); font-size:10px; line-height:1; font-weight:600; text-transform:uppercase; letter-spacing:1.8px; }
+.aast-app-brand-wordmark>span { color:var(--aast-brand-accent); font-family:'Libre Baskerville',Georgia,serif; font-size:10px; line-height:1; font-weight:700; text-transform:uppercase; letter-spacing:1.8px; }
 .workspace-login>header .aast-app-brand-logo,.signin-brand .aast-app-brand-logo { width:92px; height:66px; }
 .workspace-login>header .aast-app-brand-wordmark>strong,.signin-brand .aast-app-brand-wordmark>strong { font-size:33px; }
 .workspace-login>header .aast-app-brand-wordmark>span,.signin-brand .aast-app-brand-wordmark>span { font-size:12px; letter-spacing:2px; }

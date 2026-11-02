@@ -9,4 +9,4 @@ The workspace uses the same AAST/IEC family lockup as the SSO Portal and CEPT: s
 
 This change affects on-screen branding and the browser icon. Course, student, payroll and export behavior is unchanged.
 
-Browser tabs use a simple blue dollar-sign icon (`frontend/public/app-icon.svg`). The FINANCE label uses restrained semibold Manrope lettering with measured spacing.
+Browser tabs use a simple blue dollar-sign icon (`frontend/public/app-icon.svg`). The FINANCE label uses upright Libre Baskerville serif lettering with measured spacing, bundled locally with its OFL license.
