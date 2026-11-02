@@ -104,7 +104,7 @@ export default function DashboardLayout() {
     <a className="skip-link" href="#main-content">Skip to content</a>
     {mobileOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
     <aside ref={sidebarRef} className={`sidebar ${mobileOpen ? 'is-open' : ''}`} aria-label="Main navigation">
-      <div className="sidebar-brand"><Link to="/" aria-label="AAST Finance overview"><Brand /></Link><button className="icon-button sidebar-close" aria-label="Close menu" onClick={() => setMobileOpen(false)}><PanelLeftClose size={20} /></button></div>
+      <div className="sidebar-brand"><Link to="/" aria-label="AAST Finance overview"><Brand inverse /></Link><button className="icon-button sidebar-close" aria-label="Close menu" onClick={() => setMobileOpen(false)}><PanelLeftClose size={20} /></button></div>
       <div className="nav-section-label">Workspace</div>
       <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
       <div className="nav-section-label administration-label">Settings</div>

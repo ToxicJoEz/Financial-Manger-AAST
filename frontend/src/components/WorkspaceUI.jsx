@@ -1,8 +1,7 @@
+import AastBrand from './AastBrand';
 import { ArrowRight, BookOpen, Wallet, Clock3, Users, CheckCircle2 } from 'lucide-react';
 
-export function Brand() {
-  return <span className="brand"><span className="brand-symbol" aria-hidden="true"><i /><i /><i /><i /></span><span className="brand-name">aast<span>finance</span></span></span>;
-}
+export function Brand({ inverse = false }) { return <AastBrand application="FINANCE" inverse={inverse} />; }
 
 export function PageHeading({ eyebrow, title, description, children }) {
   return <div className="page-heading"><div>{eyebrow && <div className="eyebrow">{eyebrow}</div>}<h1>{title}</h1>{description && <p>{description}</p>}</div>{children && <div className="page-actions">{children}</div>}</div>;
