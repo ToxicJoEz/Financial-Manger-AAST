@@ -1,5 +1,6 @@
-import {auditActor} from '../utils/auditContext.js';
+import { auditActor } from '../utils/auditContext.js';
 import jwt from 'jsonwebtoken';
+import { canSeePayroll } from '../utils/access.js';
 import prisma from '../db/prisma.js';
 
 export const protect = async (req, res, next) => {
@@ -11,21 +12,32 @@ export const protect = async (req, res, next) => {
         throw new Error('FATAL: JWT_SECRET environment variable is not defined.');
       }
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
+
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
-        select: { id: true, username: true, role: true, email: true, firstName: true, lastName: true, isActive: true, isBanned: true }
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          isActive: true,
+          isBanned: true,
+          canManageBooks: true,
+          branchScope: true
+        }
       });
-      
+
       if (!user) {
         res.status(401);
         throw new Error('User no longer exists');
       }
-      
-      auditActor(user,decoded.authMethod);
+
+      auditActor(user, decoded.authMethod);
       if (user.isBanned || !user.isActive) {
-         res.status(403);
-         throw new Error('Account disabled or banned');
+        res.status(403);
+        throw new Error('Account disabled or banned');
       }
 
       req.user = user;
@@ -42,10 +54,19 @@ export const protect = async (req, res, next) => {
 
 export const modOrAbove = (req, res, next) => {
   if (req.user && (req.user.role === 'admin' || req.user.role === 'mod')) {
-    next(); 
+    next();
   } else {
     res.status(403);
     next(new Error('Not authorized. This action requires Mod or Admin privileges.'));
+  }
+};
+
+// Payroll (salaries, rates, payment batches) is for admins and the main mod only, never branch mods.
+export const payrollManager = (req, res, next) => {
+  if (canSeePayroll(req.user)) next();
+  else {
+    res.status(403);
+    next(new Error('Payroll is handled by admins and the main mod.'));
   }
 };
 

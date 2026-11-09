@@ -3,13 +3,13 @@ import axios from 'axios';
 
 export const AuthContext = createContext();
 
+// All API requests use relative /api paths unless a deployment overrides the base URL.
+axios.defaults.baseURL = import.meta.env.VITE_API_URL || '/api';
+
 export const AuthProvider = ({ children }) => {
   const incomingSSO = useRef(new URLSearchParams(window.location.search).has('token'));
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  // Configure axios defaults
-  axios.defaults.baseURL = import.meta.env.VITE_API_URL || '/api';
 
   useEffect(() => {
     const checkUserLoggedIn = async () => {

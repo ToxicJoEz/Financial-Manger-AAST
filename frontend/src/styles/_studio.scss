@@ -88,6 +88,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 .removed-enrollments{margin-top:24px;border:1px solid #dce3ef;border-radius:12px;background:#fafbff;}.removed-enrollments-heading{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;text-align:start;padding:16px 18px;border:0;border-radius:12px;background:transparent;color:#425b80;strong{font-size:14px;}small{display:block;font-size:11px;font-weight:400;color:#7b8ca5;margin-top:5px;}strong small{display:inline;}}.removed-enrollments-content{padding:0 18px 16px;}.removed-enrollment-row{display:flex;justify-content:space-between;align-items:center;gap:18px;padding:16px 0;border-top:1px solid #e1e7f0;>div{display:grid;gap:7px;min-width:0;}strong{font-size:13px;}small{font-size:11px;color:#7b8ca5;}span{font-size:12px;color:#526886;}.btn-secondary{font-size:11px;flex-shrink:0;}}@media(max-width:650px){.removed-enrollment-row{align-items:flex-start;flex-direction:column;}}
 
 .private-course-badge {display:inline-flex;align-items:center;vertical-align:middle;margin-inline:8px;padding:3px 9px;border-radius:6px;border:1px solid #a78bfa66;background:#8b5cf618;color:#7c3aed;font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.025em;white-space:nowrap;}
+.group-course-badge {display:inline-flex;align-items:center;vertical-align:middle;margin-inline:8px;padding:3px 9px;border-radius:6px;border:1px solid #10b98166;background:#10b98118;color:#047857;font-size:11px;font-weight:700;line-height:1.4;letter-spacing:.025em;white-space:nowrap;}
 .private-type-choice {display:flex;align-items:center;gap:10px;padding:14px;border:1px solid var(--border-color,#cbd5e1);border-radius:12px;margin:14px 0;}
 
 .cycle-facts .cycle-private-books {display:block;margin-top:5px;font-size:11px;line-height:1.4;}
@@ -114,3 +115,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
 fieldset.private-import-grid {padding:0;border:0;min-width:0;}
 
 .private-required {color:#dc3545;}.private-import-checklist {padding:18px;margin-top:20px;border:1px solid #cbd5e177;border-radius:12px;background:#64748b06;font-size:12px;}.private-import-checklist h4 {margin:0 0 8px;}.private-import-checklist p {line-height:1.6;}.private-import-checklist ul {padding-left:18px;max-height:220px;overflow:auto;}.private-import-checklist li {margin:7px 0;}.private-import-checklist .text-button {text-align:start;font-size:12px;white-space:normal;}.private-import-ready {display:flex;align-items:center;gap:8px;color:#16846b;}.private-import-row:focus {outline:2px solid #6366f1;outline-offset:3px;}
+
+// Private import: one card per cycle, with its students listed inside.
+.private-import-group {display:flex;align-items:center;gap:8px;margin:10px 0 4px;padding:8px 12px;border-radius:8px;background:#ecf7f2;border:1px solid #cfe9dd;color:#2c6650;font-size:12px;font-weight:600;}
+.private-import-students {display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+.private-import-student {padding:12px 14px;border:1px dashed #d5dde9;border-radius:10px;background:#fafbfd;}
+.private-import-new-subs {display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}

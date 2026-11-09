@@ -177,3 +177,15 @@ body {
   display: inline-block;
   text-transform: uppercase;
 }
+
+// File-format buttons across the app: Excel green, PDF red, Word blue. Subtle: white face, tinted edge and icon.
+.export-format-pdf { --export-ink: #b42335; --export-tint: #fff4f5; --export-border: #f1c4cb; }
+.export-format-excel { --export-ink: #147044; --export-tint: #f1faf4; --export-border: #b9dfc8; }
+.export-format-word { --export-ink: #2157b5; --export-tint: #f2f7ff; --export-border: #bfd3f2; }
+.export-format-pdf, .export-format-excel, .export-format-word {
+  display: inline-flex; align-items: center; gap: 7px;
+  color: var(--export-ink) !important; background: #fff !important; border-color: var(--export-border) !important;
+  svg { color: var(--export-ink); }
+  &:hover:not(:disabled) { background: var(--export-tint) !important; border-color: var(--export-ink) !important; box-shadow: 0 2px 8px #172b4d12; }
+  &:focus-visible { outline: 2px solid var(--export-ink); outline-offset: 3px; }
+}

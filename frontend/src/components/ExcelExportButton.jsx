@@ -175,5 +175,5 @@ export default function ExcelExportButton({
   initialMonth, parentCourseId, salaryMonth
 }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className={`btn-secondary${salaryMonth ? " export-format-excel" : ""}`} onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog salaryMonth={salaryMonth} parentCourseId={parentCourseId} initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
+  return <><button type="button" className="btn-secondary export-format-excel" onClick={() => setOpen(true)}><FileSpreadsheet size={16} />Export Excel</button>{open && <ExportDialog salaryMonth={salaryMonth} parentCourseId={parentCourseId} initialMonth={initialMonth} onClose={() => setOpen(false)} />}</>;
 }

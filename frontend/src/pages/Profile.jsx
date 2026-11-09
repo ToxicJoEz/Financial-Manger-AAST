@@ -61,7 +61,7 @@ const Profile = () => {
     } catch (err) {
       setMsg({
         type: 'error',
-        text: err.response?.data?.message || 'Failed to update profile'
+        text: err.response?.data?.error || 'Failed to update profile'
       });
     } finally {
       setLoading(false);

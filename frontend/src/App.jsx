@@ -1,3 +1,5 @@
+import { canSeePayroll } from './utils/access';
+import MoneyChecks from './pages/MoneyChecks';
 import ActivityLog from './pages/ActivityLog';
 import FinanceLayout from './layouts/FinanceLayout';
 import Income from './pages/Income';
@@ -5,7 +7,9 @@ import Notifications from './pages/Notifications';
 import CourseCatalog from './pages/CourseCatalog';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
-import { useContext } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import axios from 'axios';
+import SubCourseCatalog from './pages/SubCourseCatalog';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import RegisterUser from './pages/RegisterUser';
@@ -50,10 +54,32 @@ const PublicRoute = ({
   return children;
 };
 import { Toaster } from 'react-hot-toast';
-const CycleRoute = () => { const { courseId } = useParams(); return <Courses key={courseId || 'all'} />; };
+const CycleRoute = () => { const { courseId, subCourseId } = useParams(); return <Courses key={(courseId || 'all') + ':' + (subCourseId || '')} />; };
+// Private umbrellas open their sub-umbrellas; group umbrellas open their cycles.
+const UmbrellaRoute = () => {
+  const { courseId } = useParams();
+  const [kind, setKind] = useState(null);
+  useEffect(() => {
+    let active = true;
+    setKind(null);
+    axios.get('/courses/' + courseId).then(({ data }) => { if (active) setKind(data.isPrivate ? 'private' : 'group'); }).catch(() => { if (active) setKind('group'); });
+    return () => { active = false; };
+  }, [courseId]);
+  if (!kind) return <div className="loading-state"><span className="loading-spinner" />Loading course…</div>;
+  return kind === 'private' ? <SubCourseCatalog key={courseId} courseId={courseId} /> : <Courses key={courseId} />;
+};
 const FinanceRoute = () => {
   const { user } = useContext(AuthContext);
   return ['admin', 'mod'].includes(user.role) ? <FinanceLayout /> : <Navigate to="/" replace />;
+};
+// Finance opens on Payroll for admins and the main mod; branch mods have no payroll.
+const FinanceHome = () => {
+  const { user } = useContext(AuthContext);
+  return <Navigate to={canSeePayroll(user) ? 'payroll' : 'income'} replace />;
+};
+const PayrollRoute = () => {
+  const { user } = useContext(AuthContext);
+  return canSeePayroll(user) ? <Finances /> : <Navigate to="/finances/income" replace />;
 };
 const App = () => {
   return <WorkspaceMotion><AuthProvider>
@@ -87,13 +113,15 @@ const App = () => {
             <Route path="/employees" element={<Instructors />} /><Route path="/instructors" element={<Navigate to="/employees" replace />} />
             <Route path="/courses" element={<CourseCatalog />} />
             <Route path="/courses/cycles" element={<CycleRoute />} />
-            <Route path="/courses/:courseId" element={<CycleRoute />} />
+            <Route path="/courses/:courseId" element={<UmbrellaRoute />} />
+            <Route path="/courses/:courseId/sub/:subCourseId" element={<CycleRoute />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/students" element={<Students />} />
             <Route path="/finances" element={<FinanceRoute />}>
-              <Route index element={<Navigate to="income" replace />} />
+              <Route index element={<FinanceHome />} />
               <Route path="income" element={<Income />} />
-              <Route path="payroll" element={<Finances />} />
+              <Route path="payroll" element={<PayrollRoute />} />
+              <Route path="checks" element={<MoneyChecks />} />
             </Route>
           </Route>
 

@@ -22,6 +22,9 @@ model User {
   isActive  Boolean  @default(true)
   isBanned  Boolean  @default(false)
   lastLogin DateTime?
+  canManageBooks Boolean @default(false)
+  // Mods only: null = main mod (all branches, payroll); a branch (e.g. FOUAD) = branch mod whose money is checked.
+  branchScope String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -84,12 +87,34 @@ model Course {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   cycles Cycle[]
+  subCourses SubCourse[]
+}
+
+// Private umbrellas only: an organizing level (e.g. KET, PET) between the umbrella and its cycles.
+// Money stays on cycles; the sub-umbrella supplies cycle names, numbering and the book price.
+model SubCourse {
+  id             String    @id @default(uuid())
+  parentCourseId String
+  parentCourse   Course    @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
+  name           String
+  bookPrice      Float     @default(0)
+  archivedAt     DateTime?
+  archivedBy     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  cycles         Cycle[]
+
+  @@unique([parentCourseId, name])
 }
 
 model Cycle {
-  bookPrice Float @default(0)
   parentCourseId String
   parentCourse Course @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
+  // Private cycles belong to a sub-umbrella; group cycles do not.
+  subCourseId String?
+  subCourse SubCourse? @relation(fields: [subCourseId], references: [id], onDelete: Restrict)
+  // Cycle numbers are unique per umbrella (group) or per sub-umbrella (private): the id of that scope.
+  numberingKey String
   cycleNumber Int
 
   id           String   @id @default(uuid())
@@ -118,8 +143,9 @@ model Cycle {
   retainedIncome RetainedEnrollmentIncome[]
   enrollments  Enrollment[]
 
-  @@unique([parentCourseId, cycleNumber])
+  @@unique([numberingKey, cycleNumber])
   @@index([parentCourseId, archivedAt])
+  @@index([subCourseId])
 }
 
 model CourseInstructor {
@@ -274,25 +300,6 @@ model ImportBatch {
   studentCount Int
 }
 
-// Durable approval history. Scalar target IDs and snapshots survive target deletion.
-model StudentRequest {
-  id String @id @default(uuid())
-  action String
-  status String @default("PENDING")
-  submittedById String
-  resolvedById String?
-  studentId String?
-  courseId String?
-  enrollmentId String?
-  payload String
-  snapshot String
-  pendingKey String? @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  @@index([status, createdAt])
-  @@index([submittedById, createdAt])
-}
-
 model PayrollEarning {
   isPrivate Boolean @default(false)
   id String @id @default(uuid())
@@ -314,8 +321,26 @@ model PayrollEarning {
   @@unique([courseId, instructorId])
   @@index([instructorId, batchId])
 }
+// A payment batch as staff see it: "Payment batch 2 · October 2026". One initiation creates one run;
+// numbers restart each initiation month and are never reused. Each employee's payment inside it is an
+// InstructorPaymentBatch with its own status and actual payment date.
+model PaymentRun {
+  id String @id @default(uuid())
+  year Int
+  month Int
+  number Int
+  initiatedDate DateTime
+  initiatedBy String?
+  payments InstructorPaymentBatch[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([year, month, number])
+}
+
 model InstructorPaymentBatch {
   id String @id @default(uuid())
+  runId String
+  run PaymentRun @relation(fields: [runId], references: [id], onDelete: Restrict)
   instructorId String
   instructorName String
   status String @default("PROCESSING")
@@ -329,6 +354,7 @@ model InstructorPaymentBatch {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status, initiatedDate])
+  @@index([runId])
 }
 
 // Immutable purchase-time amounts; undo retains the original record.
@@ -358,4 +384,21 @@ model RetainedEnrollmentIncome {
  recordedBy String
  createdAt DateTime @default(now())
  @@index([courseId])
+}
+
+// A main mod's (or admin's) confirmation that money recorded for a checked branch matches the paperwork.
+// kind: PAYMENT (tuition ledger entry) or BOOK (book payment). The fingerprint captures the record when checked,
+// so a later change shows as "changed after check".
+model MoneyCheck {
+  id          String   @id @default(uuid())
+  kind        String
+  recordId    String
+  branch      String
+  fingerprint String
+  note        String?
+  checkedBy   String
+  checkedAt   DateTime @default(now())
+
+  @@unique([kind, recordId])
+  @@index([branch])
 }

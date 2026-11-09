@@ -36,7 +36,7 @@ const SSOHandler = () => {
         incomingToken.current = null;
         navigate('/', { replace: true }); // Do not leave the callback in browser history
       } catch (err) {
-        setError(err.response?.data?.message || 'SSO Handshake Failed');
+        setError(err.response?.data?.error || 'SSO Handshake Failed');
       }
     };
     processSSO();

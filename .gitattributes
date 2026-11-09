@@ -5,3 +5,4 @@
 *.scss text eol=lf
 *.md text eol=lf
 *.db binary
+*.bat text eol=crlf

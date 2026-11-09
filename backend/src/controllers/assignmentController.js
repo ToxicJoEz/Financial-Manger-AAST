@@ -21,17 +21,25 @@ export const approveAssignment = atomic(async (req, res) => {
 
     const isRemoval = pending.type === 'REMOVE';
     const isReplacement = pending.type === 'REPLACE';
-    if (pending.course.archivedAt || pending.course.isFinished) return res.status(409).json({ error: 'Reopen the unarchived course before approving changes to its teaching team.' });
+    if (pending.course.archivedAt || pending.course.isFinished)
+      return res
+        .status(409)
+        .json({ error: 'Reopen the unarchived course before approving changes to its teaching team.' });
 
     if (!isRemoval) {
       if (hourlyRate === undefined || isNaN(numberValue(hourlyRate)) || numberValue(hourlyRate) < 0) {
-        return res.status(400).json({ error: 'A valid non-negative hourly rate must be provided when approving an assignment.' });
+        return res
+          .status(400)
+          .json({ error: 'A valid non-negative hourly rate must be provided when approving an assignment.' });
       }
     }
 
     // Atomic transaction: status update, assignment mutation, notifications
-    await prisma.$transaction(async (tx) => {
-      if(!isRemoval&&pending.instructor?.archivedAt)throw Object.assign(new Error('This employee is archived. Restore them before approving an assignment.'),{status:409});
+    await prisma.$transaction(async tx => {
+      if (!isRemoval && pending.instructor?.archivedAt)
+        throw Object.assign(new Error('This employee is archived. Restore them before approving an assignment.'), {
+          status: 409
+        });
       // 1. Concurrency Guard: Atomically claim and approve the request
       const updateResult = await tx.pendingAssignment.updateMany({
         where: { id, status: 'PENDING' },
@@ -47,8 +55,18 @@ export const approveAssignment = atomic(async (req, res) => {
 
       // A replacement is one atomic removal/addition, never two independently approved requests.
       if (isReplacement) {
-        const old = await tx.courseInstructor.findFirst({ where: { id: pending.replacedAssignmentId || '', courseId: pending.courseId, instructorId: pending.replacedInstructorId || '' } });
-        if (!old) throw Object.assign(new Error('The original assignment has changed. Reject this stale replacement request.'), { status: 409 });
+        const old = await tx.courseInstructor.findFirst({
+          where: {
+            id: pending.replacedAssignmentId || '',
+            courseId: pending.courseId,
+            instructorId: pending.replacedInstructorId || ''
+          }
+        });
+        if (!old)
+          throw Object.assign(
+            new Error('The original assignment has changed. Reject this stale replacement request.'),
+            { status: 409 }
+          );
         await tx.courseInstructor.delete({ where: { id: old.id } });
       }
       // 2. Apply changes to the Course
@@ -126,12 +144,12 @@ export const approveAssignment = atomic(async (req, res) => {
 export const rejectAssignment = atomic(async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const pending = await prisma.pendingAssignment.findUnique({
       where: { id },
       include: { course: true, instructor: true, submittedBy: { select: { username: true } } }
     });
-    
+
     if (!pending) {
       return res.status(404).json({ error: 'Pending assignment not found' });
     }
@@ -140,7 +158,7 @@ export const rejectAssignment = atomic(async (req, res) => {
     }
 
     // Atomic transaction with concurrency guard
-    await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async tx => {
       const updateResult = await tx.pendingAssignment.updateMany({
         where: { id, status: 'PENDING' },
         data: {
@@ -195,7 +213,7 @@ export const rejectAssignment = atomic(async (req, res) => {
 export const undoAssignment = atomic(async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const pending = await prisma.pendingAssignment.findUnique({
       where: { id },
       include: { course: true, instructor: true }
@@ -204,18 +222,21 @@ export const undoAssignment = atomic(async (req, res) => {
     if (!pending) {
       return res.status(404).json({ error: 'Not found' });
     }
-    
+
     if (pending.submittedById !== req.user.id && req.user.role === 'user') {
       return res.status(403).json({ error: 'Not authorized to undo this request' });
     }
-    
+
     if (pending.status !== 'PENDING') {
       return res.status(400).json({ error: 'Cannot undo processed requests' });
     }
 
-    await prisma.$transaction(async (tx) => {
-      const claimed = await tx.pendingAssignment.deleteMany({ where: { id, status: 'PENDING', ...(req.user.role === 'user' ? { submittedById: req.user.id } : {}) } });
-      if (claimed.count !== 1) throw Object.assign(new Error('This request has already been processed. Refresh the page.'), { status: 409 });
+    await prisma.$transaction(async tx => {
+      const claimed = await tx.pendingAssignment.deleteMany({
+        where: { id, status: 'PENDING', ...(req.user.role === 'user' ? { submittedById: req.user.id } : {}) }
+      });
+      if (claimed.count !== 1)
+        throw Object.assign(new Error('This request has already been processed. Refresh the page.'), { status: 409 });
       await tx.notification.deleteMany({ where: { relatedId: id } });
     });
 
@@ -236,14 +257,23 @@ export const undoAssignment = atomic(async (req, res) => {
 // Fetch only review details; compensation and user credentials are not needed here.
 export const getAssignmentReview = async (req, res, next) => {
   try {
-    const request = await prisma.pendingAssignment.findUnique({ where: { id: req.params.id }, select: {
-      id: true, type: true, status: true, courseId: true,
-      instructor: { select: { id: true, name: true } },
-      course: { select: { id: true, name: true, branch: true,parentCourse:{select:{isPrivate:true}} } },
-      submittedBy: { select: { username: true, firstName: true, lastName: true } }
-    } });
+    const request = await prisma.pendingAssignment.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        type: true,
+        status: true,
+        courseId: true,
+        instructor: { select: { id: true, name: true } },
+        course: { select: { id: true, name: true, branch: true, parentCourse: { select: { isPrivate: true } } } },
+        submittedBy: { select: { username: true, firstName: true, lastName: true } }
+      }
+    });
     if (!request) return res.status(404).json({ error: 'This request no longer exists.' });
-    if (request.status !== 'PENDING') return res.status(409).json({ error: 'This request has already been processed. Refresh your notifications.' });
+    if (request.status !== 'PENDING')
+      return res.status(409).json({ error: 'This request has already been processed. Refresh your notifications.' });
     res.json(request);
-  } catch (error) { next(error); }
+  } catch (error) {
+    next(error);
+  }
 };

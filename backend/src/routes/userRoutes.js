@@ -1,5 +1,13 @@
 import express from 'express';
-import { getUsers, updateUserStatus, updateUserRole, updateProfile, unlockUserAccount } from '../controllers/userController.js';
+import {
+  getUsers,
+  updateUserStatus,
+  updateUserRole,
+  updateProfile,
+  unlockUserAccount,
+  updateUserPermissions,
+  updateUserBranchScope
+} from '../controllers/userController.js';
 import { protect, modOrAbove, adminOnly } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -11,6 +19,8 @@ router.put('/profile', protect, updateProfile);
 router.get('/', protect, modOrAbove, getUsers);
 router.put('/:id/status', protect, modOrAbove, updateUserStatus);
 router.put('/:id/role', protect, adminOnly, updateUserRole);
+router.put('/:id/permissions', protect, modOrAbove, updateUserPermissions);
+router.put('/:id/branch-scope', protect, adminOnly, updateUserBranchScope);
 router.post('/:id/unlock', protect, modOrAbove, unlockUserAccount);
 
 export default router;

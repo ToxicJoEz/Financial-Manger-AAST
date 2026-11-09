@@ -13,9 +13,11 @@ async function req(path, method = 'GET', body, auth = token) {
     method,
     headers: {
       'Content-Type': 'application/json',
-      ...(auth ? {
-        Authorization: 'Bearer ' + auth
-      } : {})
+      ...(auth
+        ? {
+            Authorization: 'Bearer ' + auth
+          }
+        : {})
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
@@ -31,45 +33,106 @@ const ok = response => {
 try {
   token = ok(await req('/auth/login', 'POST', { username: 'main-admin', password: 'IsolatedDemoTest!123' })).token;
   const junior = ok(await req('/auth/login', 'POST', { username: 'Joe', password: 'IsolatedDemoTest!123' })).token;
-  const moderator = (await prisma.user.findFirst({ where: { role: 'mod' } }));
+  const moderator = await prisma.user.findFirst({ where: { role: 'mod' } });
   const jwt = (await import('jsonwebtoken')).default;
   const modToken = jwt.sign({ id: moderator.id }, process.env.JWT_SECRET);
-  const studentPayload = { name: 'طالب تجربة الموافقة', registrationNumber: 'APPROVAL-001', dateOfBirth: '2000-01-02', nationality: 'مصري' };
+  const studentPayload = {
+    name: 'طالب تجربة الموافقة',
+    registrationNumber: 'APPROVAL-001',
+    dateOfBirth: '2000-01-02',
+    nationality: 'مصري'
+  };
   const addition = ok(await req('/students', 'POST', studentPayload, junior));
-  assert(addition.pending);
-  assert.equal(await prisma.student.count({ where: { registrationNumber: studentPayload.registrationNumber } }), 0);
-  assert.equal((await req('/students', 'POST', studentPayload, junior)).status, 409);
-  assert.equal((await req('/student-requests/' + addition.requestId + '/approve', 'POST', {}, junior)).status, 403);
-  ok(await req('/student-requests/' + addition.requestId + '/approve', 'POST', {}, modToken));
+  assert(addition.id);
+  assert.equal(await prisma.student.count({ where: { registrationNumber: studentPayload.registrationNumber } }), 1);
   let student = await prisma.student.findUnique({ where: { registrationNumber: studentPayload.registrationNumber } });
-  assert(student); assert.equal(student.nationality, studentPayload.nationality);
-  assert.equal((await req('/student-requests/' + addition.requestId + '/approve', 'POST')).status, 409);
-  const rejected = ok(await req('/students', 'POST', { ...studentPayload, registrationNumber: 'APPROVAL-REJECT' }, junior));
-  ok(await req('/student-requests/' + rejected.requestId + '/reject', 'POST'));
-  assert.equal(await prisma.student.count({ where: { registrationNumber: 'APPROVAL-REJECT' } }), 0);
-  const cycle = ok(await req('/cycles', 'POST', { parentCourseId: 'course-ket', cycleNumber: 9876543, branch: 'MIAMI', totalHours: 10, courseFee: 1000 }));
+  assert(student);
+  assert.equal(student.nationality, studentPayload.nationality);
+  const cycle = ok(
+    await req('/cycles', 'POST', {
+      parentCourseId: 'course-ket',
+      cycleNumber: 9876543,
+      branch: 'MIAMI',
+      totalHours: 10,
+      courseFee: 1000
+    })
+  );
   const enrollPath = '/cycles/' + cycle.id + '/enrollments';
-  const paymentBody = { studentId: student.id, recordPayment: true, amountPaid: 1000, paymentMethod: 'CASH', receiptNumber: '12345' };
-  const enrollmentRequest = ok(await req(enrollPath, 'POST', paymentBody, junior));
-  assert(enrollmentRequest.pending);
-  assert.equal(await prisma.enrollment.count({ where: { courseId: cycle.id } }), 0);
-  assert.equal(await prisma.paymentEntry.count({ where: { courseId: cycle.id } }), 0);
-  ok(await req('/student-requests/' + enrollmentRequest.requestId + '/approve', 'POST'));
-  const enrollment = await prisma.enrollment.findUnique({ where: { courseId_studentId: { courseId: cycle.id, studentId: student.id } } });
+  const paymentBody = {
+    studentId: student.id,
+    recordPayment: true,
+    amountPaid: 1000,
+    paymentMethod: 'CASH',
+    receiptNumber: '12345'
+  };
+  const enrollment = ok(await req(enrollPath, 'POST', paymentBody, junior));
   assert.equal(enrollment.amountPaid, 1000);
-  assert.equal(await prisma.paymentEntry.count({ where: { enrollmentId: enrollment.id } }), 1);
-  assert.equal((await req(enrollPath+'/'+enrollment.id,'DELETE',{confirm:true},junior)).status,403);
-  assert.equal((await req('/students/'+student.id,'DELETE',{confirm:true},junior)).status,403);
-  ok(await req(enrollPath+'/'+enrollment.id,'DELETE',{confirm:true,mode:'KEEP',reason:'Withdrawal, income retained'},modToken));
-  assert.equal(await prisma.enrollment.findUnique({where:{id:enrollment.id}}),null);
-  assert.equal((await prisma.retainedEnrollmentIncome.findUnique({where:{sourceEnrollmentId:enrollment.id}})).tuitionMinor,100000n);
-  ok(await req('/students/'+student.id+'/archive','POST',{},modToken));
-  assert((await prisma.student.findUnique({where:{id:student.id}})).deletedAt);
-  assert.equal(await prisma.paymentEntry.count({where:{studentId:student.id}}),1);
+  assert.equal(await prisma.enrollment.count({ where: { courseId: cycle.id } }), 1);
+  assert.equal(await prisma.paymentEntry.count({ where: { courseId: cycle.id } }), 1);
+  ok(
+    await req(
+      enrollPath + '/' + enrollment.id,
+      'DELETE',
+      { confirm: true, mode: 'KEEP', reason: 'Withdrawal, income retained' },
+      junior
+    )
+  );
+  assert.equal(await prisma.enrollment.findUnique({ where: { id: enrollment.id } }), null);
+  assert.equal(
+    (await prisma.retainedEnrollmentIncome.findUnique({ where: { sourceEnrollmentId: enrollment.id } })).tuitionMinor,
+    100000n
+  );
+  ok(await req('/students/' + student.id, 'DELETE', { confirm: true, keepFinancialRecords: true }, junior));
+  assert((await prisma.student.findUnique({ where: { id: student.id } })).deletedAt);
+  assert.equal(await prisma.paymentEntry.count({ where: { studentId: student.id } }), 1);
+  // Staff deletions never change financial totals, even if they ask to; managers may exclude them.
+  const enrollFresh = async name => {
+    const s = ok(await req('/students', 'POST', { name }, junior));
+    const e = ok(await req(enrollPath, 'POST', { studentId: s.id, recordPayment: true, amountPaid: 1000 }, junior));
+    return { s, e };
+  };
+  const single = await enrollFresh('طالب حذف فردي');
+  ok(await req('/students/' + single.s.id, 'DELETE', { confirm: true, keepFinancialRecords: false }, junior));
+  assert.equal((await prisma.enrollment.findUnique({ where: { id: single.e.id } })).financialArchivedAt, null);
+  const bulkA = await enrollFresh('طالب حذف جماعي أ'),
+    bulkB = await enrollFresh('طالب حذف جماعي ب');
+  assert.equal(
+    (await req('/students/bulk-delete', 'POST', { ids: [bulkA.s.id], keepFinancialRecords: false }, junior)).status,
+    400
+  );
+  assert.equal(
+    ok(
+      await req(
+        '/students/bulk-delete',
+        'POST',
+        { ids: [bulkA.s.id], keepFinancialRecords: false, confirm: true },
+        junior
+      )
+    ).count,
+    1
+  );
+  assert.equal((await prisma.enrollment.findUnique({ where: { id: bulkA.e.id } })).financialArchivedAt, null);
+  assert((await prisma.student.findUnique({ where: { id: bulkA.s.id } })).deletedAt);
+  assert.equal(
+    ok(
+      await req(
+        '/students/bulk-delete',
+        'POST',
+        { ids: [bulkB.s.id], keepFinancialRecords: false, confirm: true },
+        modToken
+      )
+    ).count,
+    1
+  );
+  assert((await prisma.enrollment.findUnique({ where: { id: bulkB.e.id } })).financialArchivedAt);
+  assert.equal((await req('/student-requests/anything', 'GET', undefined, modToken)).status, 404);
   assert.equal((await req('/imports/course-ket/preview', 'POST', {}, junior)).status, 403);
   assert.equal((await req('/imports/course-ket/commit', 'POST', {}, junior)).status, 403);
-  const history = ok(await req('/notifications/history?status=APPROVED&action=ASSIGN'));
-  assert(history.items.some(n => n.request?.kind === 'STUDENT'));
-  assert(history.items.every(n => n.status === 'APPROVED' && n.action === 'ASSIGN'));
-  console.log('PASS: student creation/enrollment/removal approvals, rejection, manager bypass, moderator approval, no pre-approval payments, retained ledger, duplicate/stale guards, junior import prohibition, notifications.');
-} finally { server.closeAllConnections(); await new Promise(r => server.close(r)); await prisma.$disconnect(); }
+  console.log(
+    'PASS: direct student creation/enrollment/removal by all users, staff deletions keep finances, manager finance exclusion, retained income, junior import prevention.'
+  );
+} finally {
+  server.closeAllConnections();
+  await new Promise(r => server.close(r));
+  await prisma.$disconnect();
+}

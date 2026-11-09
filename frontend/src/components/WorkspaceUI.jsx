@@ -1,5 +1,5 @@
 import AastBrand from './AastBrand';
-import { ArrowRight, BookOpen, Wallet, Clock3, Users, CheckCircle2 } from 'lucide-react';
+import { BookOpen, Wallet, Clock3, Users, CheckCircle2 } from 'lucide-react';
 
 export function Brand({ inverse = false }) { return <AastBrand application="FINANCE" inverse={inverse} />; }
 

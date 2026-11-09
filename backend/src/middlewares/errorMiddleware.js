@@ -12,10 +12,10 @@ export const errorHandler = (err, req, res, next) => {
   if (!Number.isInteger(statusCode) || statusCode < 400 || statusCode > 599) statusCode = 500;
   let message = err.message;
 
-  // Send a perfectly standardized JSON error response
+  // One error shape across the API: { error }.
   res.status(statusCode).json({
-    message: message,
+    error: message,
     // Only show the detailed stack trace if we are in development mode!
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
+    ...(process.env.NODE_ENV === 'production' ? {} : { stack: err.stack })
   });
 };

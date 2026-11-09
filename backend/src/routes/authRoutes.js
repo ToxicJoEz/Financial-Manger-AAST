@@ -6,7 +6,7 @@ const router = express.Router();
 
 // Public route: Anyone can try to login
 router.post('/login', loginUser);
-router.post('/logout',protect,logoutUser);
+router.post('/logout', protect, logoutUser);
 
 // Public route: SSO Portal verification
 router.post('/sso', ssoLogin);

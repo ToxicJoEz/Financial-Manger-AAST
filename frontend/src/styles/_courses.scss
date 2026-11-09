@@ -554,3 +554,90 @@
  .catalog-card-footer {margin-top:auto;gap:12px;flex-wrap:wrap;>a {white-space:nowrap;} >div {margin-left:auto;}}
 }
 @media(max-width:600px) {.course-catalog .catalog-title-row {font-size:25px;min-height:0;}.course-catalog .catalog-card-top {margin-bottom:20px;}}
+
+.course-private-students {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #795548;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-top: 5px;
+  font-weight: 500;
+  max-width: fit-content;
+
+  .student-names {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 260px;
+  }
+}
+
+// Bulk archive/delete dialog shared by cycles and employees.
+.bulk-delete-dialog {
+  width: min(640px, calc(100vw - 32px));
+  display: flex; flex-direction: column; gap: 14px;
+  h3 { display: flex; align-items: center; gap: 10px; font-size: 20px; color: #b42335; }
+  .bulk-delete-setall { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: #65758d; .btn-secondary { padding: 6px 12px; font-size: 12px; } }
+  .bulk-delete-list {
+    list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto; border: 1px solid #e4e8f0; border-radius: 10px;
+    li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 14px; border-bottom: 1px solid #eef1f6; &:last-child { border-bottom: 0; } }
+    li > div { display: flex; flex-direction: column; gap: 3px; min-width: 0; strong { font-size: 13px; } small { font-size: 11px; color: #77849a; } }
+    .bulk-delete-blocked { color: #a8551c !important; }
+    fieldset { display: flex; gap: 14px; border: 0; padding: 0; margin: 0; flex-shrink: 0; label { display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; } input:disabled + * , label:has(input:disabled) { opacity: .55; cursor: not-allowed; } }
+  }
+  .bulk-delete-actions { display: flex; justify-content: flex-end; gap: 10px; }
+  .btn-danger { background: #dc2626; color: #fff; border: 1px solid #dc2626; padding: .65rem 1.25rem; border-radius: 8px; font-weight: 700; cursor: pointer; &:disabled { opacity: .5; cursor: not-allowed; } }
+  @media (max-width: 560px) { .bulk-delete-list li { flex-direction: column; align-items: flex-start; } }
+}
+
+// Cycle grid card: one consistent 20px inner margin, team and students side by side, footer pinned to the bottom.
+.course-grid .course-tile.cycle-card {
+  display: flex;
+  flex-direction: column;
+  .course-tile-top { padding: 18px 20px 0; gap: 10px; align-items: center; flex-wrap: nowrap; }
+  .cycle-select-checkbox { width: 16px; height: 16px; margin: 0; flex-shrink: 0; accent-color: #4c65eb; cursor: pointer; }
+  .course-tile-icon { width: 40px; height: 40px; }
+  .cycle-card-branch {
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+    padding: 4px 10px; border-radius: 999px; background: #f3f6fb; border: 1px solid #e6ebf3;
+    font-size: 10px; font-weight: 700; letter-spacing: .4px; color: #5d6d88;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    i { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  }
+  .course-tile-top .status-badge { margin-left: auto; flex-shrink: 0; }
+  .cycle-card-heading { padding: 16px 20px 0; }
+  .course-tile-title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0; font-size: 22px !important; line-height: 1.2; }
+  .course-tile-date { padding: 6px 0 0; }
+  .cycle-card-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 18px 20px 0; }
+  .cycle-card-fact {
+    display: flex; flex-direction: column; gap: 9px; min-width: 0;
+    padding: 12px 14px; border: 1px solid #e7ecf4; border-radius: 10px; background: #fbfcfe;
+  }
+  .cycle-card-fact-label { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: #8a97ad; }
+  .cycle-card-team { display: flex; align-items: center; gap: 9px; min-width: 0;
+    > div:last-child { min-width: 0; }
+    strong { display: block; text-align: left; font-size: 12px; font-weight: 600; color: #34435d; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    small { display: block; margin-top: 3px; font-size: 10px; color: #8b98ad; }
+  }
+  .cycle-card-students { display: flex; align-items: baseline; gap: 6px; color: #3b8a5e;
+    svg { align-self: center; }
+    strong { font-size: 20px; font-weight: 800; line-height: 1; color: #24543b; }
+    span { font-size: 12px; color: #5f7f6d; }
+  }
+  .cycle-card-names { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px;
+    li { text-align: left; font-size: 11px; color: #4f5f78; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      &::before { content: ''; display: inline-block; width: 5px; height: 5px; margin-right: 7px; border-radius: 50%; background: #b9c6dd; vertical-align: middle; } }
+  }
+  .cycle-card-muted { font-size: 11px; color: #8b98ad; }
+  .course-tuition-meter { margin: 12px 20px 0; padding: 12px 14px; }
+  .tile-pending { margin: 0; padding: 12px 20px 0; }
+  .cycle-schedule-summary { margin-top: 14px; padding: 12px 20px;
+    span { display: inline-flex; align-items: center; gap: 6px; color: #4f5f78; }
+  }
+  .cycle-card-spacer { flex: 1 0 18px; }
+}

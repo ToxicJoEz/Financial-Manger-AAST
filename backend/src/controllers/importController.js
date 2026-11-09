@@ -1,5 +1,7 @@
-import {privateName,cycleNumberFor} from '../utils/privateCourses.js';
-import {auditContext} from '../utils/auditContext.js';
+import { cycleScope, cycleNumberTaken } from '../utils/privateCourses.js';
+import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
+import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
+import { auditContext } from '../utils/auditContext.js';
 import { cycleSchedule } from '../utils/cycleSchedule.js';
 import { savePayrollRecord } from '../utils/payrollRecord.js';
 import { importedCycleFinished } from '../utils/academyDate.js';
@@ -7,52 +9,91 @@ import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
+import { canSeePayroll } from '../utils/access.js';
 import { parseStudentsWorkbook, importError, normalizedName } from '../utils/importWorkbook.js';
 import { profileFields } from '../utils/studentProfile.js';
 import { appendPayment } from '../utils/paymentLedger.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { logAction } from '../utils/logger.js';
-const previewKey = () => createHmac('sha256', process.env.JWT_SECRET).update('aast-cycle-import-preview-v1').digest('hex');
+const previewKey = () =>
+  createHmac('sha256', process.env.JWT_SECRET).update('aast-cycle-import-preview-v1').digest('hex');
 const fields = ['englishName', 'mobile', 'dateOfBirth', 'nationality', 'placeOfBirth'];
-const dateOnly = value => value instanceof Date ? value.toISOString().slice(0, 10) : value;
+const dateOnly = value => (value instanceof Date ? value.toISOString().slice(0, 10) : value);
 async function inspect(parsed, user) {
   const students = await prisma.student.findMany({
     where: {
-      OR: [{
-        registrationNumber: {
-          in: parsed.rows.map(r => r.registrationNumber).filter(Boolean)
+      OR: [
+        {
+          registrationNumber: {
+            in: parsed.rows.map(r => r.registrationNumber).filter(Boolean)
+          }
+        },
+        {
+          name: {
+            in: parsed.rows.map(r => r.name)
+          }
         }
-      }, {
-        name: {
-          in: parsed.rows.map(r => r.name)
-        }
-      }]
+      ]
     }
   });
   const seen = new Set();
   return parsed.rows.map(row => {
-    const candidates=students.filter(s=>!s.deletedAt&&normalizedName(s.name)===normalizedName(row.name)&&((row.mobile&&s.mobile===row.mobile)||(row.dateOfBirth&&dateOnly(s.dateOfBirth)===row.dateOfBirth)));
-    const existing = row.registrationNumber?students.find(s => s.registrationNumber === row.registrationNumber):candidates.length===1?candidates[0]:null;
+    const candidates = students.filter(
+      s =>
+        !s.deletedAt &&
+        normalizedName(s.name) === normalizedName(row.name) &&
+        ((row.mobile && s.mobile === row.mobile) || (row.dateOfBirth && dateOnly(s.dateOfBirth) === row.dateOfBirth))
+    );
+    const existing = row.registrationNumber
+      ? students.find(s => s.registrationNumber === row.registrationNumber)
+      : candidates.length === 1
+        ? candidates[0]
+        : null;
     const issues = [];
-    if(existing&&seen.has('student:'+existing.id))issues.push('This existing student appears more than once in this workbook.');
-    if(existing)seen.add('student:'+existing.id);
-    if (row.registrationNumber&&seen.has(row.registrationNumber)) issues.push('Duplicate registration number inside this workbook.');
+    if (existing && seen.has('student:' + existing.id))
+      issues.push('This existing student appears more than once in this workbook.');
+    if (existing) seen.add('student:' + existing.id);
+    if (row.registrationNumber && seen.has(row.registrationNumber))
+      issues.push('Duplicate registration number inside this workbook.');
     seen.add(row.registrationNumber);
-    if (row.amount>0&&row.paymentMethod === 'UNSPECIFIED') issues.push(`Unknown payment-method code: ${row.methodCode || '(blank)'}. Correct the source workbook.`);
-    if (existing?.deletedAt) issues.push('This registration number belongs to a deleted student. Ask a manager to resolve the record before importing.');else if (existing && normalizedName(existing.name) !== normalizedName(row.name)) issues.push('Registration number already belongs to a different student name. Correct the source or student directory first.');
-    const differences = existing && !existing.deletedAt ? fields.filter(key => existing[key] && row[key] && normalizedName(dateOnly(existing[key])) !== normalizedName(row[key])).map(key => ({
-      field: key,
-      existing: dateOnly(existing[key]),
-      incoming: row[key]
-    })) : [];
-    const sameName = students.some(s => s.id!==existing?.id && !s.deletedAt && normalizedName(s.name) === normalizedName(row.name) && s.registrationNumber !== row.registrationNumber);
+    if (row.amount > 0 && row.paymentMethod === 'UNSPECIFIED')
+      issues.push(`Unknown payment-method code: ${row.methodCode || '(blank)'}. Correct the source workbook.`);
+    if (existing?.deletedAt)
+      issues.push(
+        'This registration number belongs to a deleted student. Ask a manager to resolve the record before importing.'
+      );
+    else if (existing && normalizedName(existing.name) !== normalizedName(row.name))
+      issues.push(
+        'Registration number already belongs to a different student name. Correct the source or student directory first.'
+      );
+    const differences =
+      existing && !existing.deletedAt
+        ? fields
+            .filter(
+              key => existing[key] && row[key] && normalizedName(dateOnly(existing[key])) !== normalizedName(row[key])
+            )
+            .map(key => ({
+              field: key,
+              existing: dateOnly(existing[key]),
+              incoming: row[key]
+            }))
+        : [];
+    const sameName = students.some(
+      s =>
+        s.id !== existing?.id &&
+        !s.deletedAt &&
+        normalizedName(s.name) === normalizedName(row.name) &&
+        s.registrationNumber !== row.registrationNumber
+    );
     return {
       ...row,
-      existing: existing ? {
-        id: existing.id,
-        name: existing.deletedAt && !isManager(user) ? 'Deleted student' : existing.name,
-        updatedAt: existing.updatedAt.toISOString()
-      } : null,
+      existing: existing
+        ? {
+            id: existing.id,
+            name: existing.deletedAt && !isManager(user) ? 'Deleted student' : existing.name,
+            updatedAt: existing.updatedAt.toISOString()
+          }
+        : null,
       differences,
       sameName,
       issues
@@ -84,21 +125,32 @@ export const previewImport = async (req, res, next) => {
     try {
       if (typeof rawName === 'string') fileName = decodeURIComponent(rawName).slice(0, 200);
     } catch {}
-    const previewToken = jwt.sign({
-      purpose: 'cycle-import',
-      userId: req.user.id,
-      parentId: parent.id,
-      parsed,
-      fileName,
-      studentVersions: Object.fromEntries(rows.map(r => [r.registrationNumber||r.rowKey, r.existing ? {
-        id: r.existing.id,
-        updatedAt: r.existing.updatedAt
-      } : null]))
-    }, previewKey(), {
-      expiresIn: '30m',
-      algorithm: 'HS256',
-      audience: 'cycle-import'
-    });
+    const previewToken = jwt.sign(
+      {
+        purpose: 'cycle-import',
+        userId: req.user.id,
+        parentId: parent.id,
+        parsed,
+        fileName,
+        studentVersions: Object.fromEntries(
+          rows.map(r => [
+            r.registrationNumber || r.rowKey,
+            r.existing
+              ? {
+                  id: r.existing.id,
+                  updatedAt: r.existing.updatedAt
+                }
+              : null
+          ])
+        )
+      },
+      previewKey(),
+      {
+        expiresIn: '30m',
+        algorithm: 'HS256',
+        audience: 'cycle-import'
+      }
+    );
     res.json({
       ...parsed,
       rows,
@@ -107,7 +159,7 @@ export const previewImport = async (req, res, next) => {
       parent: {
         id: parent.id,
         name: parent.name,
-        isPrivate:parent.isPrivate,
+        isPrivate: parent.isPrivate,
         code: parent.code
       }
     });
@@ -117,214 +169,292 @@ export const previewImport = async (req, res, next) => {
     });
   }
 };
-export const commitImport = atomic(async (req, res, next) => {
-  try {
-    let claim;
+export const commitImport = atomic(
+  async (req, res, next) => {
     try {
-      claim = jwt.verify(req.body.previewToken, previewKey(), {
-        algorithms: ['HS256'],
-        audience: 'cycle-import'
-      });
-    } catch {
-      throw importError('The preview expired or is invalid. Upload the workbook again.');
-    }
-    req.auditFileName=claim.fileName;
-    if (claim.purpose !== 'cycle-import' || claim.userId !== req.user.id || claim.parentId !== req.params.parentId) throw importError('This preview belongs to another user or course.', 403);
-    const parent = await parentFor(claim.parentId),
-      parsed = claim.parsed;
-    if (parsed.courseCode !== parent.code) throw importError(`File code ${parsed.courseCode || '(missing)'} does not match ${parent.code}. Correct the course or source workbook.`);
-    const prior = await prisma.importBatch.findUnique({
-      where: {
-        fingerprint: parsed.fingerprint
+      let claim;
+      try {
+        claim = jwt.verify(req.body.previewToken, previewKey(), {
+          algorithms: ['HS256'],
+          audience: 'cycle-import'
+        });
+      } catch {
+        throw importError('The preview expired or is invalid. Upload the workbook again.');
       }
-    });
-    if (prior) return res.status(409).json({
-      error: 'This roster was already imported.',
-      cycleId: prior.cycleId
-    });
-    if(parent.isPrivate&&parsed.rows.length!==1)throw importError('A private cycle roster must contain exactly one student. No records were imported.');
-    const number = parent.isPrivate?await cycleNumberFor(parent):numberValue(req.body.cycleNumber,'Cycle number',{positive:true});
-    if (!Number.isInteger(number) || number > 2147483647) throw importError('Cycle number must be a positive whole number up to 2,147,483,647.');
-    if (await prisma.cycle.findUnique({
-      where: {
-        parentCourseId_cycleNumber: {
+      req.auditFileName = claim.fileName;
+      if (claim.purpose !== 'cycle-import' || claim.userId !== req.user.id || claim.parentId !== req.params.parentId)
+        throw importError('This preview belongs to another user or course.', 403);
+      const parent = await parentFor(claim.parentId),
+        parsed = claim.parsed;
+      if (parsed.courseCode !== parent.code)
+        throw importError(
+          `File code ${parsed.courseCode || '(missing)'} does not match ${parent.code}. Correct the course or source workbook.`
+        );
+      const prior = await prisma.importBatch.findUnique({
+        where: {
+          fingerprint: parsed.fingerprint
+        }
+      });
+      if (prior)
+        return res.status(409).json({
+          error: 'This roster was already imported.',
+          cycleId: prior.cycleId
+        });
+      if (parent.isPrivate && parsed.rows.length > PRIVATE_SEAT_LIMIT)
+        throw importError(
+          `A private cycle roster can contain at most ${PRIVATE_SEAT_LIMIT} students. No records were imported.`
+        );
+      const scope = await cycleScope(parent, req.body.subCourseId);
+      const number = numberValue(req.body.cycleNumber, 'Cycle number', { positive: true });
+      if (!Number.isInteger(number) || number > 2147483647)
+        throw importError('Cycle number must be a positive whole number up to 2,147,483,647.');
+      if (await cycleNumberTaken(scope.numberingKey, number))
+        throw importError(`${scope.prefix} ${number} already exists, including archived cycles.`, 409);
+      const branch = req.body.branch;
+      if (!EMPLOYEE_BRANCHES.includes(branch)) throw importError('Choose a valid branch.');
+      const fee = Number(moneyMinor(req.body.courseFee, 'Standard tuition fee')) / 100;
+      const hours =
+        req.body.totalHours === '' || req.body.totalHours == null
+          ? null
+          : numberValue(req.body.totalHours, 'Total hours', {
+              positive: true
+            });
+      const startDate = req.body.startDate || parsed.startDate,
+        endDate = req.body.endDate || parsed.endDate;
+      for (const value of [startDate, endDate])
+        if (
+          typeof value !== 'string' ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+          !Number.isFinite(Date.parse(value)) ||
+          new Date(value).toISOString().slice(0, 10) !== value
+        )
+          throw importError('Choose valid cycle dates.');
+      if (endDate < startDate) throw importError('End date cannot precede start date.');
+      const rows = await inspect(parsed, req.user);
+      if (rows.some(r => r.issues.length))
+        return res.status(409).json({
+          error: 'Student conflicts must be resolved before importing. Refresh the preview.',
+          rows
+        });
+      for (const row of rows) {
+        const previous = claim.studentVersions[row.registrationNumber || row.rowKey];
+        if (
+          (previous?.id || null) !== (row.existing?.id || null) ||
+          (previous?.updatedAt || null) !== (row.existing?.updatedAt || null)
+        )
+          throw importError(
+            'A student record changed after this preview. Upload again to review the latest details.',
+            409
+          );
+      }
+      const choices = req.body.choices;
+      if (!choices || typeof choices !== 'object' || Array.isArray(choices))
+        throw importError('Review the student rows before confirming.');
+      const paymentDate = req.body.paymentDate || null;
+      if (
+        paymentDate &&
+        (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) ||
+          !Number.isFinite(Date.parse(paymentDate)) ||
+          new Date(paymentDate).toISOString().slice(0, 10) !== paymentDate ||
+          paymentDate > new Date().toISOString().slice(0, 10))
+      )
+        throw importError('Actual payment date must be valid and not in the future.');
+      if (req.body.details != null && (typeof req.body.details !== 'string' || req.body.details.length > 2000))
+        throw importError('Description must be text of up to 2,000 characters.');
+      const instructorId = req.body.instructorId || null;
+      if (instructorId && !(await prisma.instructor.findFirst({ where: { id: instructorId, archivedAt: null } })))
+        throw importError('Selected instructor no longer exists.');
+      const rate = instructorId && canSeePayroll(req.user) ? numberValue(req.body.hourlyRate, 'Hourly rate') : null;
+      // Validate every row before writing; atomic() also rolls back all work on errors.
+      for (const row of rows) {
+        const c = choices[row.registrationNumber || row.rowKey];
+        if (!c || !['keep', 'fill', 'replace'].includes(c.profile))
+          throw importError(`Review student details for registration ${row.registrationNumber}.`);
+        if (row.sameName && c.confirmSameName !== true)
+          throw importError(`Review the matching name with another registration number for ${row.registrationNumber}.`);
+        if (c.feeMode === 'partial')
+          throw importError('Partial enrollments are not allowed. Choose discounted tuition or exemption.');
+        if (row.amount > fee)
+          throw importError(
+            `Registration ${row.registrationNumber}: the course fee is ${fee} EGP; you cannot record ${row.amount} EGP paid.`
+          );
+        if (row.amount < fee && !['discount', 'exempt'].includes(c.feeMode))
+          throw importError(`Registration ${row.registrationNumber}: choose discounted tuition or exemption.`);
+        if (c.feeMode === 'discount' && !isManager(req.user))
+          throw importError(
+            'Only admins and mods can confirm discounted fees. Ask a manager to import this roster.',
+            403
+          );
+        if (c.feeMode === 'exempt' && row.amount !== 0)
+          throw importError('An exempt student cannot have a positive payment.');
+        const custom =
+          c.feeMode === 'exempt'
+            ? 0
+            : c.feeMode === 'discount'
+              ? Number(moneyMinor(c.customFee, 'Discounted fee')) / 100
+              : null;
+        if (custom !== null && (custom !== row.amount || custom > fee))
+          throw importError(
+            `Registration ${row.registrationNumber}: discounted tuition must equal the amount paid and cannot exceed the standard fee.`
+          );
+      }
+      const isFinished = importedCycleFinished(endDate);
+      const cycle = await prisma.cycle.create({
+        data: {
+          ...cycleSchedule(req.body),
           parentCourseId: parent.id,
-          cycleNumber: number
-        }
-      }
-    })) throw importError('That cycle number is already used under this course, including archived cycles.', 409);
-    const branch = req.body.branch;
-    if (!['MIAMI', 'FOUAD', 'ABU-QEER', 'PORT-SAID', 'ASWAN', 'SMART', 'SHERATON', 'ALAMEEN'].includes(branch)) throw importError('Choose a valid branch.');
-    const fee = Number(moneyMinor(req.body.courseFee, 'Standard tuition fee')) / 100;
-    const hours = req.body.totalHours === '' || req.body.totalHours == null ? null : numberValue(req.body.totalHours, 'Total hours', {
-      positive: true
-    });
-    const startDate = req.body.startDate || parsed.startDate,
-      endDate = req.body.endDate || parsed.endDate;
-    for (const value of [startDate, endDate]) if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) throw importError('Choose valid cycle dates.');
-    if (endDate < startDate) throw importError('End date cannot precede start date.');
-    const rows = await inspect(parsed, req.user);
-    if (rows.some(r => r.issues.length)) return res.status(409).json({
-      error: 'Student conflicts must be resolved before importing. Refresh the preview.',
-      rows
-    });
-    for (const row of rows) {
-      const previous = claim.studentVersions[row.registrationNumber||row.rowKey];
-      if ((previous?.id || null) !== (row.existing?.id || null) || (previous?.updatedAt || null) !== (row.existing?.updatedAt || null)) throw importError('A student record changed after this preview. Upload again to review the latest details.', 409);
-    }
-    const choices = req.body.choices;
-    if (!choices || typeof choices !== 'object' || Array.isArray(choices)) throw importError('Review the student rows before confirming.');
-    const paymentDate = req.body.paymentDate || null;
-    if (paymentDate && (!/^\d{4}-\d{2}-\d{2}$/.test(paymentDate) || !Number.isFinite(Date.parse(paymentDate)) || new Date(paymentDate).toISOString().slice(0, 10) !== paymentDate || paymentDate > new Date().toISOString().slice(0, 10))) throw importError('Actual payment date must be valid and not in the future.');
-    if (req.body.details != null && (typeof req.body.details !== 'string' || req.body.details.length > 2000)) throw importError('Description must be text of up to 2,000 characters.');
-    const instructorId = req.body.instructorId || null;
-    if (instructorId && !(await prisma.instructor.findFirst({where:{id:instructorId,archivedAt:null}}))) throw importError('Selected instructor no longer exists.');
-    const rate = instructorId && isManager(req.user) ? numberValue(req.body.hourlyRate, 'Hourly rate') : null;
-    // Validate every row before writing; atomic() also rolls back all work on errors.
-    for (const row of rows) {
-      const c = choices[row.registrationNumber||row.rowKey];
-      if (!c || !['keep', 'fill', 'replace'].includes(c.profile)) throw importError(`Review student details for registration ${row.registrationNumber}.`);
-      if (row.sameName && c.confirmSameName !== true) throw importError(`Review the matching name with another registration number for ${row.registrationNumber}.`);
-      if(c.feeMode==='partial')throw importError('Partial enrollments are not allowed. Choose discounted tuition or exemption.');
-      if (row.amount > fee) throw importError(`Registration ${row.registrationNumber}: the course fee is ${fee} EGP; you cannot record ${row.amount} EGP paid.`);
-      if (row.amount < fee && !['discount', 'exempt'].includes(c.feeMode)) throw importError(`Registration ${row.registrationNumber}: choose discounted tuition or exemption.`);
-      if (c.feeMode === 'discount' && !isManager(req.user)) throw importError('Only admins and mods can confirm discounted fees. Ask a manager to import this roster.', 403);
-      if (c.feeMode === 'exempt' && row.amount !== 0) throw importError('An exempt student cannot have a positive payment.');
-      const custom = c.feeMode === 'exempt' ? 0 : c.feeMode === 'discount' ? Number(moneyMinor(c.customFee, 'Discounted fee')) / 100 : null;
-      if (custom !== null && (custom !== row.amount || custom > fee)) throw importError(`Registration ${row.registrationNumber}: discounted tuition must equal the amount paid and cannot exceed the standard fee.`);
-    }
-    const isFinished = importedCycleFinished(endDate);
-    const cycle = await prisma.cycle.create({
-      data: {
-        ...cycleSchedule(req.body),
-        parentCourseId: parent.id,
-        cycleNumber: number,
-        name:parent.isPrivate?privateName(req.body.name):`${parent.name} ${number}`,
-        bookPrice:parent.isPrivate?Number(moneyMinor(req.body.bookPrice??0,'Book price'))/100:0,
-        branch,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        isFinished,
-        courseFee: fee,
-        totalHours: hours,
-        details: req.body.details || null
-      }
-    });
-    const batch = await prisma.importBatch.create({
-      data: {
-        fingerprint: parsed.fingerprint,
-        fileName: claim.fileName,
-        parentCourseId: parent.id,
-        cycleId: cycle.id,
-        recordedBy: req.user.username,
-        studentCount: rows.length
-      }
-    });
-    if(auditContext.getStore())auditContext.getStore().records=rows.map(({existing,...row})=>({...row,selectedChoice:choices[row.registrationNumber||row.rowKey]}));
-    let created = 0;
-    for (const row of rows) {
-      const choice = choices[row.registrationNumber||row.rowKey];
-      const incoming = {
-        name: row.name,
-        registrationNumber: row.registrationNumber,
-        mobile: row.mobile,
-        ...profileFields(row)
-      };
-      let student;
-      if (!row.existing) {
-        student = await prisma.student.create({
-          data: incoming
-        });
-        created++;
-      } else {
-        student = await prisma.student.findUnique({
-          where: {
-            id: row.existing.id
-          }
-        });
-        const data = {};
-        if (choice.profile !== 'keep') for (const key of fields) if (incoming[key] && (choice.profile === 'replace' || !student[key])) data[key] = incoming[key];
-        if (Object.keys(data).length) student = await prisma.student.update({
-          where: {
-            id: student.id
-          },
-          data
-        });
-      }
-      const customFee = choice.feeMode === 'exempt' ? 0 : choice.feeMode === 'discount' ? Number(moneyMinor(choice.customFee)) / 100 : null;
-      const enrollment = await prisma.enrollment.create({
-        data: {
-          courseId: cycle.id,
-          studentId: student.id,
-          customFee
+          subCourseId: scope.subCourse?.id ?? null,
+          numberingKey: scope.numberingKey,
+          cycleNumber: number,
+          name: `${scope.prefix} ${number}`,
+          branch,
+          startDate: new Date(startDate),
+          endDate: new Date(endDate),
+          isFinished,
+          courseFee: fee,
+          totalHours: hours,
+          details: req.body.details || null
         }
       });
-      if (row.amount > 0) await appendPayment(enrollment, cycle, student, req.user, {
-        amountMinor: moneyMinor(row.amount),
-        kind: 'PAYMENT',
-        note: 'Opening payment imported from the registration roster. ' + (paymentDate ? 'Actual payment date supplied during import.' : 'Actual payment date not provided by the source.'),
-        paymentMethod: row.paymentMethod,
-        receiptNumber: row.receiptNumber,
-        paymentDateKnown: Boolean(paymentDate),
-        occurredAt: paymentDate ? new Date(paymentDate) : new Date(),
-        idempotencyKey: `import:${batch.id}:${row.registrationNumber||row.rowKey}`,
-        importBatchId: batch.id
-      });
-    }
-    if (instructorId) {
-      if (isManager(req.user)) await prisma.courseInstructor.create({
+      const batch = await prisma.importBatch.create({
         data: {
-          courseId: cycle.id,
-          instructorId,
-          hourlyRate: rate,
-          hoursTaught: isFinished && cycle.totalHours > 0 ? cycle.totalHours : null
+          fingerprint: parsed.fingerprint,
+          fileName: claim.fileName,
+          parentCourseId: parent.id,
+          cycleId: cycle.id,
+          recordedBy: req.user.username,
+          studentCount: rows.length
         }
-      });else {
-        const pending = await prisma.pendingAssignment.create({
+      });
+      if (auditContext.getStore())
+        auditContext.getStore().records = rows.map(({ existing, ...row }) => ({
+          ...row,
+          selectedChoice: choices[row.registrationNumber || row.rowKey]
+        }));
+      let created = 0;
+      for (const row of rows) {
+        const choice = choices[row.registrationNumber || row.rowKey];
+        const incoming = {
+          name: row.name,
+          registrationNumber: row.registrationNumber,
+          mobile: row.mobile,
+          ...profileFields(row)
+        };
+        let student;
+        if (!row.existing) {
+          student = await prisma.student.create({
+            data: incoming
+          });
+          created++;
+        } else {
+          student = await prisma.student.findUnique({
+            where: {
+              id: row.existing.id
+            }
+          });
+          const data = {};
+          if (choice.profile !== 'keep')
+            for (const key of fields)
+              if (incoming[key] && (choice.profile === 'replace' || !student[key])) data[key] = incoming[key];
+          if (Object.keys(data).length)
+            student = await prisma.student.update({
+              where: {
+                id: student.id
+              },
+              data
+            });
+        }
+        const customFee =
+          choice.feeMode === 'exempt'
+            ? 0
+            : choice.feeMode === 'discount'
+              ? Number(moneyMinor(choice.customFee)) / 100
+              : null;
+        const enrollment = await prisma.enrollment.create({
           data: {
             courseId: cycle.id,
-            instructorId,
-            submittedById: req.user.id,
-            type: 'ASSIGN'
+            studentId: student.id,
+            customFee
           }
         });
-        const managers = await prisma.user.findMany({
-          where: {
-            role: {
-              in: ['admin', 'mod']
-            },
-            isActive: true,
-            isBanned: false
-          },
-          select: {
-            id: true
-          }
-        });
-        if (managers.length) await prisma.notification.createMany({
-          data: managers.map(m => ({
-            userId: m.id,
-            title: 'Imported cycle: instructor approval',
-            message: 'An instructor assignment requested during Excel import needs approval.',
-            type: 'ASSIGNMENT_REQUEST',
-            relatedId: pending.id
-          }))
-        });
+        if (row.amount > 0)
+          await appendPayment(enrollment, cycle, student, req.user, {
+            amountMinor: moneyMinor(row.amount),
+            kind: 'PAYMENT',
+            note:
+              'Opening payment imported from the registration roster. ' +
+              (paymentDate
+                ? 'Actual payment date supplied during import.'
+                : 'Actual payment date not provided by the source.'),
+            paymentMethod: row.paymentMethod,
+            receiptNumber: row.receiptNumber,
+            paymentDateKnown: Boolean(paymentDate),
+            occurredAt: paymentDate ? new Date(paymentDate) : new Date(),
+            idempotencyKey: `import:${batch.id}:${row.registrationNumber || row.rowKey}`,
+            importBatchId: batch.id
+          });
       }
+      if (instructorId) {
+        if (canSeePayroll(req.user))
+          await prisma.courseInstructor.create({
+            data: {
+              courseId: cycle.id,
+              instructorId,
+              hourlyRate: rate,
+              hoursTaught: isFinished && cycle.totalHours > 0 ? cycle.totalHours : null
+            }
+          });
+        else {
+          const pending = await prisma.pendingAssignment.create({
+            data: {
+              courseId: cycle.id,
+              instructorId,
+              submittedById: req.user.id,
+              type: 'ASSIGN'
+            }
+          });
+          const managers = await prisma.user.findMany({
+            where: {
+              OR: [{ role: 'admin' }, { role: 'mod', branchScope: null }],
+              isActive: true,
+              isBanned: false
+            },
+            select: {
+              id: true
+            }
+          });
+          if (managers.length)
+            await prisma.notification.createMany({
+              data: managers.map(m => ({
+                userId: m.id,
+                title: 'Imported cycle: instructor approval',
+                message: 'An instructor assignment requested during Excel import needs approval.',
+                type: 'ASSIGNMENT_REQUEST',
+                relatedId: pending.id
+              }))
+            });
+        }
+      }
+      if (isFinished && instructorId && cycle.totalHours > 0) await savePayrollRecord(cycle.id);
+      await logAction(
+        'IMPORT_CYCLE',
+        `Imported ${cycle.name} from ${claim.fileName}: ${rows.length} enrollments, ${created} new students. Import ${batch.id}. Status: ${isFinished ? 'finished automatically from end date' : 'active'}.`,
+        req.user.username
+      );
+      res.status(201).json({
+        cycleId: cycle.id,
+        cycleName: cycle.name,
+        isFinished,
+        importId: batch.id,
+        enrolled: rows.length,
+        created,
+        reused: rows.length - created
+      });
+    } catch (error) {
+      next(error);
     }
-    if (isFinished && instructorId && cycle.totalHours > 0) await savePayrollRecord(cycle.id);
-    await logAction('IMPORT_CYCLE', `Imported ${cycle.name} from ${claim.fileName}: ${rows.length} enrollments, ${created} new students. Import ${batch.id}. Status: ${isFinished ? "finished automatically from end date" : "active"}.`, req.user.username);
-    res.status(201).json({
-      cycleId: cycle.id,
-      cycleName: cycle.name,
-      isFinished,
-      importId: batch.id,
-      enrolled: rows.length,
-      created,
-      reused: rows.length - created
-    });
-  } catch (error) {
-    next(error);
+  },
+  {
+    timeout: 45000
   }
-}, {
-  timeout: 45000
-});
+);

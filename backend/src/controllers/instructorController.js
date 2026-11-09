@@ -1,13 +1,15 @@
-import {employeeName,employeeNumber,employeeBranches} from '../utils/employees.js';
+import { createHash } from 'node:crypto';
+import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
 import { hidePayroll } from '../utils/courseView.js';
+import { canSeePayroll } from '../utils/access.js';
 import prisma, { atomic, Prisma } from '../db/prisma.js';
 import { logAction } from '../utils/logger.js';
 
 export const getInstructors = async (req, res) => {
   try {
-    const isJunior = req.user.role === 'user';
+    const isJunior = !canSeePayroll(req.user);
     const instructors = await prisma.instructor.findMany({
-      where:{archivedAt:null},
+      where: { archivedAt: null },
       include: {
         courseAssignments: {
           include: { course: true }
@@ -53,7 +55,7 @@ export const createInstructor = atomic(async (req, res) => {
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Employee name is required.' });
     }
-    
+
     // Store branches exactly as uppercase strings
     if (Array.isArray(branches)) {
       branches = branches.map(b => b.toUpperCase()).join(',');
@@ -61,8 +63,15 @@ export const createInstructor = atomic(async (req, res) => {
       branches = branches ? branches.toUpperCase() : branches;
     }
 
-    const cleanName=employeeName(name),cleanId=employeeNumber(employeeId);
-    if(!cleanName || cleanName.length>160 || cleanId.length>80 || (employeeId!=null && !['string','number'].includes(typeof employeeId)))return res.status(400).json({error:'Enter a valid employee name and employee ID (maximum 80 characters).'});
+    const cleanName = employeeName(name),
+      cleanId = employeeNumber(employeeId);
+    if (
+      !cleanName ||
+      cleanName.length > 160 ||
+      cleanId.length > 80 ||
+      (employeeId != null && !['string', 'number'].includes(typeof employeeId))
+    )
+      return res.status(400).json({ error: 'Enter a valid employee name and employee ID (maximum 80 characters).' });
     const inst = await prisma.instructor.create({
       data: { name: cleanName, branches: employeeBranches(branches).join(','), employeeId: cleanId || null, mobile }
     });
@@ -70,7 +79,12 @@ export const createInstructor = atomic(async (req, res) => {
     await logAction('CREATE_INSTRUCTOR', `Created instructor ${inst.name}`, req.user.username);
     res.status(201).json(inst);
   } catch (error) {
-    res.status(error.code === 'P2002' ? 409 : 400).json({ error: error.code === 'P2002' ? 'This employee ID already exists. Edit that employee to add another branch.' : error.message });
+    res.status(error.code === 'P2002' ? 409 : 400).json({
+      error:
+        error.code === 'P2002'
+          ? 'This employee ID already exists. Edit that employee to add another branch.'
+          : error.message
+    });
   }
 });
 
@@ -83,20 +97,25 @@ export const updateInstructor = atomic(async (req, res) => {
     if (!existing) {
       return res.status(404).json({ error: 'Employee not found' });
     }
-    
+
     if (Array.isArray(branches)) {
       branches = branches.map(b => b.toUpperCase()).join(',');
     } else if (branches) {
       branches = branches.toUpperCase();
     }
 
-    if(employeeName(name ?? existing.name).length>160 || (name!==undefined && !employeeName(name)) || employeeNumber(employeeId ?? existing.employeeId).length>80)return res.status(400).json({error:'Enter a valid employee name and employee ID.'});
+    if (
+      employeeName(name ?? existing.name).length > 160 ||
+      (name !== undefined && !employeeName(name)) ||
+      employeeNumber(employeeId ?? existing.employeeId).length > 80
+    )
+      return res.status(400).json({ error: 'Enter a valid employee name and employee ID.' });
     const updateData = {};
     if (name) updateData.name = employeeName(name);
     if (branches !== undefined) updateData.branches = employeeBranches(branches).join(',');
     if (employeeId !== undefined) updateData.employeeId = employeeNumber(employeeId) || null;
     if (mobile !== undefined) updateData.mobile = mobile;
-    
+
     const inst = await prisma.instructor.update({
       where: { id },
       data: updateData
@@ -105,7 +124,12 @@ export const updateInstructor = atomic(async (req, res) => {
     await logAction('UPDATE_INSTRUCTOR', `Updated instructor ${inst.name}`, req.user.username);
     res.json(inst);
   } catch (error) {
-    res.status(error.code === 'P2002' ? 409 : 400).json({ error: error.code === 'P2002' ? 'This employee ID already exists. Edit that employee to add another branch.' : error.message });
+    res.status(error.code === 'P2002' ? 409 : 400).json({
+      error:
+        error.code === 'P2002'
+          ? 'This employee ID already exists. Edit that employee to add another branch.'
+          : error.message
+    });
   }
 });
 
@@ -126,55 +150,300 @@ export const deleteInstructor = atomic(async (req, res) => {
     }
 
     // Paid and processing salary must retain their employee identity. Unpaid salary may be removed explicitly.
-    if(await prisma.payrollEarning.count({where:{instructorId:id,batch:{status:{in:['PAID','PROCESSING']}}}}))return res.status(409).json({error:'This employee has paid or processing payroll history. Archive them instead, or return processing items to unpaid first.'});
-    await prisma.payrollEarning.deleteMany({where:{instructorId:id,batchId:null}});
+    if (
+      await prisma.payrollEarning.count({
+        where: { instructorId: id, batch: { status: { in: ['PAID', 'PROCESSING'] } } }
+      })
+    )
+      return res.status(409).json({
+        error:
+          'This employee has paid or processing payroll history. Archive them instead, or return processing items to unpaid first.'
+      });
+    await prisma.payrollEarning.deleteMany({ where: { instructorId: id, batchId: null } });
     await prisma.instructor.delete({ where: { id } });
     await logAction('DELETE_INSTRUCTOR', `Deleted instructor ${instructor.name}`, req.user.username);
     res.json({ message: 'Employee deleted successfully' });
   } catch (error) {
-    res.status(error.code === 'P2002' ? 409 : 400).json({ error: error.code === 'P2002' ? 'This employee ID already exists. Edit that employee to add another branch.' : error.message });
+    res.status(error.code === 'P2002' ? 409 : 400).json({
+      error:
+        error.code === 'P2002'
+          ? 'This employee ID already exists. Edit that employee to add another branch.'
+          : error.message
+    });
   }
 });
 
 // Separate, paginated directory: legacy assignment pickers keep their existing API.
-export const getEmployeeDirectory = async (req,res) => {
- try {
-  const page=Number(req.query.page ?? 1),limit=24;
-  if(!Number.isInteger(page)||page<1||page>100000)return res.status(400).json({error:'Invalid directory page.'});
-  const search=String(req.query.search||'').trim().slice(0,160);
-  const branches=req.query.branches ? employeeBranches(req.query.branches) : [];
-  const status=String(req.query.status||'all'),sort=String(req.query.sort||'name');
-  if(!['all','active','inactive','archived'].includes(status)||!['name','employeeId','active'].includes(sort))return res.status(400).json({error:'Invalid directory filter.'});
-  const directory=Prisma.sql`WITH directory AS (
+export const getEmployeeDirectory = async (req, res) => {
+  try {
+    const page = Number(req.query.page ?? 1),
+      limit = 24;
+    if (!Number.isInteger(page) || page < 1 || page > 100000)
+      return res.status(400).json({ error: 'Invalid directory page.' });
+    const search = String(req.query.search || '')
+      .trim()
+      .slice(0, 160);
+    const branches = req.query.branches ? employeeBranches(req.query.branches) : [];
+    const status = String(req.query.status || 'all'),
+      sort = String(req.query.sort || 'name');
+    if (!['all', 'active', 'inactive', 'archived'].includes(status) || !['name', 'employeeId', 'active'].includes(sort))
+      return res.status(400).json({ error: 'Invalid directory filter.' });
+    const directory = Prisma.sql`WITH directory AS (
    SELECT i.id,i.name,i."employeeId",i.mobile,i.branches,i."archivedAt",
     COUNT(c.id) FILTER (WHERE NOT c."isFinished" AND c."archivedAt" IS NULL AND p."archivedAt" IS NULL)::int AS "activeCount",
     COUNT(c.id) FILTER (WHERE c."isFinished")::int AS "completedCount"
    FROM "Instructor" i LEFT JOIN "CourseInstructor" a ON a."instructorId"=i.id
    LEFT JOIN "Cycle" c ON c.id=a."courseId" LEFT JOIN "Course" p ON p.id=c."parentCourseId"
-   WHERE (${status==='archived'} = (i."archivedAt" IS NOT NULL)) AND (${search}='' OR strpos(lower(i.name),lower(${search}))>0 OR strpos(lower(COALESCE(i."employeeId",'')),lower(${search}))>0 OR strpos(COALESCE(i.mobile,''),${search})>0)
-   AND (${branches.length===0} OR string_to_array(i.branches,',') && string_to_array(${branches.join(',')},','))
+   WHERE (${status === 'archived'} = (i."archivedAt" IS NOT NULL)) AND (${search}='' OR strpos(lower(i.name),lower(${search}))>0 OR strpos(lower(COALESCE(i."employeeId",'')),lower(${search}))>0 OR strpos(COALESCE(i.mobile,''),${search})>0)
+   AND (${branches.length === 0} OR string_to_array(i.branches,',') && string_to_array(${branches.join(',')},','))
    GROUP BY i.id
   )`;
-  const condition=status==='active'?Prisma.sql`"activeCount">0`:status==='inactive'?Prisma.sql`"activeCount"=0`:Prisma.sql`TRUE`;
-  const order=sort==='active'?Prisma.sql`"activeCount" DESC,name ASC,id ASC`:sort==='employeeId'?Prisma.sql`"employeeId" ASC NULLS LAST,name ASC,id ASC`:Prisma.sql`name ASC,id ASC`;
-  const [rows,counts]=await prisma.$transaction([
-   prisma.$queryRaw(Prisma.sql`${directory} SELECT * FROM directory WHERE ${condition} ORDER BY ${order} LIMIT ${limit} OFFSET ${(page-1)*limit}`),
-   prisma.$queryRaw(Prisma.sql`${directory} SELECT COUNT(*)::int AS total FROM directory WHERE ${condition}`)
-  ]);
-  res.json({rows,total:counts[0].total,page,pageSize:limit});
- }catch(error){res.status(error.status||500).json({error:error.status?error.message:'Employee directory could not be loaded.'});}
+    const condition =
+      status === 'active'
+        ? Prisma.sql`"activeCount">0`
+        : status === 'inactive'
+          ? Prisma.sql`"activeCount"=0`
+          : Prisma.sql`TRUE`;
+    const order =
+      sort === 'active'
+        ? Prisma.sql`"activeCount" DESC,name ASC,id ASC`
+        : sort === 'employeeId'
+          ? Prisma.sql`"employeeId" ASC NULLS LAST,name ASC,id ASC`
+          : Prisma.sql`name ASC,id ASC`;
+    const [rows, counts] = await prisma.$transaction([
+      prisma.$queryRaw(
+        Prisma.sql`${directory} SELECT * FROM directory WHERE ${condition} ORDER BY ${order} LIMIT ${limit} OFFSET ${(page - 1) * limit}`
+      ),
+      prisma.$queryRaw(Prisma.sql`${directory} SELECT COUNT(*)::int AS total FROM directory WHERE ${condition}`)
+    ]);
+    res.json({ rows, total: counts[0].total, page, pageSize: limit });
+  } catch (error) {
+    res
+      .status(error.status || 500)
+      .json({ error: error.status ? error.message : 'Employee directory could not be loaded.' });
+  }
 };
-export const getEmployeeDetails = async (req,res) => {
- try {
-  const employee=await prisma.instructor.findUnique({where:{id:req.params.id},select:{id:true,name:true,employeeId:true,mobile:true,branches:true,archivedAt:true,
-   courseAssignments:{orderBy:{course:{startDate:'desc'}},select:{id:true,hoursTaught:true,course:{select:{id:true,name:true,branch:true,startDate:true,endDate:true,isFinished:true,archivedAt:true,venue:true,classStartTime:true,classEndTime:true,parentCourse:{select:{id:true,name:true,code:true,archivedAt:true,isPrivate:true}}}}}}
-  }});
-  if(!employee)return res.status(404).json({error:'Employee not found.'});
-  const payments=await prisma.payrollEarning.findMany({where:{instructorId:employee.id,batch:{status:'PAID'}},include:{batch:true},orderBy:{batch:{actualPaymentDate:'desc'}}});
-    res.json({...employee,paidPayments:payments.map(({amountMinor,...row})=>({...row,amount:Number(amountMinor)/100}))});
- }catch{res.status(500).json({error:'Employee details could not be loaded.'});}
+export const getEmployeeDetails = async (req, res) => {
+  try {
+    const employee = await prisma.instructor.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        name: true,
+        employeeId: true,
+        mobile: true,
+        branches: true,
+        archivedAt: true,
+        courseAssignments: {
+          orderBy: { course: { startDate: 'desc' } },
+          select: {
+            id: true,
+            hoursTaught: true,
+            course: {
+              select: {
+                id: true,
+                name: true,
+                branch: true,
+                startDate: true,
+                endDate: true,
+                isFinished: true,
+                archivedAt: true,
+                venue: true,
+                classStartTime: true,
+                classEndTime: true,
+                enrollments: { where: { deletedAt: null }, select: { student: { select: { id: true, name: true } } } },
+                parentCourse: { select: { id: true, name: true, code: true, archivedAt: true, isPrivate: true } }
+              }
+            }
+          }
+        }
+      }
+    });
+    if (!employee) return res.status(404).json({ error: 'Employee not found.' });
+    // Salary history is payroll: only admins and the main mod see it.
+    const payments = !canSeePayroll(req.user)
+      ? []
+      : await prisma.payrollEarning.findMany({
+          where: { instructorId: employee.id, batch: { status: 'PAID' } },
+          include: { batch: true },
+          orderBy: { batch: { actualPaymentDate: 'desc' } }
+        });
+    const courseAssignments = (employee.courseAssignments || []).map(ca => {
+      const isPrivate = Boolean(ca.course?.parentCourse?.isPrivate);
+      const privateStudents = isPrivate ? (ca.course?.enrollments || []).map(e => e.student?.name).filter(Boolean) : [];
+      return {
+        ...ca,
+        course: {
+          ...ca.course,
+          isPrivate,
+          privateStudents
+        }
+      };
+    });
+    res.json({
+      ...employee,
+      courseAssignments,
+      paidPayments: payments.map(({ amountMinor, ...row }) => ({ ...row, amount: Number(amountMinor) / 100 }))
+    });
+  } catch {
+    res.status(500).json({ error: 'Employee details could not be loaded.' });
+  }
 };
 
-export const archiveEmployee=atomic(async(req,res,next)=>{
- try{const row=await prisma.instructor.update({where:{id:req.params.id},data:{archivedAt:req.body.archived===false?null:new Date(),archivedBy:req.body.archived===false?null:req.user.username}});await logAction(req.body.archived===false?'RESTORE_EMPLOYEE':'ARCHIVE_EMPLOYEE',row.name,req.user.username);res.json(row);}catch(error){next(error);}
+export const archiveEmployee = atomic(async (req, res, next) => {
+  try {
+    const row = await prisma.instructor.update({
+      where: { id: req.params.id },
+      data: {
+        archivedAt: req.body.archived === false ? null : new Date(),
+        archivedBy: req.body.archived === false ? null : req.user.username
+      }
+    });
+    await logAction(req.body.archived === false ? 'RESTORE_EMPLOYEE' : 'ARCHIVE_EMPLOYEE', row.name, req.user.username);
+    res.json(row);
+  } catch (error) {
+    next(error);
+  }
 });
+
+export const bulkArchiveInstructors = atomic(async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'Select at least one employee.' });
+    const result = await prisma.instructor.updateMany({
+      where: { id: { in: ids }, archivedAt: null },
+      data: { archivedAt: new Date(), archivedBy: req.user.username }
+    });
+    await logAction('BULK_ARCHIVE_EMPLOYEES', `Archived ${result.count} employees`, req.user.username);
+    res.json({ message: `Successfully archived ${result.count} employees.`, count: result.count });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Bulk employee deletion mirrors single deletion: archive keeps everything; permanent deletion is
+// refused for anyone with paid or processing payroll. Each choice is checked against its preview.
+const employeeBulkIds = ids => {
+  if (
+    !Array.isArray(ids) ||
+    !ids.length ||
+    ids.length > 200 ||
+    ids.some(id => typeof id !== 'string') ||
+    new Set(ids).size !== ids.length
+  )
+    throw Object.assign(new Error('Select between 1 and 200 unique employees.'), { status: 400 });
+  return ids;
+};
+async function employeeDeletionPlan(id) {
+  const employee = await prisma.instructor.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      employeeId: true,
+      archivedAt: true,
+      updatedAt: true,
+      courseAssignments: { select: { id: true }, orderBy: { id: 'asc' } },
+      payrollEarnings: {
+        select: { id: true, batchId: true, updatedAt: true, batch: { select: { status: true } } },
+        orderBy: { id: 'asc' }
+      }
+    }
+  });
+  if (!employee) throw Object.assign(new Error('Employee not found.'), { status: 404 });
+  const version = createHash('sha256').update(JSON.stringify(employee)).digest('hex');
+  const locked = employee.payrollEarnings.filter(e => ['PAID', 'PROCESSING'].includes(e.batch?.status));
+  return {
+    employee,
+    version,
+    permanentBlocked: locked.length > 0,
+    counts: {
+      assignments: employee.courseAssignments.length,
+      unpaidEarnings: employee.payrollEarnings.filter(e => !e.batchId).length,
+      paidOrProcessingEarnings: locked.length
+    }
+  };
+}
+export const bulkEmployeeDeletionPreview = async (req, res) => {
+  try {
+    const employees = [];
+    for (const id of employeeBulkIds(
+      String(req.query.ids || '')
+        .split(',')
+        .filter(Boolean)
+    )) {
+      const plan = await employeeDeletionPlan(id);
+      employees.push({
+        id,
+        name: plan.employee.name,
+        employeeId: plan.employee.employeeId,
+        archivedAt: plan.employee.archivedAt,
+        version: plan.version,
+        counts: plan.counts,
+        permanentBlocked: plan.permanentBlocked
+      });
+    }
+    res.json({ employees });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+};
+
+export const bulkDeleteInstructors = atomic(
+  async (req, res, next) => {
+    try {
+      if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirm the selected deletions.' });
+      const items = req.body?.items;
+      if (
+        !Array.isArray(items) ||
+        items.some(
+          item =>
+            !item ||
+            typeof item !== 'object' ||
+            !['ARCHIVE', 'DELETE'].includes(item.mode) ||
+            typeof item.version !== 'string'
+        )
+      )
+        return res.status(400).json({ error: 'Choose archive or permanent deletion for every selected employee.' });
+      employeeBulkIds(items.map(item => item.id));
+      let archived = 0,
+        deleted = 0;
+      const now = new Date();
+      for (const item of items) {
+        const plan = await employeeDeletionPlan(item.id);
+        if (plan.version !== item.version)
+          return res.status(409).json({
+            error: `${plan.employee.name} changed since the deletion preview. Close this dialog and review the latest details.`
+          });
+        if (item.mode === 'DELETE') {
+          if (plan.permanentBlocked)
+            return res.status(409).json({
+              error: `${plan.employee.name} has paid or processing payroll history. Archive them instead, or return processing items to unpaid first.`
+            });
+          await prisma.payrollEarning.deleteMany({ where: { instructorId: item.id, batchId: null } });
+          await prisma.instructor.delete({ where: { id: item.id } });
+          await logAction('DELETE_INSTRUCTOR', `Deleted instructor ${plan.employee.name}`, req.user.username);
+          deleted++;
+        } else {
+          if (!plan.employee.archivedAt) {
+            await prisma.instructor.update({
+              where: { id: item.id },
+              data: { archivedAt: now, archivedBy: req.user.username }
+            });
+            await logAction('ARCHIVE_EMPLOYEE', plan.employee.name, req.user.username);
+          }
+          archived++;
+        }
+      }
+      res.json({
+        message: `${archived} employee${archived === 1 ? '' : 's'} archived; ${deleted} permanently deleted.`,
+        archived,
+        deleted
+      });
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      next(error);
+    }
+  },
+  { timeout: 60000 }
+);

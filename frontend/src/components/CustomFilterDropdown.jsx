@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import '../styles/_customSelect.scss';
-function Dropdown({ value, onChange, options, placeholder = 'Select an option', allowClear = true, id: providedId, required = false, disabled = false, className = '', searchable = false }) {
+function Dropdown({ value, onChange, options, placeholder = 'Select an option', allowClear = true, id: providedId, required = false, disabled = false, className = '' }) {
   const generatedId = useId(), id = providedId || generatedId;
   const trigger = useRef(null), menu = useRef(null), search = useRef({ text: '', time: 0 });
   const [open, setOpen] = useState(false), [active, setActive] = useState(0), [position, setPosition] = useState(null);

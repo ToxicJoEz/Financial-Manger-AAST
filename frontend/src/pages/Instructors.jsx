@@ -5,10 +5,11 @@ import '../styles/_employeeDirectory.scss';
 import EmployeeImportDialog from '../components/EmployeeImportDialog';
 import { AnimatePresence } from 'framer-motion';
 import Dialog from '../components/Dialog';
+import BulkDeleteDialog from '../components/BulkDeleteDialog';
 import { useState, useEffect, useContext } from 'react';
 import { Navigate } from 'react-router-dom';
 import axios from 'axios';
-import { Plus, Edit2, Trash2, Search, UserCheck, Briefcase, Phone, Upload, LayoutGrid, List, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, UserCheck, Briefcase, Phone, FileSpreadsheet, LayoutGrid, List, BookOpen, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { BRANCHES } from '../Constants';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
@@ -41,6 +42,11 @@ const Instructors = () => {
   // Edit/Delete state
   const [editingInst, setEditingInst] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [selectedInstIds, setSelectedInstIds] = useState([]);
+  const [bulkActionBusy, setBulkActionBusy] = useState(false);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+
+
   useEffect(()=>{
     if(user?.role==='user')return;
     const controller=new AbortController();setLoading(true);setLoadError('');
@@ -121,23 +127,65 @@ const Instructors = () => {
     });
   };
   const filtered=instructors;
+  const toggleSelectInst = id => setSelectedInstIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  const toggleSelectAll = () => setSelectedInstIds(selectedInstIds.length === filtered.length ? [] : filtered.map(i => i.id));
+
+  const handleBulkArchive = async () => {
+    if (!selectedInstIds.length) return;
+    setBulkActionBusy(true);
+    try {
+      const res = await axios.post('/instructors/bulk-archive', { ids: selectedInstIds });
+      toast.success(res.data.message || 'Employees archived successfully');
+      setSelectedInstIds([]);
+      fetchInstructors();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to archive employees');
+    } finally {
+      setBulkActionBusy(false);
+    }
+  };
+
+  const handleBulkDeleteDone = message => {
+    toast.success(message || 'Selected employees updated');
+    setSelectedInstIds([]);
+    setBulkDeleteModalOpen(false);
+    fetchInstructors();
+  };
   const branchBadges=inst=><div className="directory-branches">{(inst.branches||'').split(',').filter(Boolean).map(b=><span className="branch-label" key={b}><i style={{background:getBranchColor(b.trim())}}/>{b.trim()}</span>)}</div>;
   const actions=inst=><div className="directory-actions"><button className="icon-button" aria-label={'Edit '+inst.name} onClick={()=>setEditingInst({...inst,branchesArray:inst.branches.split(',').map(b=>b.trim())})}><Edit2 size={15}/></button><ArchiveControls entity="employees" record={inst} onSaved={fetchInstructors}/></div>;
   if(user?.role==='user')return <Navigate to="/courses" replace/>;
   return <div className="instructor-directory">
       <PageHeading eyebrow="EMPLOYEE DIRECTORY" title="Employees" description="Your academy team, across roles and branches.">
-        <button className="btn-secondary" onClick={()=>setImportOpen(true)}><Upload size={16}/>Import Excel</button><button className="btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={16} />Add employee</button>
+        <button className="btn-secondary export-format-excel" onClick={()=>setImportOpen(true)}><FileSpreadsheet size={16}/>Import Excel</button><button className="btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={16} />Add employee</button>
       </PageHeading>
       <AnimatePresence>{importOpen&&<EmployeeImportDialog onClose={()=>setImportOpen(false)} onSaved={fetchInstructors}/>}</AnimatePresence>
       <AnimatePresence>{profileId&&<EmployeeDetailsDialog key={profileId} employeeId={profileId} onClose={()=>setProfileId(null)}/>}</AnimatePresence>
+      <AnimatePresence>{bulkDeleteModalOpen&&<BulkDeleteDialog kind="employee" ids={selectedInstIds} previewUrl="/employees/bulk-deletion-preview" deleteUrl="/employees/bulk-delete" listKey="employees" onClose={()=>setBulkDeleteModalOpen(false)} onDone={handleBulkDeleteDone}/>}</AnimatePresence>
       <div className="employee-directory-controls">
        <div className="directory-toolbar"><div className="search-field"><Search size={17}/><input aria-label="Search employees" placeholder="Search name, employee ID, or mobile…" value={searchTerm} onChange={e=>{setSearchTerm(e.target.value);setPage(1);}}/></div><div className="employee-directory-select"><CustomFilterDropdown value={sort} onChange={v=>{setSort(v);setPage(1);}} allowClear={false} placeholder="Sort employees" options={[{value:'name',label:'Name'},{value:'employeeId',label:'Employee ID'},{value:'active',label:'Most active cycles'}]}/></div></div>
        <div className="employee-status-filters" aria-label="Filter employees by availability">{[['all','Active employees'],['inactive','Free employees'],['active','With ongoing courses'],['archived','Archived employees']].map(([value,label])=><button type="button" key={value} aria-pressed={status===value} className={status===value?'active':''} onClick={()=>{setStatus(value);setPage(1);}}><span className={'availability-dot availability-'+value}/>{label}</button>)}<span className="employee-status-help">Free = no ongoing cycles</span></div>
        <div className="employee-branch-filters" aria-label="Filter employees by branch"><span>Branches</span>{BRANCHES.map(b=><button key={b} aria-pressed={branchFilter.includes(b)} className={branchFilter.includes(b)?'active':''} style={{'--branch-color':getBranchColor(b)}} onClick={()=>{setBranchFilter(old=>old.includes(b)?old.filter(x=>x!==b):[...old,b]);setPage(1);}}><i/>{b}</button>)}</div>
        <div className="employee-directory-meta"><span aria-live="polite">{loading?'Updating directory…':`${total} employees`}</span>{(searchTerm||branchFilter.length>0||status!=='all'||sort!=='name')&&<button className="text-button" onClick={clearFilters}>Clear filters</button>}<div className="view-switch" aria-label="Employee view"><button aria-label="Card view" aria-pressed={view==='grid'} className={view==='grid'?'active':''} onClick={()=>changeView('grid')}><LayoutGrid size={17}/></button><button aria-label="List view" aria-pressed={view==='list'} className={view==='list'?'active':''} onClick={()=>changeView('list')}><List size={17}/></button></div></div>
       </div>
+      {selectedInstIds.length > 0 && (
+        <div className="flex items-center justify-between p-3 bg-slate-900 text-white rounded-lg mb-4 shadow">
+          <span className="font-semibold text-sm">{selectedInstIds.length} employees selected</span>
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary text-xs" disabled={bulkActionBusy} onClick={handleBulkArchive}>
+              Archive selected
+            </button>
+            <button type="button" className="btn-secondary bg-red-600 hover:bg-red-700 text-white border-none text-xs" disabled={bulkActionBusy} onClick={() => setBulkDeleteModalOpen(true)}>
+              <Trash2 size={14} /> Delete selected
+            </button>
+            <button type="button" className="text-button text-slate-300 hover:text-white text-xs" onClick={() => setSelectedInstIds([])}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
       {loading?<div className="loading-state" role="status"><span className="loading-spinner"/>Loading employees…</div>:loadError?<div className="empty-state"><p role="alert">{loadError}</p><button className="btn-secondary" onClick={fetchInstructors}>Try again</button></div>:<MotionRegion transitionKey={view+':'+page+':'+status+':'+branchKey+':'+searchTerm}>
-      {view==='grid'?<div className="people-grid">{filtered.map(inst=><article className="person-card employee-directory-card" key={inst.id}><div className="person-top"><span className="person-avatar">{initials(inst.name)}</span>{actions(inst)}</div><button className="employee-name-button" aria-label={'View '+inst.name+' details'} onClick={()=>setProfileId(inst.id)}><h2 dir="auto">{inst.name}</h2><ChevronRight size={17}/></button><p className="person-id">{inst.employeeId?'Employee '+inst.employeeId:'Employee ID not recorded'}</p>{branchBadges(inst)}<div className="person-contact"><Phone size={13}/>{inst.mobile?<a href={'tel:'+inst.mobile}>{inst.mobile}</a>:'Contact number not added'}</div><button className="employee-assignment-summary" onClick={()=>setProfileId(inst.id)} aria-label={'View cycles for '+inst.name}><span><BookOpen size={14}/><b>{inst.activeCount}</b> ongoing</span><span><b>{inst.completedCount}</b> completed</span><ChevronRight size={15}/></button></article>)}</div>:<div className="employee-list"><div className="employee-list-head" aria-hidden="true"><span>Employee</span><span>Branches</span><span>Course activity</span><span>Contact</span><span/></div>{filtered.map(inst=><article className="employee-list-row" key={inst.id}>
+      {view==='grid'?<div className="people-grid">{filtered.map(inst=><article className="person-card employee-directory-card" key={inst.id}><div className="person-top flex items-center justify-between"><input type="checkbox" className="mr-2" aria-label={`Select ${inst.name}`} checked={selectedInstIds.includes(inst.id)} onChange={() => toggleSelectInst(inst.id)} /><span className="person-avatar">{initials(inst.name)}</span>{actions(inst)}</div><button className="employee-name-button" aria-label={'View '+inst.name+' details'} onClick={()=>setProfileId(inst.id)}><h2 dir="auto">{inst.name}</h2><ChevronRight size={17}/></button><p className="person-id">{inst.employeeId?'Employee '+inst.employeeId:'Employee ID not recorded'}</p>{branchBadges(inst)}<div className="person-contact"><Phone size={13}/>{inst.mobile?<a href={'tel:'+inst.mobile}>{inst.mobile}</a>:'Contact number not added'}</div><button className="employee-assignment-summary" onClick={()=>setProfileId(inst.id)} aria-label={'View cycles for '+inst.name}><span><BookOpen size={14}/><b>{inst.activeCount}</b> ongoing</span><span><b>{inst.completedCount}</b> completed</span><ChevronRight size={15}/></button></article>)}</div>:<div className="employee-list"><div className="employee-list-head" aria-hidden="true"><span className="w-10"><input type="checkbox" aria-label="Select all" checked={selectedInstIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></span><span>Employee</span><span>Branches</span><span>Course activity</span><span>Contact</span><span/></div>{filtered.map(inst=><article className="employee-list-row" key={inst.id}>
+        <span className="checkbox-cell flex items-center justify-center"><input type="checkbox" aria-label={`Select ${inst.name}`} checked={selectedInstIds.includes(inst.id)} onChange={() => toggleSelectInst(inst.id)} /></span>
        <button className="employee-list-person" aria-label={'View '+inst.name+' details'} onClick={()=>setProfileId(inst.id)}><span className="employee-list-avatar">{initials(inst.name)}</span><span><strong dir="auto">{inst.name}</strong><small>{inst.employeeId?'ID · '+inst.employeeId:'No employee ID'}</small></span></button>
        <div className="employee-list-branches">{branchBadges(inst)}</div>
        <button className="employee-list-activity" onClick={()=>setProfileId(inst.id)} aria-label={'View cycles for '+inst.name}><span className={'employee-availability '+(inst.activeCount?'is-teaching':'is-free')}><i/>{inst.activeCount?`${inst.activeCount} ongoing`:'Free'}</span><small>{inst.completedCount} completed cycles</small></button>

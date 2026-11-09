@@ -16,7 +16,7 @@ export default function Login() {
   const submit = async e => {
     e.preventDefault(); setError(''); setBusy(true);
     try { await login(username, password); navigate('/'); }
-    catch (err) { setError(err.response?.data?.message || 'Unable to sign in. Please try again.'); }
+    catch (err) { setError(err.response?.data?.error || 'Unable to sign in. Please try again.'); }
     finally { setBusy(false); }
   };
   return <div className="signin">

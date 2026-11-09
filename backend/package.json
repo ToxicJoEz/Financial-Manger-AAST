@@ -14,7 +14,10 @@
     "db:status": "prisma migrate status",
     "db:start": "node src/scripts/localPostgres.js start",
     "db:stop": "node src/scripts/localPostgres.js stop",
-    "db:import-users": "node src/scripts/importUsers.js"
+    "db:import-users": "node src/scripts/importUsers.js",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test",
+    "db:reset-test-data": "node src/scripts/resetLocalTestData.js --confirm"
   },
   "keywords": [],
   "author": "",
@@ -33,6 +36,7 @@
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
+    "prettier": "3.3.3",
     "prisma": "^5.22.0"
   },
   "engines": {

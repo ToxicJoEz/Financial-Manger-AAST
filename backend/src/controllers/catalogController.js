@@ -3,9 +3,10 @@ import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
 import { logAction } from '../utils/logger.js';
 const clean = (value, field) => {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120) throw Object.assign(new Error(`${field} must contain 1 to 120 characters.`), {
-    status: 400
-  });
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120)
+    throw Object.assign(new Error(`${field} must contain 1 to 120 characters.`), {
+      status: 400
+    });
   return value.trim().toUpperCase();
 };
 const summary = (course, user) => {
@@ -17,7 +18,7 @@ const summary = (course, user) => {
     name: course.name,
     code: course.code,
     bookPrice: course.bookPrice,
-    isPrivate:course.isPrivate,
+    isPrivate: course.isPrivate,
     archivedAt: course.archivedAt,
     nextCycleNumber: highest < 2147483647 ? highest + 1 : null,
     cycleCount: visible.length,
@@ -25,10 +26,12 @@ const summary = (course, user) => {
     activeCount: live.filter(c => !c.isFinished).length,
     completedCount: live.filter(c => c.isFinished).length,
     branches: [...new Set(live.map(c => c.branch))],
-    students: live.reduce((n, c) => n + c._count.enrollments, 0)
+    students: live.reduce((n, c) => n + c._count.enrollments, 0),
+    subCourseCount: course.isPrivate ? course.subCourses.filter(sub => isManager(user) || !sub.archivedAt).length : 0
   };
 };
 const relations = {
+  subCourses: { select: { id: true, archivedAt: true } },
   cycles: {
     select: {
       cycleNumber: true,
@@ -54,9 +57,11 @@ const relations = {
 export const listCourses = async (req, res, next) => {
   try {
     const courses = await prisma.course.findMany({
-      where: isManager(req.user) ? {} : {
-        archivedAt: null
-      },
+      where: isManager(req.user)
+        ? {}
+        : {
+            archivedAt: null
+          },
       include: relations,
       orderBy: {
         name: 'asc'
@@ -75,9 +80,10 @@ export const getCourse = async (req, res, next) => {
       },
       include: relations
     });
-    if (!course || !isManager(req.user) && course.archivedAt) return res.status(404).json({
-      error: 'Course not found.'
-    });
+    if (!course || (!isManager(req.user) && course.archivedAt))
+      return res.status(404).json({
+        error: 'Course not found.'
+      });
     res.json(summary(course, req.user));
   } catch (error) {
     next(error);
@@ -85,20 +91,24 @@ export const getCourse = async (req, res, next) => {
 };
 export const createCourse = atomic(async (req, res, next) => {
   try {
-    if(req.body.isPrivate!==undefined&&typeof req.body.isPrivate!=='boolean')return res.status(400).json({error:'Private course must be a toggle value.'});
+    if (req.body.isPrivate !== undefined && typeof req.body.isPrivate !== 'boolean')
+      return res.status(400).json({ error: 'Private course must be a toggle value.' });
     const name = clean(req.body.name, 'Course name'),
       code = clean(req.body.code, 'Course code');
-    if (await prisma.course.findUnique({
-      where: {
-        code
-      }
-    })) return res.status(409).json({
-      error: 'This course code is already in use.'
-    });
+    if (
+      await prisma.course.findUnique({
+        where: {
+          code
+        }
+      })
+    )
+      return res.status(409).json({
+        error: 'This course code is already in use.'
+      });
     const course = await prisma.course.create({
       data: {
-        isPrivate:req.body.isPrivate===true,
-        bookPrice:req.body.isPrivate===true?0:Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price'))/100,
+        isPrivate: req.body.isPrivate === true,
+        bookPrice: req.body.isPrivate === true ? 0 : Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
         name,
         code
       }
@@ -116,12 +126,21 @@ export const editCourse = atomic(async (req, res, next) => {
         id: req.params.id
       }
     });
-    if (!current) return res.status(404).json({
-      error: 'Course not found.'
-    });
-    if(req.body.isPrivate!==undefined&&typeof req.body.isPrivate!=='boolean')return res.status(400).json({error:'Private course must be a toggle value.'});
-    const isPrivate=req.body.isPrivate??current.isPrivate;
-    if(isPrivate!==current.isPrivate&&await prisma.cycle.count({where:{parentCourseId:current.id}}))return res.status(409).json({error:'Course type cannot change once cycles exist. Create a separate umbrella for the other type.'});
+    if (!current)
+      return res.status(404).json({
+        error: 'Course not found.'
+      });
+    if (req.body.isPrivate !== undefined && typeof req.body.isPrivate !== 'boolean')
+      return res.status(400).json({ error: 'Private course must be a toggle value.' });
+    const isPrivate = req.body.isPrivate ?? current.isPrivate;
+    if (
+      isPrivate !== current.isPrivate &&
+      ((await prisma.cycle.count({ where: { parentCourseId: current.id } })) ||
+        (await prisma.subCourse.count({ where: { parentCourseId: current.id } })))
+    )
+      return res
+        .status(409)
+        .json({ error: 'Course type cannot change once cycles exist. Create a separate umbrella for the other type.' });
     const name = clean(req.body.name ?? current.name, 'Course name'),
       code = clean(req.body.code ?? current.code, 'Course code');
     const duplicate = await prisma.course.findUnique({
@@ -129,16 +148,17 @@ export const editCourse = atomic(async (req, res, next) => {
         code
       }
     });
-    if (duplicate && duplicate.id !== current.id) return res.status(409).json({
-      error: 'This course code is already in use.'
-    });
+    if (duplicate && duplicate.id !== current.id)
+      return res.status(409).json({
+        error: 'This course code is already in use.'
+      });
     const course = await prisma.course.update({
       where: {
         id: current.id
       },
       data: {
         isPrivate,
-        bookPrice:isPrivate?0:Number(moneyMinor(req.body.bookPrice??current.bookPrice,'Book price'))/100,
+        bookPrice: isPrivate ? 0 : Number(moneyMinor(req.body.bookPrice ?? current.bookPrice, 'Book price')) / 100,
         name,
         code
       }
@@ -153,15 +173,21 @@ export const editCourse = atomic(async (req, res, next) => {
         cycleNumber: true
       }
     });
-    if(!course.isPrivate)for (const cycle of cycles) await prisma.cycle.update({
-      where: {
-        id: cycle.id
-      },
-      data: {
-        name: `${name} ${cycle.cycleNumber}`
-      }
-    });
-    await logAction('UPDATE_COURSE', `Updated ${current.name} (${current.code}) to ${name} (${code}); historical financial snapshots retained.`, req.user.username);
+    if (!course.isPrivate)
+      for (const cycle of cycles)
+        await prisma.cycle.update({
+          where: {
+            id: cycle.id
+          },
+          data: {
+            name: `${name} ${cycle.cycleNumber}`
+          }
+        });
+    await logAction(
+      'UPDATE_COURSE',
+      `Updated ${current.name} (${current.code}) to ${name} (${code}); historical financial snapshots retained.`,
+      req.user.username
+    );
     res.json(course);
   } catch (error) {
     next(error);
@@ -174,17 +200,21 @@ export const archiveCourse = atomic(async (req, res, next) => {
         id: req.params.id
       }
     });
-    if (!course) return res.status(404).json({
-      error: 'Course not found.'
-    });
-    if (await prisma.cycle.count({
-      where: {
-        parentCourseId: course.id,
-        archivedAt: null
-      }
-    })) return res.status(409).json({
-      error: 'Archive every cycle before archiving this course.'
-    });
+    if (!course)
+      return res.status(404).json({
+        error: 'Course not found.'
+      });
+    if (
+      await prisma.cycle.count({
+        where: {
+          parentCourseId: course.id,
+          archivedAt: null
+        }
+      })
+    )
+      return res.status(409).json({
+        error: 'Archive every cycle before archiving this course.'
+      });
     await prisma.course.update({
       where: {
         id: course.id

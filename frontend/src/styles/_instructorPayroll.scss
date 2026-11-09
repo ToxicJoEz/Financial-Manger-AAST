@@ -27,14 +27,45 @@
 .payroll-day-payment-state {display:flex;align-items:flex-end;flex-direction:column;gap:9px;flex-shrink:0;b {font-size:15px;color:#3d5d7b;}button {display:flex;align-items:center;gap:6px;font-size:11px;}}
 @media(max-width:600px){.payroll-day-heading {padding:19px;align-items:flex-start;flex-direction:column;h2 {font-size:19px;}}.payroll-day-total {text-align:left;}.payroll-day-actions {padding:15px;>span {width:100%;line-height:1.6;}}.payroll-day-payment {padding:18px 15px;gap:12px;align-items:flex-start;}.payroll-day-payment-state {max-width:46%;text-align:right;} }
 
-// Consistent file-format colors for monthly and daily salary exports.
-.instructor-payroll {
-  .export-format-pdf { --export-ink: #b42335; --export-bg: #fff0f1; --export-border: #f4b8c1; }
-  .export-format-excel { --export-ink: #147044; --export-bg: #edf9f1; --export-border: #adddc1; }
-  .export-format-word { --export-ink: #2157b5; --export-bg: #edf4ff; --export-border: #b4cdf5; }
-  .export-format-pdf, .export-format-excel, .export-format-word {
-    color: var(--export-ink); background: var(--export-bg); border-color: var(--export-border);
-    &:hover:not(:disabled) { background: var(--export-bg); border-color: var(--export-ink); box-shadow: 0 2px 8px #172b4d12; }
-    &:focus-visible { outline: 2px solid var(--export-ink); outline-offset: 3px; }
-  }
+
+
+// Numbered payment batches: name, dates, and payments split into processing and paid sections.
+.payroll-run-dates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.run-date {
+  display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; border: 1px solid;
+  font-size: 11px; font-weight: 600; letter-spacing: .2px;
+  b { font-size: 12px; font-weight: 750; }
+  &.run-date-initiated { background: #eef2f9; border-color: #d8e0ee; color: #5a6d8c; b { color: #2f4566; } }
+  &.run-date-payment.is-pending { background: #fdf2dd; border-color: #efcf94; color: #8a5a12; b { color: #6f450a; } }
+  &.run-date-payment.is-paid { background: #e5f5ec; border-color: #b4dec5; color: #23704a; b { color: #175a39; } }
+  &.run-date-payment.is-cancelled { background: #eef1f5; border-color: #dce2ea; color: #6c7a90; b { color: #56657c; } }
 }
+// Processing work stands out on a warm tinted background; paid payments stay plain.
+.payroll-run-section { margin-top: 0; padding: 16px 0 4px; border-top: 1px solid #e6ebf3;
+  h3 { padding: 0 23px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 6px; font-size: 12px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+    span { font-weight: 600; letter-spacing: 0; text-transform: none; } }
+  &.section-processing h3 { color: #8f5c10; span { color: #a57a3b; } }
+  &.section-paid { background: #fff;
+    h3 { color: #23704a; span { color: #5e9478; } } }
+  &.is-secondary { border-top: 2px dashed #d9e0ea; }
+}
+.payroll-run.state-cancelled { background: #fafbfc; h2 { color: #7a879b; } }
+.payroll-run-cancelled { margin: 0 23px 20px; padding: 12px 14px; border-radius: 8px; background: #f3f5f8; color: #6c7a90; font-size: 12px; }
+.payroll-payment-status.status-cancelled { background: #eef1f5; color: #6c7a90; }
+.payroll-status-tabs .payroll-status-cancelled { margin-left: auto; color: #8a5a63; &.active { background: #fbeff1; color: #9c3445; border-color: #f1d3d8; } }
+.payroll-row-dates strong { display: block; font-size: 11px; color: #3d5577; margin-bottom: 2px; }
+.payroll-run-choice { display: flex; flex-direction: column; gap: 8px; margin: 0 0 16px; padding: 12px 14px; border: 1px solid #dfe6f1; border-radius: 10px;
+  legend { padding: 0 5px; font-size: 12px; font-weight: 700; } select { margin-top: 4px; } }
+
+// The tinted processing block only appears when a batch is partly paid, to separate the two parts.
+.payroll-run.state-partial .payroll-run-section.section-processing {
+  background: #fbf3e4; border-top-color: #efdcb7; box-shadow: inset 4px 0 0 #dda33e;
+  .payroll-day-payment + .payroll-day-payment { border-top-color: #efdfc2; }
+}
+// Collapsible batches: the header toggles the details.
+.payroll-run-toggle { cursor: pointer; position: relative; padding-right: 56px !important;
+  &:hover h2 { color: #4c65eb; }
+  &:focus-visible { outline: 2px solid #4c65eb; outline-offset: -2px; border-radius: 12px; }
+}
+.payroll-run-chevron { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); color: #8a97ad; transition: transform .15s ease; }
+.payroll-run.is-open .payroll-run-chevron { transform: translateY(-50%) rotate(180deg); }

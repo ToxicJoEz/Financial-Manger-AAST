@@ -36,7 +36,7 @@ const RegisterUser = () => {
       setUsername('');
       setPassword('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed.');
+      setError(err.response?.data?.error || 'Registration failed.');
     } finally {
       setIsSubmitting(false);
     }

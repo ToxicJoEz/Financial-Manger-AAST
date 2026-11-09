@@ -1,5 +1,15 @@
 import express from 'express';
-import { archiveStudent, permanentlyDeleteStudent, getStudentDetails, getStudents, createStudent, updateStudent, deleteStudent } from '../controllers/studentController.js';
+import {
+  archiveStudent,
+  permanentlyDeleteStudent,
+  getStudentDetails,
+  getStudents,
+  createStudent,
+  updateStudent,
+  deleteStudent,
+  bulkArchiveStudents,
+  bulkDeleteStudents
+} from '../controllers/studentController.js';
 import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -8,11 +18,13 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/', getStudents);
-router.post('/:id/archive',modOrAbove,archiveStudent);
-router.delete('/:id/permanent',modOrAbove,permanentlyDeleteStudent);
+router.post('/bulk-archive', modOrAbove, bulkArchiveStudents);
+router.post('/bulk-delete', bulkDeleteStudents);
+router.post('/:id/archive', modOrAbove, archiveStudent);
+router.delete('/:id/permanent', modOrAbove, permanentlyDeleteStudent);
 router.get('/:id', getStudentDetails);
 router.post('/', createStudent);
 router.put('/:id', updateStudent);
-router.delete('/:id', modOrAbove, deleteStudent);
+router.delete('/:id', deleteStudent);
 
 export default router;

@@ -8,7 +8,8 @@ test('Vercel services own their builds and route API before frontend', () => {
   assert.equal(config.services.backend.root, 'backend');
   assert.equal(config.services.backend.framework, 'express');
   assert(existsSync(new URL('backend/' + config.services.backend.entrypoint, root)));
-  for (const key of ['framework','functions','installCommand','buildCommand','outputDirectory']) assert(!Object.hasOwn(config, key));
+  for (const key of ['framework', 'functions', 'installCommand', 'buildCommand', 'outputDirectory'])
+    assert(!Object.hasOwn(config, key));
   assert.equal(config.rewrites[0].destination.service, 'backend');
   assert.equal(config.rewrites[1].destination.service, 'backend');
   assert.equal(config.rewrites.at(-1).destination.service, 'frontend');

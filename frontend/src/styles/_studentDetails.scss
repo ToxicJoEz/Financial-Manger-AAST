@@ -9,3 +9,23 @@
 .student-cycle-payments{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid #edf0f6;padding-top:12px;font-size:11px;color:#7d8aa0;b{color:#3b506c;margin-left:5px;}small{margin-left:5px;} .student-book-chip{padding:5px 8px;border-radius:5px;background:#fff2d5;color:#94631f;&.book-paid{background:#e0f3e9;color:#217451;}&.book-exempt{background:#e9eef7;color:#536d8e;}}}
 .student-name-link {background:none;border:0;padding:0;color:inherit;text-align:inherit;font-weight:700;cursor:pointer;&:hover{color:#526bd0;text-decoration:underline;}}
 @media(max-width:760px){.student-profile-facts{grid-template-columns:repeat(2,minmax(0,1fr));}.student-cycle-list{grid-template-columns:1fr;}}
+
+.employee-cycle-students {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #795548;
+  background: #fdf6ec;
+  border: 1px solid #faecd8;
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin: 6px 0;
+
+  .student-names {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

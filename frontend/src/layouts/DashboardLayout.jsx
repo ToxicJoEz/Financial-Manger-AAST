@@ -1,4 +1,4 @@
-import StudentRequestReviewDialog from '../components/StudentRequestReviewDialog';
+import { canSeePayroll } from '../utils/access';
 import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
 import { RequestReviewContext } from '../context/RequestReviewContext';
 import { useContext, useState, useEffect, useRef } from 'react';
@@ -71,13 +71,13 @@ export default function DashboardLayout() {
 
   const unread = unreadTotal;
   const nav = [{ to: '/', name: 'Overview', icon: LayoutDashboard }, { to: '/courses', name: 'Courses', icon: BookOpen }, { to: '/students', name: 'Students', icon: GraduationCap }, ...(isManager ? [{ to: '/employees', name: 'Employees', icon: Users }, { to: '/finances', name: 'Finance', icon: Wallet }] : [])];
-  const openRequestReview = async (id, kind = 'INSTRUCTOR') => {
-    if (!isManager) return;
+  const openRequestReview = async id => {
+    if (!canSeePayroll(user)) return;
     const load = ++reviewLoad.current;
     setShowNotifications(false);
     try {
-      const { data } = await axios.get(kind === 'STUDENT' ? `/student-requests/${id}` : `/assignments/${id}`);
-      if (load === reviewLoad.current) setReviewRequest({ ...data, kind });
+      const { data } = await axios.get(`/assignments/${id}`);
+      if (load === reviewLoad.current) setReviewRequest(data);
     } catch (error) {
       if (load === reviewLoad.current) toast.error(error.response?.data?.error || 'Could not open this request.');
       window.dispatchEvent(new Event('notifications-updated'));
@@ -88,8 +88,7 @@ export default function DashboardLayout() {
       try { await axios.put(`/notifications/${n.id}/read`); setUnreadTotal(value => Math.max(0, value - 1)); setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)); }
       catch { toast.error('Could not mark notification as read'); }
     }
-    if (isManager && n.status === 'PENDING') await openRequestReview(n.relatedId, n.request?.kind);
-    else if (n.request?.kind === 'STUDENT' && !n.request.courseId) navigate('/students');
+    if (canSeePayroll(user) && n.status === 'PENDING') await openRequestReview(n.relatedId);
     else navigate('/courses/cycles', { state: { search: n.request?.course?.name || '' } });
     setShowNotifications(false);
   };
@@ -125,7 +124,7 @@ export default function DashboardLayout() {
       <main id="main-content" className="workspace-main"><MotionRegion transitionKey={location.pathname === '/finances' || location.pathname.startsWith('/finances/') ? '/finances' : location.pathname} className="page-transition">{outlet}</MotionRegion></main>
       <footer className="workspace-footer"><span><span className="footer-dot" />AAST Finance</span><span>A little clarity. A better workday.</span></footer>
     </div>
-  </div><AnimatePresence>{reviewRequest && (reviewRequest.kind === 'STUDENT' ? <StudentRequestReviewDialog key={reviewRequest.id} request={reviewRequest} onClose={() => setReviewRequest(null)} /> : <AssignmentReviewDialog key={reviewRequest.id} request={reviewRequest} onClose={() => setReviewRequest(null)} />)}</AnimatePresence></RequestReviewContext.Provider>;
+  </div><AnimatePresence>{reviewRequest && <AssignmentReviewDialog key={reviewRequest.id} request={reviewRequest} onClose={() => setReviewRequest(null)} />}</AnimatePresence></RequestReviewContext.Provider>;
 }
 
 

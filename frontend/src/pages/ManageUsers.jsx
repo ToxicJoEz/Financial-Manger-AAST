@@ -4,26 +4,22 @@ import Dialog from '../components/Dialog';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { Shield, ShieldAlert, UserCheck, UserX, AlertTriangle, UserPlus, ListOrdered } from 'lucide-react';
+import { UserPlus, ListOrdered } from 'lucide-react';
 import { Link, Navigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
+import { MOD_TITLE_OPTIONS, modTitle } from '../utils/access';
 const ManageUsers = () => {
   const {
     user: currentUser
   } = useContext(AuthContext);
-  if (currentUser && currentUser.role === 'user') {
-    return <Navigate to="/" replace />;
-  }
+  const isStaff = currentUser && currentUser.role === 'user';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Modal states
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
   const fetchUsers = async () => {
     try {
       const {
@@ -42,6 +38,9 @@ const ManageUsers = () => {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    if (!isStaff) fetchUsers();
+  }, [isStaff]);
   const canModify = targetUser => {
     if (targetUser.username === 'main-admin') return false;
     if (currentUser.role === 'admin') return true;
@@ -63,7 +62,7 @@ const ManageUsers = () => {
       toast.success(`Account for ${targetUser.username} unlocked successfully`);
       fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to unlock account');
+      toast.error(err.response?.data?.error || 'Failed to unlock account');
     }
   };
   const executeAction = async (id, payload, endpoint) => {
@@ -73,12 +72,11 @@ const ManageUsers = () => {
       fetchUsers(); // refresh
       setConfirmModal(null);
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Action failed');
+      toast.error(err.response?.data?.error || 'Action failed');
     }
   };
   const handleStatusToggle = (user, type) => {
     const isBanAction = type === 'ban';
-    const currentValue = isBanAction ? user.isBanned : user.isActive;
     const newValue = isBanAction ? !user.isBanned : !user.isActive;
     setConfirmModal({
       title: isBanAction ? newValue ? 'Ban User' : 'Unban User' : newValue ? 'Reactivate User' : 'Deactivate User',
@@ -87,6 +85,28 @@ const ManageUsers = () => {
         [isBanAction ? 'isBanned' : 'isActive']: newValue
       }, 'status')
     });
+  };
+  // Main mod (all branches, payroll) or a branch mod (no payroll; their branch's money is checked).
+  const handleModTitle = async (targetUser, value) => {
+    const branchScope = value === 'MAIN' ? null : value;
+    if ((targetUser.branchScope || null) === branchScope) return;
+    try {
+      await axios.put('/users/' + targetUser.id + '/branch-scope', { branchScope });
+      toast.success(`${targetUser.username} is now ${modTitle({ branchScope })}`);
+      setUsers(prev => prev.map(u => (u.id === targetUser.id ? { ...u, branchScope } : u)));
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to update the mod title');
+    }
+  };
+  const handleToggleBooks = async targetUser => {
+    try {
+      const updated = !targetUser.canManageBooks;
+      await axios.put('/users/' + targetUser.id + '/permissions', { canManageBooks: updated });
+      toast.success(targetUser.username + ': Book permission ' + (updated ? 'granted' : 'revoked'));
+      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, canManageBooks: updated } : u));
+    } catch (err) {
+      toast.error(err.response?.data?.error || err.response?.data?.error || 'Failed to update permissions');
+    }
   };
   const handleRoleChange = (user, newRole) => {
     setConfirmModal({
@@ -100,6 +120,7 @@ const ManageUsers = () => {
   if (!currentUser || currentUser.role !== 'admin' && currentUser.role !== 'mod') {
     return <div className="appearance-p-8 appearance-text-center appearance-font-bold appearance-text-red-500">Access Denied: Mods and Admins Only</div>;
   }
+  if (isStaff) return <Navigate to="/" replace />;
   return <div className="manage-users-container">
       <PageHeading eyebrow="The people you work with" title="Team & access" description="A shared workspace, with the right access for everyone.">
         <Link to="/logs" className="btn-secondary"><ListOrdered size={16}/>Activity log</Link>
@@ -112,6 +133,7 @@ const ManageUsers = () => {
               <tr>
                 <th>Team member</th>
                 <th>Access Level</th>
+                <th>Permissions</th>
                 <th>Account Status</th>
                 <th>Last Active</th>
                 <th>Manage access</th>
@@ -131,7 +153,23 @@ const ManageUsers = () => {
                     </div>
                   </td>
                   <td>
-                    <span className={`badge badge-${u.role}`}>{u.role}</span>
+                    <span className={"badge badge-" + u.role}>{u.role}</span>
+                    {u.role === 'mod' && (currentUser.role === 'admin' ? <div className="mod-title-select"><CustomFilterDropdown allowClear={false} value={u.branchScope || 'MAIN'} onChange={val => handleModTitle(u, val)} options={MOD_TITLE_OPTIONS} placeholder="Mod title" /></div> : <span className={`badge mod-title-badge${u.branchScope ? ' is-branch' : ''}`}>{modTitle(u)}</span>)}
+                  </td>
+                  <td>
+                    {u.role === 'admin' || u.role === 'mod' ? (
+                      <span className="permission-badge-role">Full (by role)</span>
+                    ) : (
+                      <label className="permission-toggle-label" title="Allow this accountant to mark book payments as paid or exempt">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(u.canManageBooks)}
+                          disabled={!canModify(u)}
+                          onChange={() => handleToggleBooks(u)}
+                        />
+                        <span>Books</span>
+                      </label>
+                    )}
                   </td>
                   <td>
                     <div className="flex gap-2 items-center flex-wrap">
@@ -143,7 +181,7 @@ const ManageUsers = () => {
                   <td>
                     <span className="appearance-text-xs text-muted">
                       {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-GB', { year:'2-digit',
-                  day: '2-digit',
+                    day: '2-digit',
                   month: '2-digit',
                   hour: '2-digit',
                   minute: '2-digit'

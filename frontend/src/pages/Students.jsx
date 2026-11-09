@@ -7,7 +7,7 @@ import FinancialRemovalChoice from '../components/FinancialRemovalChoice';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AnimatePresence } from 'framer-motion';
-import { Plus, Edit2, Trash2, Search, Phone, GraduationCap, X, Check } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Phone, GraduationCap, X, Check, AlertTriangle } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import Dialog from '../components/Dialog';
 import { PageHeading, initials } from '../components/WorkspaceUI';
@@ -35,12 +35,13 @@ export default function Students() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [keepFinancialRecords, setKeepFinancialRecords] = useState(true);
   const [confirmRemoval, setConfirmRemoval] = useState(false);
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [bulkKeepFinancials, setBulkKeepFinancials] = useState(true);
+  const [bulkActionBusy, setBulkActionBusy] = useState(false);
+
+
   useEffect(() => { setKeepFinancialRecords(true); setConfirmRemoval(false); }, [deleteTarget]);
-  useEffect(() => {
-    fetchStudents();
-    window.addEventListener('students-updated', fetchStudents);
-    return () => window.removeEventListener('students-updated', fetchStudents);
-  }, []);
   const fetchStudents = async () => {
     try {
       setLoading(true);
@@ -52,6 +53,11 @@ export default function Students() {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    fetchStudents();
+    window.addEventListener('students-updated', fetchStudents);
+    return () => window.removeEventListener('students-updated', fetchStudents);
+  }, []);
   const resetAddForm = () => {
     setAddName('');
     setAddRegNumber('');
@@ -72,7 +78,7 @@ export default function Students() {
         mobile: addMobile.trim() || null,
         ...addProfile
       });
-      toast.success(res.data.pending ? res.data.message : `Student ${res.data.name} registered`);
+      toast.success(`Student ${res.data.name} registered`);
       window.dispatchEvent(new Event('notifications-updated'));
       setIsAddModalOpen(false);
       resetAddForm();
@@ -110,8 +116,8 @@ export default function Students() {
     if (!deleteTarget) return;
     try {
       setSubmitting(true);
-      const res = await axios.delete(`/students/${deleteTarget.id}`, { data: { keepFinancialRecords, confirm: confirmRemoval } });
-      toast.success(res.data.pending ? res.data.message : `Removed student ${deleteTarget.name}`);
+      await axios.delete(`/students/${deleteTarget.id}`, { data: { keepFinancialRecords: manager ? keepFinancialRecords : true, confirm: confirmRemoval } });
+      toast.success(`Removed student ${deleteTarget.name}`);
       window.dispatchEvent(new Event('notifications-updated'));
       setDeleteTarget(null);
       fetchStudents();
@@ -126,18 +132,54 @@ export default function Students() {
     const q = searchTerm.toLowerCase();
     return (s.englishName || '').toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || (s.registrationNumber||'').toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
   });
+  const toggleSelectStudent = id => setSelectedStudentIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
+  const toggleSelectAll = () => setSelectedStudentIds(selectedStudentIds.length === filtered.length && filtered.length > 0 ? [] : filtered.map(s => s.id));
+
+  const handleBulkArchive = async () => {
+    if (!selectedStudentIds.length) return;
+    setBulkActionBusy(true);
+    try {
+      const res = await axios.post('/students/bulk-archive', { ids: selectedStudentIds });
+      toast.success(res.data.message || 'Students archived successfully');
+      setSelectedStudentIds([]);
+      fetchStudents();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to archive students');
+    } finally {
+      setBulkActionBusy(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedStudentIds.length) return;
+    setBulkActionBusy(true);
+    try {
+      const res = await axios.post('/students/bulk-delete', {
+        ids: selectedStudentIds,
+        keepFinancialRecords: manager ? bulkKeepFinancials : true,
+        confirm: true
+      });
+      toast.success(res.data.message || 'Students deleted successfully');
+      setSelectedStudentIds([]);
+      setBulkDeleteModalOpen(false);
+      fetchStudents();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to delete students');
+    } finally {
+      setBulkActionBusy(false);
+    }
+  };
   return <div className="students-container">
       <PageHeading eyebrow="ACADEMIC DIRECTORY" title="Students" description="Comprehensive directory of registered students across all academic branches.">
         <button className="btn-primary" onClick={() => {
         resetAddForm();
         setIsAddModalOpen(true);
       }}>
-          <Plus size={16} /> {manager ? 'Add student' : 'Request student addition'}
+          <Plus size={16} /> Add student
         </button>
       </PageHeading>
 
-      {!manager && <p className="payment-view-note">Student additions require approval from an admin or moderator. Archiving and deletion are available only to managers. Pending requests appear in Notifications.</p>}
-      {manager&&<div className="section-tabs"><button className={!archivedView?'active':''} onClick={()=>setArchivedView(false)}>Active students</button><button className={archivedView?'active':''} onClick={()=>setArchivedView(true)}>Archived students</button></div>}
+            {manager&&<div className="section-tabs"><button className={!archivedView?'active':''} onClick={()=>setArchivedView(false)}>Active students</button><button className={archivedView?'active':''} onClick={()=>setArchivedView(true)}>Archived students</button></div>}
       <div className="students-toolbar">
         <div className="students-search">
           <Search size={16} />
@@ -153,6 +195,24 @@ export default function Students() {
         </div>
       </div>
 
+      {selectedStudentIds.length > 0 && (
+        <div className="flex items-center justify-between p-3 bg-slate-900 text-white rounded-lg mb-4 shadow">
+          <span className="font-semibold text-sm">{selectedStudentIds.length} students selected</span>
+          <div className="flex items-center gap-2">
+            {manager && (
+              <button type="button" className="btn-secondary text-xs" disabled={bulkActionBusy} onClick={handleBulkArchive}>
+                Archive selected
+              </button>
+            )}
+            <button type="button" className="btn-secondary bg-red-600 hover:bg-red-700 text-white border-none text-xs" disabled={bulkActionBusy} onClick={() => setBulkDeleteModalOpen(true)}>
+              <Trash2 size={14} /> Delete selected
+            </button>
+            <button type="button" className="text-button text-slate-300 hover:text-white text-xs" onClick={() => setSelectedStudentIds([])}>
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
       {loading ? <div className="loading-state">
           <div className="loading-spinner" />
           <span>Loading student records...</span>
@@ -175,6 +235,7 @@ export default function Students() {
             <table className="students-table">
               <thead>
                 <tr>
+                  <th className="select-column"><input type="checkbox" aria-label="Select all" checked={selectedStudentIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></th>
                   <th>Student</th>
                   <th>Registration ID</th>
                   <th>Contact</th>
@@ -184,6 +245,7 @@ export default function Students() {
               </thead>
               <tbody>
                 {filtered.map(student => <tr key={student.id}>
+                    <td className="select-column"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedStudentIds.includes(student.id)} onChange={() => toggleSelectStudent(student.id)} /></td>
                     <td>
                       <div className="student-info-cell">
                         <span className="student-avatar">{initials(student.name)}</span>
@@ -218,7 +280,7 @@ export default function Students() {
                   })}>
                           <Edit2 size={15} />
                         </button>
-                        {manager&&<ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>}
+                        <ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>
 
                       </div>
                     </td>
@@ -261,7 +323,7 @@ export default function Students() {
                     Cancel
                   </button>
                   <button type="submit" className="btn-primary" disabled={submitting}>
-                    <Plus size={16} /> {submitting ? 'Submitting…' : manager ? 'Register student' : 'Submit for approval'}
+                    <Plus size={16} /> {submitting ? 'Submitting…' : 'Register student'}
                   </button>
                 </div>
               </form>
@@ -318,6 +380,59 @@ export default function Students() {
           </Dialog>}
       </AnimatePresence>
 
+      {/* Bulk Delete Modal */}
+      <AnimatePresence>
+        {bulkDeleteModalOpen && (
+          <Dialog title="Bulk Delete Students" onClose={() => setBulkDeleteModalOpen(false)}>
+            <div className="modal-content card max-w-md w-full">
+              <div className="flex items-center gap-3 text-red-600 mb-3">
+                <AlertTriangle size={24} />
+                <h3 className="text-lg font-bold text-slate-900">Delete {selectedStudentIds.length} Selected Students?</h3>
+              </div>
+              {!manager ? <p className="text-sm text-slate-600 mb-6">
+                These students will be removed from normal staff views. Their tuition and book payments stay counted in revenue and reports. Only admins and moderators can exclude financial records.
+              </p> : <>
+              <p className="text-sm text-slate-600 mb-4">
+                Some or all of these students may have recorded tuition or book payments.
+                Choose how to handle associated financial records:
+              </p>
+              <div className="flex flex-col gap-3 mb-6 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="studentBulkFinancialChoice"
+                    checked={bulkKeepFinancials}
+                    onChange={() => setBulkKeepFinancials(true)}
+                  />
+                  <div>
+                    <strong className="block text-sm font-semibold text-slate-900">Keep Financial Records (Recommended)</strong>
+                    <span className="text-xs text-slate-500">Student records are soft-deleted, but previous tuition and book payments remain counted in revenue and reports.</span>
+                  </div>
+                </label>
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="studentBulkFinancialChoice"
+                    checked={!bulkKeepFinancials}
+                    onChange={() => setBulkKeepFinancials(false)}
+                  />
+                  <div>
+                    <strong className="block text-sm font-semibold text-red-700">Delete Financial Records As Well</strong>
+                    <span className="text-xs text-red-600">Removes student payments from financial totals, revenue metrics, and balance sheets.</span>
+                  </div>
+                </label>
+              </div></>}
+              <div className="flex items-center justify-end gap-3">
+                <button type="button" className="btn-secondary" disabled={bulkActionBusy} onClick={() => setBulkDeleteModalOpen(false)}>Cancel</button>
+                <button type="button" className="btn-primary bg-red-600 hover:bg-red-700 text-white" disabled={bulkActionBusy} onClick={handleBulkDelete}>
+                  {bulkActionBusy ? 'Deleting…' : `Delete ${selectedStudentIds.length} Students`}
+                </button>
+              </div>
+            </div>
+          </Dialog>
+        )}
+      </AnimatePresence>
+
       {/* Delete Confirmation Modal */}
       <AnimatePresence>
         {deleteTarget && <Dialog title="Delete Student" onClose={() => setDeleteTarget(null)}>
@@ -335,13 +450,13 @@ export default function Students() {
                 <div className="delete-student-highlight">
                   <strong>{deleteTarget.name}</strong> (Reg: {deleteTarget.registrationNumber})
                 </div>
-                <FinancialRemovalChoice keep={keepFinancialRecords} onKeep={setKeepFinancialRecords} confirmed={confirmRemoval} onConfirm={setConfirmRemoval} />
+                <FinancialRemovalChoice allowArchive={manager} keep={manager ? keepFinancialRecords : true} onKeep={setKeepFinancialRecords} confirmed={confirmRemoval} onConfirm={setConfirmRemoval} />
                 <div className="student-modal-actions">
                   <button type="button" className="btn-secondary" onClick={() => setDeleteTarget(null)}>
                     Cancel
                   </button>
                   <button type="button" className="btn-primary students-presentation-25" onClick={handleDeleteSubmit} disabled={submitting || !confirmRemoval}>
-                    <Trash2 size={16} /> {submitting ? 'Submitting…' : manager ? 'Delete student' : 'Request removal'}
+                    <Trash2 size={16} /> {submitting ? 'Submitting…' : 'Delete student'}
                   </button>
                 </div>
               </div>

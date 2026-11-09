@@ -1,3 +1,5 @@
+import { canSeePayroll } from '../utils/access';
+import { cyclePath } from '../utils/cyclePath';
 import PrivateBadge from '../components/PrivateBadge';
 import '../styles/_yearOverview.scss';
 import { useContext, useEffect, useState } from 'react';
@@ -12,6 +14,8 @@ export default function Home() {
     user
   } = useContext(AuthContext);
   const manager = ['admin', 'mod'].includes(user.role);
+  // Payroll figures are for admins and the main mod; branch mods see the course snapshot.
+  const payroll = canSeePayroll(user);
   const [state, setState] = useState({
     courses: [],
     finances: null,
@@ -80,15 +84,15 @@ export default function Home() {
     {error ? <section className="panel"><EmptyState title="Let’s try that again" description="We couldn’t load your overview. Check your connection and refresh." icon={CircleHelp}><button className="btn-primary" onClick={load}>Try again</button></EmptyState></section> : loading ? <div className="loading-state"><span className="loading-spinner" />Getting your workspace ready…</div> : <>
       <div className={`home-summary ${manager ? 'has-year-finances' : ''}`}>
         <section className="balance-card">
-          <div className="balance-top"><span><Wallet size={17} />{manager ? 'Payroll snapshot' : 'Course snapshot'}</span><span className="balance-period">{manager ? year : 'All branches'}</span></div>
-          <div className="balance-body"><div><div className="balance-label">{manager ? `Salary paid in ${year}` : 'Cycles across the academy'}</div><div className="balance-amount">{manager ? money(paid) : courses.length}<span>{manager ? 'EGP' : 'cycles'}</span></div><Link to={manager ? '/finances/payroll' : '/courses'} className="balance-link">{manager ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
-            {manager ? <div className="annual-payroll-mark"><CalendarDays size={25}/><strong>{year}</strong><span>Actual payment year</span></div> : (<div className="payroll-ring" style={{
+          <div className="balance-top"><span><Wallet size={17} />{payroll ? 'Payroll snapshot' : 'Course snapshot'}</span><span className="balance-period">{payroll ? year : 'All branches'}</span></div>
+          <div className="balance-body"><div><div className="balance-label">{payroll ? `Salary paid in ${year}` : 'Cycles across the academy'}</div><div className="balance-amount">{payroll ? money(paid) : courses.length}<span>{payroll ? 'EGP' : 'cycles'}</span></div><Link to={payroll ? '/finances/payroll' : '/courses'} className="balance-link">{payroll ? 'View payroll' : 'Explore courses'}<ArrowUpRight size={17} /></Link></div>
+            {payroll ? <div className="annual-payroll-mark"><CalendarDays size={25}/><strong>{year}</strong><span>Actual payment year</span></div> : (<div className="payroll-ring" style={{
               '--progress': `${courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}%`
             }} aria-label={'Course completion'}><div><strong>{courses.length ? Math.round((courses.length - active.length) / courses.length * 100) : 0}<small>%</small></strong><span>completed</span></div></div>)}
           </div>
-          <div className="balance-legend"><span><i/>{manager ? "Employees paid" : 'Completed'}<strong>{manager ? finances?.payroll.instructorsPaid || 0 : courses.length-active.length}</strong></span><span><i/>{manager ? 'Cycles paid' : 'Active'}<strong>{manager ? finances?.payroll.cyclesPaid || 0 : active.length}</strong></span></div>
+          <div className="balance-legend"><span><i/>{payroll ? "Employees paid" : 'Completed'}<strong>{payroll ? finances?.payroll.instructorsPaid || 0 : courses.length-active.length}</strong></span><span><i/>{payroll ? 'Cycles paid' : 'Active'}<strong>{payroll ? finances?.payroll.cyclesPaid || 0 : active.length}</strong></span></div>
         </section>
-        {manager && <section className="balance-card year-income-card"><div className="balance-top"><span><Wallet size={17}/>Income snapshot</span><span className="balance-period">{year}</span></div><div className="balance-body"><div><div className="balance-label">Income from cycles starting in {year}</div><div className="balance-amount">{money(finances?.income.total || 0)}<span>EGP</span></div><Link to="/finances/income" className="balance-link">View income<ArrowUpRight size={17}/></Link></div></div><div className="balance-legend"><span><i/>Tuition<strong>{money(finances?.income.tuition || 0)} EGP</strong></span><span><i/>Books<strong>{money(finances?.income.books || 0)} EGP</strong></span></div></section>}
+        {payroll && <section className="balance-card year-income-card"><div className="balance-top"><span><Wallet size={17}/>Income snapshot</span><span className="balance-period">{year}</span></div><div className="balance-body"><div><div className="balance-label">Income from cycles starting in {year}</div><div className="balance-amount">{money(finances?.income.total || 0)}<span>EGP</span></div><Link to="/finances/income" className="balance-link">View income<ArrowUpRight size={17}/></Link></div></div><div className="balance-legend"><span><i/>Tuition<strong>{money(finances?.income.tuition || 0)} EGP</strong></span><span><i/>Books<strong>{money(finances?.income.books || 0)} EGP</strong></span></div></section>}
         <Metric tone="blue" icon={BookOpen} label="Active courses" value={String(active.length).padStart(2, '0')} detail={`${courses.length} courses in your workspace`}><div className="metric-footer"><span className="micro-bar"><i style={{
                 "--runtime-width": `${courses.length ? active.length / courses.length * 100 : 0}%`
               }} className="home-presentation-12" /></span><Link to="/courses/cycles" state={{
@@ -98,15 +102,15 @@ export default function Home() {
                 '--avatar-color': ['#dee5fe', '#ffdfca', '#d3efea'][index]
               }} title={name}>{name.slice(0, 1)}</span>)}</div><Link to={manager ? '/employees' : '/courses'} aria-label="View teaching team"><ArrowUpRight size={17} /></Link></div></Metric>
       </div>
-      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${manager ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an employee` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses/cycles" state={pending.length ? {
+      <div className={`work-queue ${pending.length || unassigned.length ? 'has-work' : ''}`}><span className="queue-icon">{pending.length || unassigned.length ? <Clock3 size={21} /> : <CheckCheck size={21} />}</span><div><strong>{pending.length ? `${pending.length} assignment request${pending.length === 1 ? '' : 's'} ${payroll ? 'ready for review' : 'awaiting review'}` : unassigned.length ? `${unassigned.length} course${unassigned.length === 1 ? '' : 's'} need an employee` : 'Looking good. You’re all caught up.'}</strong><p>{pending.length ? 'A quick review keeps the teaching team moving.' : unassigned.length ? 'Find the right people for your next course.' : 'No pending assignments. Everything is moving along.'}</p></div><Link className="text-button" to="/courses/cycles" state={pending.length ? {
           status: 'pending',
-          openReviewId: manager ? pending[0].id : null
+          openReviewId: payroll ? pending[0].id : null
         } : unassigned.length ? {
           status: 'unassigned'
         } : null}>{pending.length ? 'View requests' : 'View courses'}<ArrowRight size={16} /></Link></div>
       <div className="overview-columns">
         <section className="panel course-overview"><div className="panel-heading"><div><h2>Cycle activity</h2><p>The latest across your teaching team</p></div><Link className="subtle-button" to="/courses">View all<ArrowUpRight size={15} /></Link></div>
-          {recent.length ? <div className="activity-list">{recent.map((c, index) => <Link key={c.id} className="activity-course" to={`/courses/${c.parentCourseId}`} state={{
+          {recent.length ? <div className="activity-list">{recent.map((c, index) => <Link key={c.id} className="activity-course" to={cyclePath(c)} state={{
               search: c.name
             }}><span className={`course-glyph glyph-${index % 4}`}><BookOpen size={21} strokeWidth={1.7} /></span><div className="activity-course-main"><strong>{c.name}<PrivateBadge record={c}/></strong><span>{c.branch.replaceAll('-', ' ')}<i />{c.totalHours || '—'} hours<span className="activity-team"> · {c.instructors.length ? c.instructors.map(i => i.instructor.name).join(', ') : 'Unassigned'}</span></span></div><Status complete={c.isFinished}>{c.isFinished ? 'Completed' : 'In progress'}</Status><ArrowUpRight className="activity-arrow" size={17} /></Link>)}</div> : <EmptyState title="Your next course starts here" description="Create a course, add your teaching team, and keep everything connected."><Link to="/courses" className="btn-primary">Go to courses<ArrowRight size={16} /></Link></EmptyState>}
           <div className="panel-footnote"><span className="status-dot" />{courses.length} cycles · {branches.length} branches<span>Updated from your workspace</span></div>
@@ -124,7 +128,7 @@ export default function Home() {
           create: true
         } : {
           status: 'unassigned'
-        }}><span className="quick-icon"><Plus size={20} /></span><div><strong>{manager ? 'Make room for what’s next' : 'Find your next assignment'}</strong><p>{manager ? 'Set up a new course in a few simple steps.' : "Browse courses that need an employee."}</p></div><ArrowRight size={18} /></Link><Link to={manager ? '/finances/payroll' : '/profile'}><span className="quick-icon teal"><Wallet size={20} /></span><div><strong>{manager ? "Keep employee payments moving" : 'A workspace that feels like you'}</strong><p>{manager ? 'Review teaching hours and settle course payments.' : 'Keep your profile and account details up to date.'}</p></div><ArrowRight size={18} /></Link></div>
+        }}><span className="quick-icon"><Plus size={20} /></span><div><strong>{manager ? 'Make room for what’s next' : 'Find your next assignment'}</strong><p>{manager ? 'Set up a new course in a few simple steps.' : "Browse courses that need an employee."}</p></div><ArrowRight size={18} /></Link><Link to={payroll ? '/finances/payroll' : '/profile'}><span className="quick-icon teal"><Wallet size={20} /></span><div><strong>{payroll ? "Keep employee payments moving" : 'A workspace that feels like you'}</strong><p>{payroll ? 'Review teaching hours and settle course payments.' : 'Keep your profile and account details up to date.'}</p></div><ArrowRight size={18} /></Link></div>
     </>}
   </div>;
 }

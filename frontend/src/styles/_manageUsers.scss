@@ -135,3 +135,32 @@
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
   }
 }
+
+.permission-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: $text-main;
+  cursor: pointer;
+  user-select: none;
+
+  input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+    accent-color: #047857;
+  }
+}
+
+.permission-badge-role {
+  font-size: 0.72rem;
+  color: $text-muted;
+  font-style: italic;
+}
+
+// Mod titles: main mod (all branches) or a branch mod.
+.mod-title-select { display: inline-block; width: 170px; margin-top: 6px; }
+.mod-title-badge { display: inline-block; margin-top: 6px; margin-left: 6px; background: #eef2fb; color: #3f5585; border: 1px solid #d8e0f3;
+  &.is-branch { background: #f3ecfb; color: #6a3fa0; border-color: #e0d2f3; } }

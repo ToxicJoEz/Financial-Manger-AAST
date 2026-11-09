@@ -1,0 +1,36 @@
+// Branch money checks (Fouad): records grouped by cycle, each unchecked, checked or changed after check.
+.money-checks {
+  display: flex; flex-direction: column; gap: 18px;
+  .money-checks-intro h2 { display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 800; color: #2f4566; }
+  .money-checks-intro p { margin-top: 6px; max-width: 760px; font-size: 13px; line-height: 1.6; color: #6c7d99; }
+  .money-check-metrics { margin: 0; }
+  .money-check-controls { margin: 0; .filter-toolbar { flex-wrap: wrap; align-items: flex-end; } }
+  .money-check-date { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; color: #6c7d99; .input-field { width: 140px; } }
+  .money-check-group {
+    padding: 0; overflow: hidden;
+    > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #e8edf5; background: #fafbfd;
+      strong { font-size: 14px; color: #32415b; } > span { font-size: 12px; color: #7b8aa2; } }
+  }
+  .money-check-table {
+    td { vertical-align: top; }
+    small { display: block; margin-top: 3px; font-size: 10px; color: #8b98ad; }
+    .money-check-note { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .is-negative { color: #b42335; }
+    tr.state-unchecked td:first-child { box-shadow: inset 3px 0 0 #dda33e; }
+    tr.state-changed td:first-child { box-shadow: inset 3px 0 0 #c4485a; }
+  }
+  .money-check-state {
+    display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid;
+    &.is-unchecked { background: #fdf2dd; border-color: #efcf94; color: #8a5a12; }
+    &.is-checked { background: #e5f5ec; border-color: #b4dec5; color: #23704a; }
+    &.is-changed { background: #fdecef; border-color: #f2c2ca; color: #a3293d; }
+  }
+}
+
+// Income page reminder linking to the checks page.
+.money-check-reminder {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 18px; padding: 12px 16px; border-radius: 10px;
+  background: #fdf2dd; border: 1px solid #efcf94; color: #7a4f0f; font-size: 13px; text-decoration: none;
+  strong { color: #5f3c08; } span { flex: 1; }
+  &:hover { border-color: #dda33e; }
+}

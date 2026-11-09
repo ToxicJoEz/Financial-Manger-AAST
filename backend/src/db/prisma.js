@@ -1,44 +1,82 @@
-import {auditContext} from '../utils/auditContext.js';
-import {auditData,snapshotChange} from '../utils/auditEvent.js';
+import { auditContext } from '../utils/auditContext.js';
+import { auditData, snapshotChange } from '../utils/auditEvent.js';
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
 import pkg from './prismaClient.js';
-export const Prisma=pkg.Prisma;
+export const Prisma = pkg.Prisma;
 import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
 const base = new pkg.PrismaClient();
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
-const auditedModels = new Set(['user', 'course', 'cycle', 'instructor', 'student', 'enrollment', 'paymentEntry', 'pendingAssignment', 'payrollRecord', 'studentRequest', 'payrollEarning', 'instructorPaymentBatch', 'bookPayment','retainedEnrollmentIncome','courseInstructor','importBatch','notification','branchColor']);
+const auditedModels = new Set([
+  'user',
+  'course',
+  'subCourse',
+  'cycle',
+  'instructor',
+  'student',
+  'enrollment',
+  'paymentEntry',
+  'pendingAssignment',
+  'payrollRecord',
+  'payrollEarning',
+  'instructorPaymentBatch',
+  'bookPayment',
+  'retainedEnrollmentIncome',
+  'courseInstructor',
+  'importBatch',
+  'notification',
+  'branchColor',
+  'moneyCheck',
+  'paymentRun'
+]);
 
 // Controllers use the same client inside atomic(), including their existing transaction callbacks.
 const prisma = new Proxy(base, {
   get(target, property) {
     const context = mutationContext.getStore();
     const client = context?.tx || target;
-    if (property === '$transaction' && context?.tx) return async callback => {
-      if (typeof callback !== 'function') throw new Error('Nested batch transactions are unsupported.');
-      return callback(prisma);
-    };
+    if (property === '$transaction' && context?.tx)
+      return async callback => {
+        if (typeof callback !== 'function') throw new Error('Nested batch transactions are unsupported.');
+        return callback(prisma);
+      };
     const member = client[property];
-    if (auditedModels.has(property) && context?.tx) return new Proxy(member, {
-      get(model, operation) {
-        const method = model[operation];
-        if (!mutations.has(operation)) return typeof method === 'function' ? method.bind(model) : method;
-        return async args => {
-          const before = operation === 'create' || operation === 'createMany' ? [] : await model.findMany({ where: args.where });
-          const result = await method.call(model, args);
-          const audit=auditContext.getStore();
-          if(audit||context.actor){
-            const identity=property==='branchColor'?'name':'id';
-            const ids=before.map(row=>row[identity]);
-            const after=operation==='delete'||operation==='deleteMany'?[]:operation==='createMany'?args.data:await model.findMany({where:ids.length?{[identity]:{in:ids}}:{[identity]:result[identity]}});
-            if(audit)audit.changes.push(snapshotChange(property,operation,before,after));
-            else await context.tx.systemLog.create({data:{action:`${property.toUpperCase()}_${operation.toUpperCase()}`,description:JSON.stringify(snapshotChange(property,operation,before,after)),actorUsername:context.actor}});
-          }
-          return result;
-        };
-      }
-    });
+    if (auditedModels.has(property) && context?.tx)
+      return new Proxy(member, {
+        get(model, operation) {
+          const method = model[operation];
+          if (!mutations.has(operation)) return typeof method === 'function' ? method.bind(model) : method;
+          return async args => {
+            const before =
+              operation === 'create' || operation === 'createMany' ? [] : await model.findMany({ where: args.where });
+            const result = await method.call(model, args);
+            const audit = auditContext.getStore();
+            if (audit || context.actor) {
+              const identity = property === 'branchColor' ? 'name' : 'id';
+              const ids = before.map(row => row[identity]);
+              const after =
+                operation === 'delete' || operation === 'deleteMany'
+                  ? []
+                  : operation === 'createMany'
+                    ? args.data
+                    : await model.findMany({
+                        where: ids.length ? { [identity]: { in: ids } } : { [identity]: result[identity] }
+                      });
+              if (audit) audit.changes.push(snapshotChange(property, operation, before, after));
+              else
+                await context.tx.systemLog.create({
+                  data: {
+                    action: `${property.toUpperCase()}_${operation.toUpperCase()}`,
+                    description: JSON.stringify(snapshotChange(property, operation, before, after)),
+                    actorUsername: context.actor
+                  }
+                });
+            }
+            return result;
+          };
+        }
+      });
     return typeof member === 'function' ? member.bind(client) : member;
   }
 });
@@ -46,24 +84,43 @@ const prisma = new Proxy(base, {
 export function atomic(handler, { timeout = 20000 } = {}) {
   return async (req, res, next) => {
     let response;
-    const audit=auditContext.getStore();
+    const audit = auditContext.getStore();
     const buffered = Object.create(res);
     buffered.statusCode = res.statusCode || 200;
-    buffered.status = code => { buffered.statusCode = code; return buffered; };
-    buffered.json = body => { response = { status: buffered.statusCode, body }; return buffered; };
+    buffered.status = code => {
+      buffered.statusCode = code;
+      return buffered;
+    };
+    buffered.json = body => {
+      response = { status: buffered.statusCode, body };
+      return buffered;
+    };
     try {
-      await base.$transaction(tx => mutationContext.run({ tx, actor: req.user?.username }, async () => {
-        await handler(req, buffered, error => { throw error; });
-        if (!response) throw new Error('Mutation handler did not produce a response.');
-        if (response.status >= 400) throw Object.assign(new Error('Request rejected'), { bufferedResponse: response });
-        if(audit){const data=await auditData(prisma,audit,req,response.status,response.body);await tx.systemLog.create({data});}
-      }), { maxWait: 10000, timeout, isolationLevel: 'Serializable' });
-      if(audit)audit.persisted=true;
+      await base.$transaction(
+        tx =>
+          mutationContext.run({ tx, actor: req.user?.username }, async () => {
+            await handler(req, buffered, error => {
+              throw error;
+            });
+            if (!response) throw new Error('Mutation handler did not produce a response.');
+            if (response.status >= 400)
+              throw Object.assign(new Error('Request rejected'), { bufferedResponse: response });
+            if (audit) {
+              const data = await auditData(prisma, audit, req, response.status, response.body);
+              await tx.systemLog.create({ data });
+            }
+          }),
+        { maxWait: 10000, timeout, isolationLevel: 'Serializable' }
+      );
+      if (audit) audit.persisted = true;
       res.status(response.status).json(response.body);
     } catch (error) {
       if (error.bufferedResponse) return res.status(error.bufferedResponse.status).json(error.bufferedResponse.body);
       if (error.status) return res.status(error.status).json({ error: error.message });
-      if (['P2002', 'P2025', 'P2034', 'P2028'].includes(error.code)) return res.status(409).json({ error: 'The record changed or this request conflicts with another operation. Refresh and try again.' });
+      if (['P2002', 'P2025', 'P2034', 'P2028'].includes(error.code))
+        return res.status(409).json({
+          error: 'The record changed or this request conflicts with another operation. Refresh and try again.'
+        });
       res.status(buffered.statusCode >= 400 ? buffered.statusCode : 500);
       next(error);
     }

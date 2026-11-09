@@ -1,11 +1,12 @@
 import prisma, { atomic } from '../db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { logAction } from '../utils/logger.js';
+import { MOD_BRANCH_SCOPES } from '../utils/access.js';
 import { isAccountLocked, unlockUser } from '../utils/loginRateLimiter.js';
 
 // Helper to strictly enforce hierarchical modification rules
 const enforceHierarchy = (reqUser, targetUser) => {
-  if (reqUser.role === 'admin') return true; 
+  if (reqUser.role === 'admin') return true;
   if (reqUser.role === 'mod') {
     // Mods can only modify standard users
     if (targetUser.role === 'admin' || targetUser.role === 'mod') {
@@ -29,6 +30,8 @@ export const getUsers = async (req, res, next) => {
         lastName: true,
         isActive: true,
         isBanned: true,
+        canManageBooks: true,
+        branchScope: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -83,6 +86,8 @@ export const updateUserStatus = atomic(async (req, res, next) => {
         lastName: true,
         isActive: true,
         isBanned: true,
+        canManageBooks: true,
+        branchScope: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -141,7 +146,8 @@ export const updateUserRole = atomic(async (req, res, next) => {
 
     const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
-      data: { role },
+      // Only mods carry a branch title; changing role clears it.
+      data: { role, ...(role !== 'mod' ? { branchScope: null } : {}) },
       select: {
         id: true,
         username: true,
@@ -151,6 +157,8 @@ export const updateUserRole = atomic(async (req, res, next) => {
         lastName: true,
         isActive: true,
         isBanned: true,
+        canManageBooks: true,
+        branchScope: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -221,7 +229,7 @@ export const updateProfile = atomic(async (req, res, next) => {
           throw new Error('Current password is incorrect');
         }
       }
-      
+
       const salt = await bcrypt.genSalt(10);
       updatedData.password = await bcrypt.hash(newPassword, salt);
     }
@@ -251,7 +259,81 @@ export const updateProfile = atomic(async (req, res, next) => {
         isBanned: updatedUser.isBanned
       }
     });
+  } catch (error) {
+    next(error);
+  }
+});
 
+// @desc    Update user permissions (e.g. canManageBooks)
+export const updateUserPermissions = atomic(async (req, res, next) => {
+  try {
+    const { canManageBooks } = req.body;
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!enforceHierarchy(req.user, targetUser)) {
+      return res.status(403).json({ error: 'Forbidden: You do not have permission to modify this user.' });
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: req.params.id },
+      data: {
+        canManageBooks: canManageBooks !== undefined ? Boolean(canManageBooks) : targetUser.canManageBooks
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        role: true,
+        firstName: true,
+        lastName: true,
+        isActive: true,
+        isBanned: true,
+        canManageBooks: true,
+        branchScope: true,
+        avatar: true,
+        lastLogin: true,
+        createdAt: true
+      }
+    });
+
+    await logAction(
+      'USER_PERMISSIONS_UPDATED',
+      'Permissions updated for @' + targetUser.username + ': canManageBooks=' + Boolean(updatedUser.canManageBooks),
+      req.user.username,
+      targetUser.username
+    );
+
+    res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @desc    Set a mod's title: main mod (all branches, payroll) or a branch mod (e.g. Fouad). Admin only.
+export const updateUserBranchScope = atomic(async (req, res, next) => {
+  try {
+    const { branchScope } = req.body;
+    if (branchScope !== null && !MOD_BRANCH_SCOPES.includes(branchScope))
+      return res.status(400).json({ error: `Choose main mod or one of: ${MOD_BRANCH_SCOPES.join(', ')}.` });
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+    if (targetUser.role !== 'mod') return res.status(400).json({ error: 'Only mods can have a branch title.' });
+    const updatedUser = await prisma.user.update({
+      where: { id: targetUser.id },
+      data: { branchScope },
+      select: { id: true, username: true, role: true, branchScope: true }
+    });
+    await logAction(
+      'USER_BRANCH_SCOPE_UPDATED',
+      `Mod title for @${targetUser.username}: ${targetUser.branchScope || 'main'} -> ${branchScope || 'main'}`,
+      req.user.username,
+      targetUser.username
+    );
+    res.json({ success: true, user: updatedUser });
   } catch (error) {
     next(error);
   }

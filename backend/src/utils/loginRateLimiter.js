@@ -5,7 +5,7 @@ const MAX_ATTEMPTS = 15;
 
 const attemptsMap = new Map(); // username.toLowerCase() -> { count, firstAttemptAt, isLocked }
 
-export const isAccountLocked = (username) => {
+export const isAccountLocked = username => {
   if (!username) return false;
   const key = username.trim().toLowerCase();
   const record = attemptsMap.get(key);
@@ -21,7 +21,7 @@ export const isAccountLocked = (username) => {
   return record.count >= MAX_ATTEMPTS;
 };
 
-export const getRemainingLockMinutes = (username) => {
+export const getRemainingLockMinutes = username => {
   if (!username) return 0;
   const key = username.trim().toLowerCase();
   const record = attemptsMap.get(key);
@@ -36,7 +36,7 @@ export const getRemainingLockMinutes = (username) => {
   return Math.ceil((WINDOW_MS - elapsed) / 60000);
 };
 
-export const recordFailedAttempt = (username) => {
+export const recordFailedAttempt = username => {
   if (!username) return;
   const key = username.trim().toLowerCase();
   const now = Date.now();
@@ -53,12 +53,12 @@ export const recordFailedAttempt = (username) => {
   }
 };
 
-export const recordSuccessfulLogin = (username) => {
+export const recordSuccessfulLogin = username => {
   if (!username) return;
   attemptsMap.delete(username.trim().toLowerCase());
 };
 
-export const unlockUser = (username) => {
+export const unlockUser = username => {
   if (!username) return;
   attemptsMap.delete(username.trim().toLowerCase());
 };
