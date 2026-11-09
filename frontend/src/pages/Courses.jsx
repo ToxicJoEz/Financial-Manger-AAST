@@ -7,7 +7,6 @@ import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
 import PermanentDeleteDialog from '../components/PermanentDeleteDialog';
 import BulkDeleteDialog from '../components/BulkDeleteDialog';
 import CycleImportDialog from '../components/CycleImportDialog';
-import { tuitionOutstanding, instructorPaymentOutstanding } from '../utils/coursePayments';
 import ExcelExportButton from '../components/ExcelExportButton';
 import EnrollmentDialog from '../components/EnrollmentDialog';
 import { AnimatePresence } from 'framer-motion';
@@ -41,6 +40,13 @@ const Courses = () => {
   const [view, setView] = useState(() => localStorage.getItem('aast-course-view') || 'grid');
   const [loadError, setLoadError] = useState(false);
   const [courses, setCourses] = useState([]);
+  // The server pages and filters cycles; tab counts come from the database too.
+  const PAGE_SIZE = 24;
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({});
+  const [query, setQuery] = useState('');
+  const listParams = useRef({});
   const [instructorsList, setInstructorsList] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -120,12 +126,16 @@ const Courses = () => {
     const request = ++dataRequest.current;
     setLoadError(false);
     try {
-      const [coursesRes, instructorsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: parentId ? { parentCourseId: parentId, ...(subCourseId ? { subCourseId } : {}) } : {} }), axios.get('/instructors'), subCourseId ? axios.get('/sub-courses/' + subCourseId) : parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
+      const [coursesRes, instructorsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: listParams.current }), axios.get('/instructors', { params: { picker: 1 } }), subCourseId ? axios.get('/sub-courses/' + subCourseId) : parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
       if (request !== dataRequest.current) return;
       // A sub-umbrella page scopes everything to that sub-umbrella, using its umbrella's code.
       setParentCourse(subCourseId && parentRes.data ? { ...parentRes.data, code: parentRes.data.parentCourse.code, umbrella: parentRes.data.parentCourse } : parentRes.data);
       if (parentRes.data?.archivedAt) setFilterStatus('archived');
-      setCourses(coursesRes.data);
+      const pages = Math.max(1, Math.ceil(coursesRes.data.total / PAGE_SIZE));
+      if (coursesRes.data.page > pages) { setPage(pages); return; }
+      setCourses(coursesRes.data.rows);
+      setTotal(coursesRes.data.total);
+      setCounts(coursesRes.data.counts);
       setInstructorsList(instructorsRes.data);
     } catch (error) {
       if (request !== dataRequest.current) return;
@@ -135,12 +145,22 @@ const Courses = () => {
       if (request === dataRequest.current) setLoading(false);
     }
   };
+  listParams.current = { parentCourseId: parentId, subCourseId: subCourseId || undefined, page, pageSize: PAGE_SIZE, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined };
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(filterName.trim()), 300);
+    return () => clearTimeout(t);
+  }, [filterName]);
+  useEffect(() => { setPage(1); setSelectedCycleIds([]); }, [query, filterBranch, filterStatus, parentId, subCourseId]);
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentId, subCourseId, page, query, filterBranch, filterStatus]);
+  useEffect(() => {
     const refreshAssignments = () => fetchData();
     window.addEventListener('assignments-updated', refreshAssignments);
     return () => window.removeEventListener('assignments-updated', refreshAssignments);
-  }, [parentId, subCourseId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const handleAddSubmit = async e => {
     e.preventDefault();
     try {
@@ -354,33 +374,20 @@ const Courses = () => {
 
   // Filter logic
 
-  const filteredCourses = courses.filter(c => {
-    if (filterStatus === 'archived' ? !c.archivedAt : !!c.archivedAt) return false;
-    const q = filterName.toLowerCase().trim();
-    const matchSearch = q ? c.name.toLowerCase().includes(q) || c.branch.toLowerCase().includes(q) || c.instructors?.some(ci => ci.instructor?.name?.toLowerCase().includes(q)) : true;
-    const matchBranch = filterBranch ? c.branch === filterBranch : true;
-    let matchStatus = true;
-    if (filterStatus === 'active') matchStatus = !c.isFinished;
-    if (filterStatus === 'finished') matchStatus = c.isFinished;
-    if (filterStatus === 'unassigned') matchStatus = !c.isFinished && c.instructors.length === 0;
-    if (filterStatus === 'pending') matchStatus = c.pendingAssignments?.length > 0;
-    if (filterStatus === 'tuition-due') matchStatus = tuitionOutstanding(c);
-    if (filterStatus === 'payroll-due') matchStatus = instructorPaymentOutstanding(c, user.role);
-    return matchSearch && matchBranch && matchStatus;
-  });
-
+  const filteredCourses = courses;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const canSelectCycles = user.role !== 'user';
   const toggleSelectCycle = id => setSelectedCycleIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
-  const toggleSelectAll = () => setSelectedCycleIds(selectedCycleIds.length === filteredCourses.length ? [] : filteredCourses.map(c => c.id));
-  const selectAllInRange = () => {
-    const matching = filteredCourses.filter(c => {
-      if (!c.startDate) return false;
-      const d = c.startDate.slice(0, 10);
-      if (dateRangeStart && d < dateRangeStart) return false;
-      if (dateRangeEnd && d > dateRangeEnd) return false;
-      return true;
-    });
-    setSelectedCycleIds(matching.map(c => c.id));
+  const toggleSelectAll = () => setSelectedCycleIds(filteredCourses.length && filteredCourses.every(c => selectedCycleIds.includes(c.id)) ? [] : filteredCourses.map(c => c.id));
+  // Picks every matching cycle in the date range, across all pages.
+  const selectAllInRange = async () => {
+    try {
+      const { data } = await axios.get('/cycles', { params: { ...listParams.current, page: undefined, pageSize: undefined, from: dateRangeStart || undefined, to: dateRangeEnd || undefined, idsOnly: 1 } });
+      setSelectedCycleIds(data.ids);
+      if (!data.ids.length) toast('No cycles start in that range.');
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Could not select the cycles in that range.');
+    }
   };
 
   const handleBulkArchive = async () => {
@@ -422,6 +429,9 @@ const Courses = () => {
       if (course) {
         setReviewingAssignment(course.pendingAssignments.find(p => p.id === openReviewId));
         setExpandedCourse(null);
+      } else {
+        // The cycle may be on another page: load the request on its own.
+        axios.get('/assignments/' + openReviewId).then(({ data }) => setReviewingAssignment(data)).catch(error => toast.error(error.response?.data?.error || 'This request could not be opened.'));
       }
     }
     navigate(location.pathname, {
@@ -536,14 +546,14 @@ const Courses = () => {
       <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
 
         <ExcelExportButton parentCourseId={parentId} />
-        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
-
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary export-format-excel" onClick={() => setImportOpen(true)}><FileSpreadsheet size={16} />Import cycle from Excel</button>}
+
+        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
       </PageHeading>
 
       <div className="section-tabs" aria-label="Course status">
 
-        {[['', 'All cycles', courses.filter(c => !c.archivedAt).length], ['active', 'Active', courses.filter(c => !c.archivedAt && !c.isFinished).length], ['finished', 'Completed', courses.filter(c => !c.archivedAt && c.isFinished).length], ['tuition-due', 'Tuition outstanding', courses.filter(tuitionOutstanding).length], ...(payrollAccess ? [['payroll-due', "Employee payments due", courses.filter(c => instructorPaymentOutstanding(c, user.role)).length]] : []), ['pending', 'Pending approval', courses.filter(c => !c.archivedAt && c.pendingAssignments?.length).length], ...(user.role !== 'user' ? [['archived', 'Archived', courses.filter(c => c.archivedAt).length]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
+        {[['', 'All cycles', counts.all ?? 0], ['active', 'Active', counts.active ?? 0], ['finished', 'Completed', counts.finished ?? 0], ['tuition-due', 'Tuition outstanding', counts.tuitionDue ?? 0], ...(payrollAccess ? [['payroll-due', "Employee payments due", counts.payrollDue ?? 0]] : []), ['pending', 'Pending approval', counts.pending ?? 0], ...(user.role !== 'user' ? [['archived', 'Archived', counts.archived ?? 0]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
 
       </div>
 
@@ -566,7 +576,7 @@ const Courses = () => {
 
           {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}
 
-          <span className="result-count">{filteredCourses.length} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
+          <span className="result-count">{total} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
             setView('grid');
             localStorage.setItem('aast-course-view', 'grid');
           }}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => {
@@ -644,11 +654,19 @@ const Courses = () => {
                 setInstructorHours(ih);
               }} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />)}</tbody></table></div>}
 
-        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{courses.length ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{courses.length ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{courses.length > 0 && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
+        {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{isAnyFilterActive ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{isAnyFilterActive ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{isAnyFilterActive && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
 
         </MotionRegion>
 
-        <div className="panel-footnote">Showing {filteredCourses.length} of {courses.length} cycles<span>Expand a cycle to manage its details</span></div>
+        {pageCount > 1 && <div className="list-pagination">
+          <span>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+          <div>
+            <button type="button" className="btn-secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+            <span>Page {page} of {pageCount}</span>
+            <button type="button" className="btn-secondary" disabled={page >= pageCount} onClick={() => setPage(p => p + 1)}>Next</button>
+          </div>
+        </div>}
+        <div className="panel-footnote">Showing {filteredCourses.length} of {total} cycles<span>Expand a cycle to manage its details</span></div>
 
       </section>
 

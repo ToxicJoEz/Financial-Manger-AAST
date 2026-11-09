@@ -95,7 +95,7 @@ export default function SubCourseCatalog({ courseId }) {
   }
   async function openImport() {
     try {
-      const { data } = await axios.get('/instructors');
+      const { data } = await axios.get('/instructors', { params: { picker: 1 } });
       setInstructors(data);
       setImportOpen(true);
     } catch {

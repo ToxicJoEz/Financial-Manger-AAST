@@ -54,25 +54,42 @@ export const getStudents = async (req, res, next) => {
       });
       return res.json({ students: rows.slice(0, 20), nextCursor: rows.length > 20 ? rows[19].id : null });
     }
-    const { search } = req.query;
-
-    const where = isManager(req.user) ? {} : { deletedAt: null };
-    if (search && search.trim()) {
-      const q = search.trim();
-      where.OR = [
-        { name: { contains: q } },
-        { registrationNumber: { contains: q } },
-        { mobile: { contains: q } },
-        { englishName: { contains: q } }
-      ];
-    }
-
-    const students = await prisma.student.findMany({
-      where,
-      orderBy: { createdAt: 'desc' }
-    });
-
-    res.json(students);
+    // One page at a time, filtered in the database: active or archived (managers), plus search.
+    const page = Number(req.query.page ?? 1),
+      pageSize = Number(req.query.pageSize ?? 24);
+    if (
+      !Number.isInteger(page) ||
+      page < 1 ||
+      page > 100000 ||
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100
+    )
+      return res.status(400).json({ error: 'Invalid student page.' });
+    const archived = req.query.view === 'archived';
+    if (archived && !isManager(req.user))
+      return res.status(403).json({ error: 'Only managers can view archived students.' });
+    const q = typeof req.query.search === 'string' ? req.query.search.trim().slice(0, 160) : '';
+    const search = q
+      ? {
+          OR: ['name', 'englishName', 'registrationNumber', 'mobile'].map(field => ({
+            [field]: { contains: q, mode: 'insensitive' }
+          }))
+        }
+      : {};
+    const where = { deletedAt: archived ? { not: null } : null, ...search };
+    const [rows, total, active, archivedCount] = await Promise.all([
+      prisma.student.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      }),
+      prisma.student.count({ where }),
+      prisma.student.count({ where: { deletedAt: null, ...search } }),
+      isManager(req.user) ? prisma.student.count({ where: { deletedAt: { not: null }, ...search } }) : 0
+    ]);
+    res.json({ rows, total, page, pageSize, counts: { active, archived: archivedCount } });
   } catch (error) {
     next(error);
   }

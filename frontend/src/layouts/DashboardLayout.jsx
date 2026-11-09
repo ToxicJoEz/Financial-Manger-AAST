@@ -23,6 +23,8 @@ export default function DashboardLayout() {
   const [reviewRequest, setReviewRequest] = useState(null);
   const reviewLoad = useRef(0);
   const [unreadTotal, setUnreadTotal] = useState(0);
+  // Sidebar badge counts: requests to review, Fouad money to check.
+  const [attention, setAttention] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -34,11 +36,15 @@ export default function DashboardLayout() {
 
   useEffect(() => {
     let alive = true;
-    const fetchNotifications = () => axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
+    const fetchNotifications = () => {
+      axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
+      axios.get('/attention').then(({ data }) => { if (alive) setAttention(data); }).catch(() => {});
+    };
     fetchNotifications();
     window.addEventListener('notifications-updated', fetchNotifications);
+    window.addEventListener('assignments-updated', fetchNotifications);
     const interval = setInterval(fetchNotifications, 30000);
-    return () => { alive = false; clearInterval(interval); window.removeEventListener('notifications-updated', fetchNotifications); };
+    return () => { alive = false; clearInterval(interval); window.removeEventListener('notifications-updated', fetchNotifications); window.removeEventListener('assignments-updated', fetchNotifications); };
   }, [user]);
   useEffect(() => { setMobileOpen(false); setShowNotifications(false); }, [location.pathname]);
   useEffect(() => {
@@ -70,6 +76,7 @@ export default function DashboardLayout() {
   }, [mobileOpen]);
 
   const unread = unreadTotal;
+  const navCount = to => to === '/courses' ? attention?.pendingApprovals || 0 : to === '/finances' ? (attention?.moneyChecks?.unchecked.count || 0) + (attention?.moneyChecks?.changed.count || 0) : 0;
   const nav = [{ to: '/', name: 'Overview', icon: LayoutDashboard }, { to: '/courses', name: 'Courses', icon: BookOpen }, { to: '/students', name: 'Students', icon: GraduationCap }, ...(isManager ? [{ to: '/employees', name: 'Employees', icon: Users }, { to: '/finances', name: 'Finance', icon: Wallet }] : [])];
   const openRequestReview = async id => {
     if (!canSeePayroll(user)) return;
@@ -105,7 +112,7 @@ export default function DashboardLayout() {
     <aside ref={sidebarRef} className={`sidebar ${mobileOpen ? 'is-open' : ''}`} aria-label="Main navigation">
       <div className="sidebar-brand"><Link to="/" aria-label="AAST Finance overview"><Brand inverse /></Link><button className="icon-button sidebar-close" aria-label="Close menu" onClick={() => setMobileOpen(false)}><PanelLeftClose size={20} /></button></div>
       <div className="nav-section-label">Workspace</div>
-      <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
+      <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{navCount(to) > 0 ? <span className="nav-count" aria-label={`${navCount(to)} need attention`}>{navCount(to) > 99 ? '99+' : navCount(to)}</span> : to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
       <div className="nav-section-label administration-label">Settings</div>
       <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{isManager&&<NavLink to="/logs" className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
       <div className="sidebar-bottom">

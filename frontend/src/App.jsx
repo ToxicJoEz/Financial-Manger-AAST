@@ -89,7 +89,7 @@ const App = () => {
           border: '1px solid #dfe6d7',
           fontSize: '13px',
           background: '#fff',
-          color: '#324d2d'
+          color: '#26334d'
         }
       }} />
       <BrowserRouter>

@@ -12,74 +12,182 @@ import { paymentFields } from '../utils/studentProfile.js';
 import { openingBalance } from '../utils/paymentLedger.js';
 import { moneyMinor } from '../utils/numbers.js';
 import { numberValue } from '../utils/numbers.js';
-import prisma, { atomic } from '../db/prisma.js';
+import prisma, { atomic, Prisma } from '../db/prisma.js';
 import { logAction } from '../utils/logger.js';
 
+const CYCLE_STATUSES = ['', 'active', 'finished', 'tuition-due', 'payroll-due', 'pending', 'unassigned', 'archived'];
+const cycleInclude = user => ({
+  retainedIncome: true,
+  parentCourse: true,
+  subCourse: true,
+  ...(canSeePayroll(user) ? { payrollEarnings: { include: { batch: true } } } : {}),
+  instructors: { include: { instructor: true } },
+  pendingAssignments: {
+    where: { status: 'PENDING' },
+    include: {
+      instructor: true,
+      submittedBy: { select: { id: true, username: true, firstName: true, lastName: true, avatar: true, role: true } }
+    }
+  },
+  enrollments: {
+    include: { student: true, bookPayments: activeBookInclude, payments: paymentSummaryInclude },
+    orderBy: { enrolledAt: 'asc' }
+  }
+});
+const cycleOut = (course, user) => {
+  const { payrollEarnings, ...rest } = course;
+  return courseView(
+    {
+      ...rest,
+      ...(canSeePayroll(user)
+        ? {
+            payrollEarnings: (payrollEarnings || []).map(e => ({
+              id: e.id,
+              amount: Number(e.amountMinor) / 100,
+              status: e.batch?.status || 'UNPAID'
+            }))
+          }
+        : {})
+    },
+    user
+  );
+};
+// Cycles where at least one counted student still owes tuition (the same rule as the cycle cards).
+async function tuitionDueIds(parentCourseId, subCourseId) {
+  const rows = await prisma.$queryRaw(Prisma.sql`SELECT DISTINCT e."courseId" AS id FROM "Enrollment" e
+    JOIN "Cycle" c ON c.id = e."courseId"
+    WHERE e."financialArchivedAt" IS NULL AND c."archivedAt" IS NULL
+      AND COALESCE(e."customFee", c."courseFee") - e."amountPaid" >= 0.005
+      ${parentCourseId ? Prisma.sql`AND c."parentCourseId" = ${parentCourseId}` : Prisma.empty}
+      ${subCourseId ? Prisma.sql`AND c."subCourseId" = ${subCourseId}` : Prisma.empty}`);
+  return rows.map(r => r.id);
+}
+const payrollDueWhere = {
+  archivedAt: null,
+  payrollEarnings: {
+    some: { amountMinor: { gt: 0n }, OR: [{ batchId: null }, { batch: { status: { not: 'PAID' } } }] }
+  }
+};
+function startRange(from, to) {
+  const range = {};
+  for (const [key, value] of [
+    ['gte', from],
+    ['lt', to]
+  ]) {
+    if (value === undefined || value === '') continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)))
+      throw Object.assign(new Error('Choose valid dates.'), { status: 400 });
+    const date = new Date(value + 'T00:00:00Z');
+    if (key === 'lt') date.setUTCDate(date.getUTCDate() + 1);
+    range[key] = date;
+  }
+  return Object.keys(range).length ? range : null;
+}
+
+// One cycle by id, or one page of cycles with the filters and tab counts worked out in the database.
 export const getCourses = async (req, res) => {
   try {
-    const isJunior = req.user.role === 'user';
-    const courses = await prisma.cycle.findMany({
-      where: {
-        ...(req.params.id ? { id: req.params.id } : {}),
-        ...(!isManager(req.user) ? { archivedAt: null, parentCourse: { archivedAt: null } } : {}),
-        ...(req.query.parentCourseId ? { parentCourseId: String(req.query.parentCourseId) } : {}),
-        ...(req.query.subCourseId ? { subCourseId: String(req.query.subCourseId) } : {}),
-        ...(!isManager(req.user) && req.query.subCourseId ? { subCourse: { archivedAt: null } } : {})
-      },
-      include: {
-        retainedIncome: true,
-        parentCourse: true,
-        subCourse: true,
-        ...(canSeePayroll(req.user) ? { payrollEarnings: { include: { batch: true } } } : {}),
-        instructors: {
-          include: { instructor: true }
-        },
-        pendingAssignments: {
-          where: { status: 'PENDING' },
-          include: {
-            instructor: true,
-            submittedBy: {
-              select: {
-                id: true,
-                username: true,
-                firstName: true,
-                lastName: true,
-                avatar: true,
-                role: true
-              }
+    const manager = isManager(req.user);
+    const visibility = manager ? {} : { archivedAt: null, parentCourse: { archivedAt: null } };
+    if (req.params.id) {
+      const course = await prisma.cycle.findFirst({
+        where: { id: req.params.id, ...visibility },
+        include: cycleInclude(req.user)
+      });
+      return course ? res.json(cycleOut(course, req.user)) : res.status(404).json({ error: 'Cycle not found.' });
+    }
+    const q = req.query;
+    const keys = ['parentCourseId', 'subCourseId', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
+    if (keys.some(key => q[key] !== undefined && typeof q[key] !== 'string'))
+      return res.status(400).json({ error: 'Invalid filters.' });
+    const parentCourseId = q.parentCourseId || null,
+      subCourseId = q.subCourseId || null;
+    const status = q.status || '';
+    if (!CYCLE_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status filter.' });
+    if (!manager && status === 'archived')
+      return res.status(403).json({ error: 'Only managers can view archived cycles.' });
+    const payroll = canSeePayroll(req.user);
+    if (!payroll && status === 'payroll-due')
+      return res.status(403).json({ error: 'Employee payments are not available to you.' });
+    const page = Number(q.page ?? 1),
+      pageSize = Number(q.pageSize ?? 24);
+    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+      return res.status(400).json({ error: 'Invalid page.' });
+    const search = (q.search || '').trim().slice(0, 160);
+    const range = startRange(q.from, q.to);
+    const scope = {
+      ...visibility,
+      ...(parentCourseId ? { parentCourseId } : {}),
+      ...(subCourseId ? { subCourseId } : {}),
+      ...(!manager && subCourseId ? { subCourse: { archivedAt: null } } : {})
+    };
+    const tuitionIds = await tuitionDueIds(parentCourseId, subCourseId);
+    const statusWhere = {
+      '': { archivedAt: null },
+      active: { archivedAt: null, isFinished: false },
+      finished: { archivedAt: null, isFinished: true },
+      'tuition-due': { archivedAt: null, id: { in: tuitionIds } },
+      'payroll-due': payrollDueWhere,
+      pending: { archivedAt: null, pendingAssignments: { some: { status: 'PENDING' } } },
+      unassigned: { archivedAt: null, isFinished: false, instructors: { none: {} } },
+      archived: { archivedAt: { not: null } }
+    };
+    const filters = [
+      scope,
+      statusWhere[status],
+      ...(search
+        ? [
+            {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { branch: { contains: search, mode: 'insensitive' } },
+                { instructors: { some: { instructor: { name: { contains: search, mode: 'insensitive' } } } } }
+              ]
             }
-          }
-        },
-        enrollments: {
-          include: { student: true, bookPayments: activeBookInclude, payments: paymentSummaryInclude },
-          orderBy: { enrolledAt: 'asc' }
-        }
-      },
-      orderBy: [{ parentCourse: { name: 'asc' } }, { cycleNumber: 'asc' }]
+          ]
+        : []),
+      ...(q.branch ? [{ branch: q.branch }] : []),
+      ...(range ? [{ startDate: range }] : [])
+    ];
+    const where = { AND: filters };
+    // "Select range" picks every matching cycle, not only the page on screen.
+    if (q.idsOnly === '1') {
+      const ids = await prisma.cycle.findMany({ where, select: { id: true }, take: 1000 });
+      return res.json({ ids: ids.map(c => c.id) });
+    }
+    const count = extra => prisma.cycle.count({ where: { AND: [scope, extra] } });
+    const [total, rows, all, active, finished, tuitionDue, payrollDue, pending, archived] = await Promise.all([
+      prisma.cycle.count({ where }),
+      prisma.cycle.findMany({
+        where,
+        include: cycleInclude(req.user),
+        orderBy: [{ parentCourse: { name: 'asc' } }, { cycleNumber: 'asc' }, { id: 'asc' }],
+        skip: (page - 1) * pageSize,
+        take: pageSize
+      }),
+      count(statusWhere['']),
+      count(statusWhere.active),
+      count(statusWhere.finished),
+      count(statusWhere['tuition-due']),
+      payroll ? count(payrollDueWhere) : 0,
+      count(statusWhere.pending),
+      manager ? count(statusWhere.archived) : 0
+    ]);
+    res.json({
+      rows: rows.map(course => cycleOut(course, req.user)),
+      total,
+      page,
+      pageSize,
+      counts: {
+        all,
+        active,
+        finished,
+        tuitionDue,
+        pending,
+        ...(payroll ? { payrollDue } : {}),
+        ...(manager ? { archived } : {})
+      }
     });
-
-    const enriched = courses.map(course => {
-      const { payrollEarnings, ...rest } = course;
-      return courseView(
-        {
-          ...rest,
-          ...(canSeePayroll(req.user)
-            ? {
-                payrollEarnings: (payrollEarnings || []).map(e => ({
-                  id: e.id,
-                  amount: Number(e.amountMinor) / 100,
-                  status: e.batch?.status || 'UNPAID'
-                }))
-              }
-            : {})
-        },
-        req.user
-      );
-    });
-
-    if (req.params.id)
-      return enriched.length ? res.json(enriched[0]) : res.status(404).json({ error: 'Cycle not found.' });
-    res.json(enriched);
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -929,3 +1037,61 @@ export const bulkArchiveCourses = atomic(async (req, res, next) => {
     next(error);
   }
 });
+
+// Overview figures for the Home page, computed in the database instead of loading every cycle.
+export const getCyclesOverview = async (req, res, next) => {
+  try {
+    const manager = isManager(req.user);
+    const visible = { archivedAt: null, parentCourse: { archivedAt: null } };
+    const [total, active, branchRows, recent, assigned, pendingCount, firstPending, unassigned] = await Promise.all([
+      prisma.cycle.count({ where: visible }),
+      prisma.cycle.count({ where: { ...visible, isFinished: false } }),
+      prisma.cycle.groupBy({ by: ['branch'], where: visible, _count: { _all: true } }),
+      prisma.cycle.findMany({
+        where: visible,
+        orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          branch: true,
+          totalHours: true,
+          isFinished: true,
+          updatedAt: true,
+          parentCourseId: true,
+          subCourseId: true,
+          parentCourse: { select: { isPrivate: true } },
+          instructors: { select: { instructor: { select: { name: true } } } }
+        }
+      }),
+      prisma.courseInstructor.findMany({
+        where: { course: visible },
+        distinct: ['instructorId'],
+        select: { instructorId: true, instructor: { select: { name: true } } },
+        orderBy: { instructorId: 'asc' }
+      }),
+      prisma.pendingAssignment.count({
+        where: { status: 'PENDING', course: visible, ...(manager ? {} : { submittedById: req.user.id }) }
+      }),
+      prisma.pendingAssignment.findFirst({
+        where: { status: 'PENDING', course: visible, ...(manager ? {} : { submittedById: req.user.id }) },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true }
+      }),
+      prisma.cycle.count({ where: { ...visible, isFinished: false, instructors: { none: {} } } })
+    ]);
+    res.json({
+      total,
+      active,
+      completed: total - active,
+      instructorCount: assigned.length,
+      instructorNames: assigned.slice(0, 3).map(a => a.instructor.name),
+      branches: branchRows.map(r => [r.branch, r._count._all]).sort((a, b) => b[1] - a[1]),
+      recent: recent.map(({ parentCourse, ...cycle }) => ({ ...cycle, isPrivate: Boolean(parentCourse?.isPrivate) })),
+      pending: { count: pendingCount, firstId: firstPending?.id ?? null },
+      unassigned
+    });
+  } catch (error) {
+    next(error);
+  }
+};

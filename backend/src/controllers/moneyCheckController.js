@@ -136,6 +136,11 @@ const totals = items => {
   return { unchecked: of('UNCHECKED'), checked: of('CHECKED'), changed: of('CHANGED') };
 };
 
+// Totals only, for the sidebar and Overview reminders.
+export async function moneyCheckSummary(branch) {
+  return totals((await moneyRecords(branch)).items);
+}
+
 export const listMoneyChecks = async (req, res, next) => {
   try {
     const branch = branchOf(req.query.branch);

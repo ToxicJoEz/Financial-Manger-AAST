@@ -1,3 +1,4 @@
+import { getAttention } from './controllers/attentionController.js';
 import express from 'express';
 import { clientActivity } from './controllers/clientActivityController.js';
 import { protect } from './middlewares/authMiddleware.js';
@@ -37,6 +38,7 @@ app.use('/api', (req, res, next) => {
 app.get('/api/health', (req, res) => res.json({ status: 'ok', database: 'postgresql' }));
 
 app.post('/api/activity-events', protect, clientActivity);
+app.get('/api/attention', protect, getAttention);
 
 // Routes
 app.use('/api/imports', importRoutes);

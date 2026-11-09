@@ -48,10 +48,12 @@ try {
   const overview = ok(await req('/finances/overview?year=2026', 'GET', undefined, fouad));
   assert(overview.income && !('payroll' in overview));
   assert('payroll' in ok(await req('/finances/overview?year=2026', 'GET', undefined, main)));
-  const cycles = ok(await req('/cycles', 'GET', undefined, fouad));
+  const cycles = ok(await req('/cycles?pageSize=100', 'GET', undefined, fouad));
+  assert(cycles.rows.length && cycles.counts.payrollDue === undefined);
   assert(!JSON.stringify(cycles).includes('hourlyRate'));
   assert(!JSON.stringify(cycles).includes('payrollEarnings'));
-  assert(JSON.stringify(ok(await req('/cycles', 'GET', undefined, main))).includes('hourlyRate'));
+  assert(JSON.stringify(ok(await req('/cycles?pageSize=100', 'GET', undefined, main)).rows).includes('hourlyRate'));
+  assert.equal((await req('/cycles?status=payroll-due', 'GET', undefined, fouad)).status, 403);
   const options = ok(await req('/exports/options', 'GET', undefined, fouad));
   assert(!JSON.stringify(options).includes('Hourly rate'));
   assert.equal(ok(await req('/employees/demo-instructor-3/details', 'GET', undefined, fouad)).paidPayments.length, 0);

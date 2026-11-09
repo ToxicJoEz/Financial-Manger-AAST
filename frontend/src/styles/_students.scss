@@ -19,7 +19,7 @@
   align-items: center;
   gap: 0.5rem;
   background-color: #ffffff;
-  border: 1px solid #dce4d3;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   padding: 0.5rem 0.85rem;
   min-width: 260px;
@@ -31,7 +31,7 @@
     outline: none;
     background: transparent;
     width: 100%;
-    color: #202e2b;
+    color: #26334d;
     font-size: 0.875rem;
 
     &::placeholder {
@@ -48,15 +48,15 @@
   color: #738073;
 
   strong {
-    color: #265b49;
+    color: #4c65eb;
     font-weight: 600;
   }
 }
 
 .students-card {
   background-color: #ffffff;
-  border: 1px solid #e3e8e1;
-  border-radius: 8px;
+  border: 1px solid #e6e9f1;
+  border-radius: 10px;
   box-shadow: 0 1px 3px rgba(32, 46, 43, 0.04);
   overflow: hidden;
 }
@@ -77,21 +77,21 @@
   font-size: 0.8125rem;
 
   th {
-    background-color: #fafbf8;
+    background-color: #f8fafc;
     color: #69785f;
     font-size: 0.6875rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 0.875rem 1.25rem;
-    border-bottom: 1px solid #e3e8e1;
+    border-bottom: 1px solid #e6e9f1;
     white-space: nowrap;
   }
 
   td {
     padding: 1rem 1.25rem;
     border-bottom: 1px solid #edf0e8;
-    color: #202e2b;
+    color: #26334d;
     vertical-align: middle;
   }
 
@@ -115,7 +115,7 @@
   height: 32px;
   border-radius: 50%;
   background-color: #e7ede1;
-  color: #4e6240;
+  color: #3f4f6b;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -132,12 +132,12 @@
   strong {
     font-size: 0.875rem;
     font-weight: 600;
-    color: #202e2b;
+    color: #26334d;
   }
 
   span {
     font-size: 0.75rem;
-    color: #737e79;
+    color: #67758d;
     margin-top: 2px;
   }
 }
@@ -148,8 +148,8 @@
   padding: 0.25rem 0.5rem;
   background-color: #f0f4ea;
   color: #284a36;
-  border: 1px solid #dce4d3;
-  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
   font-family: monospace;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -159,7 +159,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: #265b49;
+  color: #4c65eb;
   font-size: 0.8125rem;
   text-decoration: none;
 
@@ -184,7 +184,7 @@
 .student-action-btn {
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 0.35rem;
   color: #738073;
   display: inline-flex;
@@ -194,7 +194,7 @@
 
   &:hover {
     background-color: #eaf0e6;
-    color: #265b49;
+    color: #4c65eb;
   }
 
   &.danger:hover {
@@ -209,12 +209,12 @@
   justify-content: space-between;
   margin-bottom: 1.25rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e3e8e1;
+  border-bottom: 1px solid #e6e9f1;
 
   h3 {
     font-size: 1.125rem;
     font-weight: 600;
-    color: #202e2b;
+    color: #26334d;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -235,29 +235,29 @@
   label {
     font-size: 0.75rem;
     font-weight: 600;
-    color: #4e6240;
+    color: #3f4f6b;
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
 
   input {
     padding: 0.6rem 0.75rem;
-    border: 1px solid #dce4d3;
+    border: 1px solid #e2e8f0;
     border-radius: 6px;
     font-size: 0.875rem;
-    color: #202e2b;
+    color: #26334d;
     background-color: #ffffff;
     outline: none;
 
     &:focus {
-      border-color: #265b49;
+      border-color: #4c65eb;
       box-shadow: 0 0 0 2px rgba(38, 91, 73, 0.15);
     }
   }
 
   small {
     font-size: 0.6875rem;
-    color: #737e79;
+    color: #67758d;
   }
 }
 
@@ -268,7 +268,7 @@
   gap: 0.75rem;
   margin-top: 1.5rem;
   padding-top: 1rem;
-  border-top: 1px solid #e3e8e1;
+  border-top: 1px solid #e6e9f1;
 }
 
 .student-delete-confirm {
@@ -278,7 +278,7 @@
 
   p {
     font-size: 0.875rem;
-    color: #4e6240;
+    color: #3f4f6b;
     line-height: 1.5;
   }
 

@@ -4,7 +4,7 @@ import StudentDetailsDialog from '../components/StudentDetailsDialog';
 import { AuthContext } from '../context/AuthContext';
 import StudentProfileFields from '../components/StudentProfileFields';
 import FinancialRemovalChoice from '../components/FinancialRemovalChoice';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { AnimatePresence } from 'framer-motion';
 import { Plus, Edit2, Trash2, Search, Phone, GraduationCap, X, Check, AlertTriangle } from 'lucide-react';
@@ -19,6 +19,12 @@ export default function Students() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [archivedView,setArchivedView]=useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ active: 0, archived: 0 });
+  const [query, setQuery] = useState('');
+  const PAGE_SIZE = 24;
+  const request = useRef(0);
 
   // Add Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -42,19 +48,35 @@ export default function Students() {
 
 
   useEffect(() => { setKeepFinancialRecords(true); setConfirmRemoval(false); }, [deleteTarget]);
+  // The server pages and searches the directory, so only one page of students is loaded at a time.
+  const params = useRef({});
+  params.current = { page, pageSize: PAGE_SIZE, search: query || undefined, view: archivedView ? 'archived' : 'active' };
   const fetchStudents = async () => {
+    const id = ++request.current;
     try {
       setLoading(true);
-      const res = await axios.get('/students');
-      setStudents(res.data);
+      const res = await axios.get('/students', { params: params.current });
+      if (id !== request.current) return;
+      const pages = Math.max(1, Math.ceil(res.data.total / PAGE_SIZE));
+      if (res.data.page > pages) { setPage(pages); return; }
+      setStudents(res.data.rows);
+      setTotal(res.data.total);
+      setCounts(res.data.counts);
     } catch (err) {
-      toast.error('Failed to load students directory');
+      if (id === request.current) toast.error('Failed to load students directory');
     } finally {
-      setLoading(false);
+      if (id === request.current) setLoading(false);
     }
   };
   useEffect(() => {
+    const t = setTimeout(() => setQuery(searchTerm.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+  useEffect(() => { setPage(1); setSelectedStudentIds([]); }, [query, archivedView]);
+  useEffect(() => {
     fetchStudents();
+  }, [page, query, archivedView]);
+  useEffect(() => {
     window.addEventListener('students-updated', fetchStudents);
     return () => window.removeEventListener('students-updated', fetchStudents);
   }, []);
@@ -127,11 +149,9 @@ export default function Students() {
       setSubmitting(false);
     }
   };
-  const filtered = students.filter(s => {
-    if(Boolean(s.deletedAt)!==archivedView)return false;
-    const q = searchTerm.toLowerCase();
-    return (s.englishName || '').toLowerCase().includes(q) || s.name.toLowerCase().includes(q) || (s.registrationNumber||'').toLowerCase().includes(q) || s.mobile && s.mobile.toLowerCase().includes(q);
-  });
+  const filtered = students;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const viewCount = archivedView ? counts.archived : counts.active;
   const toggleSelectStudent = id => setSelectedStudentIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id]);
   const toggleSelectAll = () => setSelectedStudentIds(selectedStudentIds.length === filtered.length && filtered.length > 0 ? [] : filtered.map(s => s.id));
 
@@ -187,10 +207,10 @@ export default function Students() {
         </div>
         <div className="students-meta-summary">
           <span>
-            Total: <strong>{students.length}</strong> {students.length === 1 ? 'student' : 'students'}
+            Total: <strong>{viewCount}</strong> {viewCount === 1 ? 'student' : 'students'}
           </span>
-          {searchTerm && <span>
-              Matches: <strong>{filtered.length}</strong>
+          {query && <span>
+              Matches: <strong>{total}</strong>
             </span>}
         </div>
       </div>
@@ -220,11 +240,11 @@ export default function Students() {
           <span className="empty-icon">
             <GraduationCap size={28} />
           </span>
-          <h3>{students.length ? 'No matching students found' : 'No students registered yet'}</h3>
+          <h3>{viewCount ? 'No matching students found' : archivedView ? 'No archived students' : 'No students registered yet'}</h3>
           <p>
-            {students.length ? 'Try adjusting your search criteria.' : 'Add your first student to get started with course enrollments.'}
+            {viewCount ? 'Try adjusting your search criteria.' : archivedView ? 'Archived students will appear here.' : 'Add your first student to get started with course enrollments.'}
           </p>
-          {!students.length && <button className="btn-primary" onClick={() => {
+          {!viewCount && !archivedView && <button className="btn-primary" onClick={() => {
         resetAddForm();
         setIsAddModalOpen(true);
       }}>
@@ -288,6 +308,14 @@ export default function Students() {
               </tbody>
             </table>
           </div>
+          {pageCount > 1 && <div className="list-pagination">
+            <span>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
+            <div>
+              <button type="button" className="btn-secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
+              <span>Page {page} of {pageCount}</span>
+              <button type="button" className="btn-secondary" disabled={page >= pageCount} onClick={() => setPage(p => p + 1)}>Next</button>
+            </div>
+          </div>}
         </div>}
 
       <AnimatePresence>{viewingStudent && <StudentDetailsDialog studentId={viewingStudent.id} onClose={()=>setViewingStudent(null)} />}</AnimatePresence>

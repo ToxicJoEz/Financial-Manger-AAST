@@ -7,6 +7,15 @@ import { logAction } from '../utils/logger.js';
 
 export const getInstructors = async (req, res) => {
   try {
+    // Pickers only need names: skip the assignment history.
+    if (req.query.picker === '1')
+      return res.json(
+        await prisma.instructor.findMany({
+          where: { archivedAt: null },
+          select: { id: true, name: true, employeeId: true, branches: true },
+          orderBy: [{ name: 'asc' }, { id: 'asc' }]
+        })
+      );
     const isJunior = !canSeePayroll(req.user);
     const instructors = await prisma.instructor.findMany({
       where: { archivedAt: null },

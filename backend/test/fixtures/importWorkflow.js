@@ -244,7 +244,9 @@ try {
   };
   const manual = ok(await request(`/cycles/${partial.cycleId}/enrollments/${e.id}/payments`, 'POST', paymentBody));
   assert.equal(manual.paymentMethod, 'CARD');
-  const refreshedCycles = ok(await request('/cycles?parentCourseId=course-ket', 'GET', undefined, junior));
+  const refreshedCycles = ok(
+    await request('/cycles?parentCourseId=course-ket&pageSize=100', 'GET', undefined, junior)
+  ).rows;
   const refreshedEnrollment = refreshedCycles
     .find(c => c.id === partial.cycleId)
     .enrollments.find(row => row.id === e.id);

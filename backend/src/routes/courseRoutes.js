@@ -23,7 +23,8 @@ import {
   enrollStudent,
   updateEnrollment,
   removeEnrollment,
-  bulkArchiveCourses
+  bulkArchiveCourses,
+  getCyclesOverview
 } from '../controllers/courseController.js';
 import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 
@@ -36,6 +37,7 @@ router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
 router.delete('/:id/permanent', modOrAbove, permanentlyDelete('cycle'));
 
 router.get('/bulk-deletion-preview', modOrAbove, bulkCycleDeletionPreview);
+router.get('/overview', getCyclesOverview);
 router.get('/', getCourses);
 router.get('/:id', getCourses);
 router.post('/bulk-archive', modOrAbove, bulkArchiveCourses);

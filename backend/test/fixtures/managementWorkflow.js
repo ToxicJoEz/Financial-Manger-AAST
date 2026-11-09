@@ -220,7 +220,7 @@ try {
   );
   // Archive/restore has no financial effect; ordinary users cannot see archived records or controls.
   ok(await req('/students/' + a.id + '/archive', 'POST', {}));
-  assert(!ok(await req('/students', 'GET', undefined, junior)).some(s => s.id === a.id));
+  assert(!ok(await req('/students?pageSize=100', 'GET', undefined, junior)).rows.some(s => s.id === a.id));
   assert.equal((await req('/students/' + a.id + '/archive', 'POST', { archived: false }, junior)).status, 403);
   ok(await req('/students/' + a.id + '/archive', 'POST', { archived: false }));
   ok(await req('/students/' + b.id + '/permanent', 'DELETE', { confirm: true }));

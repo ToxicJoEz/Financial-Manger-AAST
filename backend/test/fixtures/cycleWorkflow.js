@@ -100,9 +100,24 @@ try {
     })
   );
   assert.equal(
-    ok(await req('/cycles?parentCourseId=course-ket')).every(c => c.parentCourseId === 'course-ket'),
+    ok(await req('/cycles?parentCourseId=course-ket&pageSize=100')).rows.every(c => c.parentCourseId === 'course-ket'),
     true
   );
+  // Cycle lists are paged, with filters and tab counts worked out in the database.
+  const everyKet = ok(await req('/cycles?parentCourseId=course-ket&pageSize=100'));
+  const firstPage = ok(await req('/cycles?parentCourseId=course-ket&pageSize=1'));
+  assert.equal(firstPage.rows.length, 1);
+  assert.equal(firstPage.total, everyKet.rows.length);
+  assert.equal(firstPage.counts.all, everyKet.rows.length);
+  assert.equal(ok(await req('/cycles?parentCourseId=course-ket&pageSize=1&page=2')).rows[0]?.id, everyKet.rows[1]?.id);
+  const due = ok(await req('/cycles?parentCourseId=course-ket&status=tuition-due&pageSize=100'));
+  assert.equal(due.total, everyKet.rows.filter(c => c.totalRemainingBalance > 0).length);
+  assert.equal(due.counts.tuitionDue, due.total);
+  const named = ok(
+    await req('/cycles?parentCourseId=course-ket&pageSize=100&search=' + encodeURIComponent('ket 1293219'))
+  );
+  assert(named.rows.some(c => c.id === manual.id));
+  assert.equal((await req('/cycles?pageSize=500')).status, 400);
   ok(await req('/cycles/' + manual.id, 'DELETE'));
   assert.equal(
     (

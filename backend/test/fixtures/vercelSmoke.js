@@ -39,7 +39,7 @@ try {
   assert.equal(catalog.data.length, 3);
   const courses = await request('cycles');
   assert.equal(courses.status, 200);
-  assert.equal(courses.data.length, 7);
+  assert.equal(courses.data.counts.all + courses.data.counts.archived, 7);
   const roster = await request('students');
   assert.equal(roster.status, 200);
   const picker = await request('students&pickerCourseId=cycle-ket-12');
