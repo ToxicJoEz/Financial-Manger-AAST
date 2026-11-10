@@ -47,3 +47,11 @@
     &.active { background: var(--branch-color); border-color: var(--branch-color); color: #fff; i { background: #fff; } span { background: #fff; color: var(--ink-strong); } }
   }
 }
+
+// Cycle name in a Checks group opens the cycle details pop-up.
+.money-checks .money-check-group-title { display: flex; align-items: center; gap: 4px; }
+.money-check-cycle-link {
+  border: 0; background: none; padding: 2px 4px; border-radius: var(--radius-sm); cursor: pointer;
+  font-size: 14px; font-weight: 800; color: var(--accent-strong); text-decoration: underline; text-decoration-color: var(--accent-line); text-underline-offset: 3px;
+  &:hover { background: var(--accent-soft); text-decoration-color: var(--accent); }
+}

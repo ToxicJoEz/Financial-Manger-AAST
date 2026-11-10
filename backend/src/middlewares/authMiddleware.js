@@ -2,6 +2,7 @@ import { auditActor } from '../utils/auditContext.js';
 import jwt from 'jsonwebtoken';
 import { canSeePayroll, branchScopeOf } from '../utils/access.js';
 import prisma from '../db/prisma.js';
+import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 
 export const protect = async (req, res, next) => {
   let token;
@@ -117,6 +118,18 @@ export const studentsInBranch = async (req, res, next) => {
         .json({ error: 'This student also studies in another branch. Ask the main mod to remove or archive them.' });
     next();
   } catch (error) {
+    next(error);
+  }
+};
+
+// Deleting cycles or students would remove money the main mod already confirmed: branch mods are stopped.
+export const confirmedMoneyGuard = kind => async (req, res, next) => {
+  try {
+    const ids = req.params.id ? [req.params.id] : Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+    await assertMoneyUnlocked(req.user, kind === 'cycle' ? { cycleIds: ids } : { studentIds: ids });
+    next();
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);
   }
 };

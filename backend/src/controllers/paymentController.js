@@ -1,3 +1,4 @@
+import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import { paymentFields } from '../utils/studentProfile.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { appendPayment, paymentView } from '../utils/paymentLedger.js';
@@ -31,8 +32,17 @@ export const getPayments = async (req, res, next) => {
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {})
     });
     const page = entries.slice(0, 50);
+    // Entries the main mod confirmed in Checks (branch mods can no longer reverse them).
+    const confirmed = new Set(
+      (
+        await prisma.moneyCheck.findMany({
+          where: { kind: 'PAYMENT', recordId: { in: page.map(e => e.id) } },
+          select: { recordId: true }
+        })
+      ).map(c => c.recordId)
+    );
     res.json({
-      entries: page.map(paymentView),
+      entries: page.map(entry => ({ ...paymentView(entry), confirmed: confirmed.has(entry.id) })),
       amountPaid: enrollment.amountPaid,
       nextCursor: entries.length > 50 ? page.at(-1).id : null
     });
@@ -103,6 +113,7 @@ export const reversePayment = atomic(async (req, res, next) => {
       include: { reversal: true }
     });
     if (!entry) return res.status(404).json({ error: 'Payment entry not found.' });
+    await assertMoneyUnlocked(req.user, { paymentIds: [entry.id] });
     if (entry.reversal || entry.kind === 'REVERSAL')
       return res.status(409).json({ error: 'This entry cannot be reversed again.' });
     res.status(201).json(

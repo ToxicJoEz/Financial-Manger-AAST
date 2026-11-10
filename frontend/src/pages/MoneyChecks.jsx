@@ -7,6 +7,7 @@ import { AuthContext } from '../context/AuthContext';
 import { Metric, EmptyState, money } from '../components/WorkspaceUI';
 import DateInput from '../components/DateInput';
 import Dialog from '../components/Dialog';
+import CycleDetailsDialog from '../components/CycleDetailsDialog';
 import { CHECKED_BRANCHES, canCheckBranchMoney, branchName } from '../utils/access';
 import { useSearchParams } from 'react-router-dom';
 import { getBranchColor } from '../utils/branchColors';
@@ -47,6 +48,7 @@ export default function MoneyChecks() {
     [dialog, setDialog] = useState(null),
     [note, setNote] = useState(''),
     [saving, setSaving] = useState(false);
+  const [viewCycle, setViewCycle] = useState(null);
   const request = useRef(0);
   async function load() {
     const id = ++request.current;
@@ -116,7 +118,7 @@ export default function MoneyChecks() {
       const keys = group.items.map(keyOf);
       const total = group.items.reduce((sum, i) => sum + i.amount, 0);
       return <article className="panel money-check-group" key={group.id}>
-        <header><label className="policy-check">{canMark && <input type="checkbox" aria-label={`Select all records in ${group.name}`} checked={keys.every(k => selected.includes(k))} onChange={() => toggle(keys)} />}<strong>{group.name}</strong></label><span>{group.items.length} records · {money(total)} EGP</span></header>
+        <header><div className="money-check-group-title"><label className="policy-check">{canMark && <input type="checkbox" aria-label={`Select all records in ${group.name}`} checked={keys.every(k => selected.includes(k))} onChange={() => toggle(keys)} />}</label>{group.id && group.id !== group.name ? <button type="button" className="money-check-cycle-link" title="Open cycle details" onClick={() => setViewCycle(group.id)}>{group.name}</button> : <strong>{group.name}</strong>}</div><span>{group.items.length} records · {money(total)} EGP</span></header>
         <div className="table-scroll"><table className="data-table money-check-table"><thead><tr>{canMark && <th className="select-column" aria-label="Select" />}<th>Date</th><th>Student</th><th>Type</th><th>Method / receipt</th><th className="number">Amount</th><th>Recorded by</th><th>Status</th></tr></thead><tbody>
           {group.items.map(item => <tr key={keyOf(item)} className={`state-${item.state.toLowerCase()}`}>
             {canMark && <td className="select-column"><input type="checkbox" aria-label={`Select ${item.student} ${typeLabels[item.type] || item.type}`} checked={selected.includes(keyOf(item))} onChange={() => toggle([keyOf(item)])} /></td>}
@@ -132,6 +134,7 @@ export default function MoneyChecks() {
       </article>;
     })}
     {canMark && chosen.length > 0 && <div className="payroll-selection"><div><strong>{chosen.length} records selected</strong><span>{money(chosen.reduce((sum, i) => sum + i.amount, 0))} EGP</span></div><button className="text-button" onClick={() => setSelected([])}>Clear</button>{chosen.some(i => i.state !== 'UNCHECKED') && <button className="btn-secondary management-danger" onClick={() => setDialog({ mode: 'uncheck', items: chosen.filter(i => i.state !== 'UNCHECKED') })}>Mark as unchecked</button>}{chosen.some(i => i.state !== 'CHECKED') && <button className="btn-primary" onClick={() => setDialog({ mode: 'check', items: chosen.filter(i => i.state !== 'CHECKED') })}><CircleCheck size={16} />Mark as checked</button>}</div>}
+    <AnimatePresence>{viewCycle && <CycleDetailsDialog cycleId={viewCycle} onClose={() => setViewCycle(null)} />}</AnimatePresence>
     <AnimatePresence>{dialog && <Dialog title={dialog.mode === 'check' ? 'Mark as checked' : 'Mark as unchecked'} onClose={saving ? () => {} : () => setDialog(null)}><div className="modal-content card enrollment-dialog">
       <h3>{dialog.mode === 'check' ? `Confirm ${dialog.items.length} ${branchLabel} records?` : `Mark ${dialog.items.length} records as unchecked?`}</h3>
       <p>{dialog.mode === 'check' ? 'Only confirm records that match the receipts and paperwork. If a record changes later, it will show as "Changed after check".' : 'These records go back to Unchecked and will need to be checked again.'}</p>

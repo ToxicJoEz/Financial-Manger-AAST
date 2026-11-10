@@ -1,3 +1,4 @@
+import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import { assertPrivateSeat, cycleScope, cycleNumberTaken, parseCycleNumber } from '../utils/privateCourses.js';
 import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
@@ -52,6 +53,41 @@ const cycleOut = (course, user) => {
     user
   );
 };
+// Marks tuition payments, book payments and enrollments the main mod has confirmed in Checks.
+// Branch mods cannot change confirmed money, so the screens lock those actions.
+async function withConfirmations(cycles) {
+  const paymentIds = [],
+    bookIds = [];
+  for (const cycle of cycles)
+    for (const e of cycle.enrollments || []) {
+      for (const p of e.paymentSummary || []) paymentIds.push(p.id);
+      if (e.books?.id) bookIds.push(e.books.id);
+    }
+  if (!paymentIds.length && !bookIds.length) return cycles;
+  const checks = await prisma.moneyCheck.findMany({
+    where: {
+      OR: [
+        { kind: 'PAYMENT', recordId: { in: paymentIds } },
+        { kind: 'BOOK', recordId: { in: bookIds } }
+      ]
+    },
+    select: { kind: true, recordId: true }
+  });
+  const confirmed = new Set(checks.map(c => `${c.kind}:${c.recordId}`));
+  return cycles.map(cycle => ({
+    ...cycle,
+    enrollments: (cycle.enrollments || []).map(e => {
+      const paymentSummary = (e.paymentSummary || []).map(p => ({ ...p, confirmed: confirmed.has(`PAYMENT:${p.id}`) }));
+      const books = e.books?.id ? { ...e.books, confirmed: confirmed.has(`BOOK:${e.books.id}`) } : e.books;
+      return {
+        ...e,
+        paymentSummary,
+        books,
+        moneyConfirmed: paymentSummary.some(p => p.confirmed) || Boolean(books?.confirmed)
+      };
+    })
+  }));
+}
 // Cycles where at least one counted student still owes tuition (the same rule as the cycle cards).
 async function tuitionDueIds(parentCourseId, subCourseId) {
   const rows = await prisma.$queryRaw(Prisma.sql`SELECT DISTINCT e."courseId" AS id FROM "Enrollment" e
@@ -97,7 +133,9 @@ export const getCourses = async (req, res) => {
         where: { id: req.params.id, ...visibility },
         include: cycleInclude(req.user)
       });
-      return course ? res.json(cycleOut(course, req.user)) : res.status(404).json({ error: 'Cycle not found.' });
+      return course
+        ? res.json((await withConfirmations([cycleOut(course, req.user)]))[0])
+        : res.status(404).json({ error: 'Cycle not found.' });
     }
     const q = req.query;
     const keys = ['parentCourseId', 'subCourseId', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
@@ -177,7 +215,7 @@ export const getCourses = async (req, res) => {
       manager ? count(statusWhere.archived) : 0
     ]);
     res.json({
-      rows: rows.map(course => cycleOut(course, req.user)),
+      rows: await withConfirmations(rows.map(course => cycleOut(course, req.user))),
       total,
       page,
       pageSize,
@@ -730,6 +768,9 @@ export const enrollStudentHandler = async (req, res, next) => {
     if (!course) return res.status(404).json({ error: 'Course not found.' });
     if (course.archivedAt || course.parentCourse.archivedAt)
       return res.status(409).json({ error: 'Restore the archived course before enrolling students.' });
+    // Nobody adds students to a completed cycle: reopen it first.
+    if (course.isFinished)
+      return res.status(409).json({ error: 'This cycle is completed. Reopen it before adding students.' });
     await assertPrivateSeat(course);
     const terms = enrollmentTerms(req.body, course.courseFee);
     const metadata = paymentFields(req.body);
@@ -848,6 +889,7 @@ export const updateEnrollment = atomic(async (req, res, next) => {
     if (!enrollment || enrollment.courseId !== id || (!isManager(req.user) && enrollment.student.deletedAt)) {
       return res.status(404).json({ error: 'Enrollment record not found for this course.' });
     }
+    await assertMoneyUnlocked(req.user, { enrollmentIds: [enrollment.id] });
 
     const updateData = {};
 
@@ -912,12 +954,16 @@ export const updateEnrollment = atomic(async (req, res, next) => {
 // @access  Private (All authenticated users)
 export const removeEnrollmentHandler = async (req, res, next) => {
   try {
+    // Users can add students to a cycle but never remove them.
+    if (!isManager(req.user))
+      return res.status(403).json({ error: 'Only admins and mods can remove a student from a cycle.' });
     if (req.body.confirm !== true) return res.status(400).json({ error: 'Confirm permanent enrollment removal.' });
     const enrollment = await prisma.enrollment.findFirst({
       where: { id: req.params.enrollmentId, courseId: req.params.id },
       include: { course: true, student: true }
     });
     if (!enrollment) return res.status(404).json({ error: 'Enrollment not found.' });
+    await assertMoneyUnlocked(req.user, { enrollmentIds: [enrollment.id] });
     const retained = await permanentlyRemoveEnrollment(enrollment, req.user, req.body);
     await logAction(
       'PERMANENT_REMOVE_ENROLLMENT',

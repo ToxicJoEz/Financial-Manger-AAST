@@ -173,16 +173,23 @@ try {
   assert.equal(checks.items.length, 2);
   assert(checks.items.every(i => i.check.checkedBy === 'main-mod' && i.check.note === 'Matched receipt F-100'));
   assert.equal(ok(await req('/finances/checks?branch=FOUAD&summary=1')).summary.checked.count, 2);
-  // Undoing the book payment after it was checked flags it for another look.
+  // Once confirmed, the branch mod can no longer undo, edit or remove that money; the main mod still can.
   const bookRow = await prisma.bookPayment.findUnique({ where: { id: book.id } });
-  ok(
-    await req(
-      '/cycles/' + cycle.id + '/enrollments/' + enrollment.id + '/books',
-      'POST',
-      { status: 'UNPAID', paymentId: bookRow.id },
-      fouad
-    )
+  const bookPath = '/cycles/' + cycle.id + '/enrollments/' + enrollment.id + '/books';
+  const enrollmentPath = '/cycles/' + cycle.id + '/enrollments/' + enrollment.id;
+  assert.equal((await req(bookPath, 'POST', { status: 'UNPAID', paymentId: bookRow.id }, fouad)).status, 403);
+  assert.equal((await req(enrollmentPath, 'PUT', { customFee: 500 }, fouad)).status, 403);
+  assert.equal((await req(enrollmentPath, 'DELETE', { confirm: true, mode: 'KEEP' }, fouad)).status, 403);
+  assert.equal(
+    (await req(enrollmentPath + '/payments/' + tuition.id + '/reverse', 'POST', { note: 'Typo' }, fouad)).status,
+    403
   );
+  assert.equal((await req('/cycles/' + cycle.id + '/permanent', 'DELETE', { confirm: true }, fouad)).status, 403);
+  const cycleView = ok(await req('/cycles/' + cycle.id, 'GET', undefined, fouad));
+  const shown = cycleView.enrollments.find(e => e.id === enrollment.id);
+  assert(shown.moneyConfirmed && shown.books.confirmed && shown.paymentSummary.every(p => p.confirmed));
+  // Undoing the book payment after it was checked flags it for another look.
+  ok(await req(bookPath, 'POST', { status: 'UNPAID', paymentId: bookRow.id }, main));
   checks = ok(await req('/finances/checks?branch=FOUAD&status=CHANGED'));
   assert.deepEqual(
     checks.items.map(i => i.id),
@@ -190,6 +197,36 @@ try {
   );
   ok(await req('/finances/checks/uncheck', 'POST', { branch: 'FOUAD', items: [{ kind: 'BOOK', id: book.id }] }, main));
   assert.equal(ok(await req('/finances/checks?branch=FOUAD&status=CHANGED')).items.length, 0);
+  // Unconfirmed money can still be undone by the branch mod who works there.
+  const second = ok(
+    await req(
+      '/cycles/' + cycle.id + '/enrollments',
+      'POST',
+      {
+        studentId: 'demo-student-7',
+        recordPayment: true,
+        amountPaid: 1000,
+        paymentMethod: 'CASH',
+        receiptNumber: 'F-101'
+      },
+      fouad
+    )
+  );
+  const secondEntry = await prisma.paymentEntry.findFirst({ where: { enrollmentId: second.id } });
+  ok(
+    await req(
+      '/cycles/' + cycle.id + '/enrollments/' + second.id + '/payments/' + secondEntry.id + '/reverse',
+      'POST',
+      { note: 'Wrong receipt' },
+      fouad
+    )
+  );
+  // Completed cycles take no new students, for anyone, until they are reopened.
+  await prisma.cycle.update({ where: { id: cycle.id }, data: { isFinished: true } });
+  assert.equal(
+    (await req('/cycles/' + cycle.id + '/enrollments', 'POST', { studentId: 'demo-student-6' }, main)).status,
+    409
+  );
   // Changing the role away from mod clears the branch title.
   ok(await req('/users/' + created.user.id + '/role', 'PUT', { role: 'user' }));
   assert.equal((await prisma.user.findUnique({ where: { id: created.user.id } })).branchScope, null);

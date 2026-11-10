@@ -228,3 +228,6 @@ button, input, select, textarea { font-family: inherit; }
   min-width: 22px; padding: 2px 8px !important; border-radius: 999px; background: #f5b452 !important; color: #3d2800 !important;
   font-size: 12px !important; font-weight: 800; opacity: 1 !important; text-align: center;
 }
+
+// Money the main mod has confirmed in Checks.
+.money-confirmed-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--success-soft); color: var(--success); font-size: 11px; font-weight: 800; }

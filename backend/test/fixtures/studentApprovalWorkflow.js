@@ -69,13 +69,17 @@ try {
   assert.equal(enrollment.amountPaid, 1000);
   assert.equal(await prisma.enrollment.count({ where: { courseId: cycle.id } }), 1);
   assert.equal(await prisma.paymentEntry.count({ where: { courseId: cycle.id } }), 1);
+  // Staff add students to cycles but never remove them; a manager does.
+  assert.equal(
+    (await req(enrollPath + '/' + enrollment.id, 'DELETE', { confirm: true, mode: 'KEEP' }, junior)).status,
+    403
+  );
   ok(
-    await req(
-      enrollPath + '/' + enrollment.id,
-      'DELETE',
-      { confirm: true, mode: 'KEEP', reason: 'Withdrawal, income retained' },
-      junior
-    )
+    await req(enrollPath + '/' + enrollment.id, 'DELETE', {
+      confirm: true,
+      mode: 'KEEP',
+      reason: 'Withdrawal, income retained'
+    })
   );
   assert.equal(await prisma.enrollment.findUnique({ where: { id: enrollment.id } }), null);
   assert.equal(

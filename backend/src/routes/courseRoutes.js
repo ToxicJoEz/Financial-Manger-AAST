@@ -26,7 +26,13 @@ import {
   bulkArchiveCourses,
   getCyclesOverview
 } from '../controllers/courseController.js';
-import { protect, modOrAbove, cycleInBranch, bulkCyclesInBranch } from '../middlewares/authMiddleware.js';
+import {
+  protect,
+  modOrAbove,
+  cycleInBranch,
+  bulkCyclesInBranch,
+  confirmedMoneyGuard
+} from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -35,14 +41,14 @@ router.param('id', cycleInBranch);
 router.get('/:id/removed-enrollments', modOrAbove, getRemovedEnrollments);
 router.post('/:id/removed-enrollments/:removalId/adjust', modOrAbove, adjustRemovedEnrollment);
 router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
-router.delete('/:id/permanent', modOrAbove, permanentlyDelete('cycle'));
+router.delete('/:id/permanent', modOrAbove, confirmedMoneyGuard('cycle'), permanentlyDelete('cycle'));
 
 router.get('/bulk-deletion-preview', modOrAbove, bulkCyclesInBranch, bulkCycleDeletionPreview);
 router.get('/overview', getCyclesOverview);
 router.get('/', getCourses);
 router.get('/:id', getCourses);
 router.post('/bulk-archive', modOrAbove, bulkCyclesInBranch, bulkArchiveCourses);
-router.post('/bulk-delete', modOrAbove, bulkCyclesInBranch, bulkDeleteCycles);
+router.post('/bulk-delete', modOrAbove, bulkCyclesInBranch, confirmedMoneyGuard('cycle'), bulkDeleteCycles);
 router.post('/', modOrAbove, createCourse);
 router.put('/:id', modOrAbove, updateCourse);
 router.delete('/:id', modOrAbove, deleteCourse);
@@ -58,7 +64,7 @@ router.post('/:id/enrollments/:enrollmentId/books', updateBookStatus);
 router.get('/:id/enrollments', getCourseEnrollments);
 router.post('/:id/enrollments', enrollStudent);
 router.put('/:id/enrollments/:enrollmentId', updateEnrollment);
-router.delete('/:id/enrollments/:enrollmentId', removeEnrollment);
+router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
 
 router.get('/:id/enrollments/:enrollmentId/payments', getPayments);
 router.post('/:id/enrollments/:enrollmentId/payments', modOrAbove, recordPayment);

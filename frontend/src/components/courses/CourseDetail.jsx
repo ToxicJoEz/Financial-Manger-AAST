@@ -145,7 +145,7 @@ export function CourseDetail({
 
               </div>
 
-              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.isFinished || course.privateSeatOccupied} title={course.isFinished ? 'This cycle is completed. Reopen it to add students.' : course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                 <Plus size={13} /> {course.privateSeatOccupied ? `Private cycle full (${course.privateSeatCount}/${course.privateSeatLimit})` : course.isPrivate ? `Enroll student (${course.privateSeatCount}/${course.privateSeatLimit})` : "Enroll student"}
 
@@ -213,7 +213,7 @@ export function CourseDetail({
 
                 </p>
 
-                {enrollments.length === 0 && !readOnly ? <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+                {enrollments.length === 0 && !readOnly ? course.isFinished ? <span className="muted">This cycle is completed. Reopen it to add students.</span> : <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                     <Plus size={13} /> Enroll first student
 

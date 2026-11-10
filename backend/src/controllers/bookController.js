@@ -1,3 +1,4 @@
+import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { moneyMinor } from '../utils/numbers.js';
 import { logAction } from '../utils/logger.js';
@@ -20,7 +21,10 @@ export const updateBookStatus = atomic(async (req, res, next) => {
     if (!row) fail('Enrollment not found.', 404);
     const current = await prisma.bookPayment.findUnique({ where: { activeKey: row.id } });
     if (status === 'UNPAID') {
+      // Users can record books but never undo them; branch mods can until the main mod confirms the payment.
+      if (req.user.role === 'user') fail('Only admins and mods can undo a book status.', 403);
       if (!current || current.id !== paymentId) fail('Book status changed. Refresh and review it again.', 409);
+      await assertMoneyUnlocked(req.user, { bookIds: [current.id] });
       await prisma.bookPayment.update({
         where: { id: current.id },
         data: { activeKey: null, reversedAt: new Date(), reversedBy: req.user.username }
