@@ -5,7 +5,7 @@ import { parsePrivateWorkbook, phoneNumbers, privateDate } from '../utils/privat
 import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
-import { CYCLE_NUMBER_MAX, subCourseName } from '../utils/privateCourses.js';
+import { LEVEL_MAX, subCourseName, namedCycle, umbrellaBranches } from '../utils/privateCourses.js';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { importedCycleFinished } from '../utils/academyDate.js';
 import { appendPayment } from '../utils/paymentLedger.js';
@@ -106,20 +106,18 @@ const groupFingerprint = (parentId, members) =>
       .sort()
       .join(',')}`
   );
-const validNumber = value => Number.isInteger(value) && value >= 1 && value <= CYCLE_NUMBER_MAX;
+const validLevel = value => Number.isInteger(value) && value >= 1 && value <= LEVEL_MAX;
 
-// Builds the cycle plan: groups, their sub-umbrella and cycle number, and every problem to fix first.
-// `numbers` holds numbers the reviewer already saw (suggested or typed); file numbers are kept when free.
+// Builds the cycle plan: groups, their sub-umbrella and level, and every problem to fix first.
+// `numbers` holds levels the reviewer typed; otherwise the level comes from the file ("PET 2" -> level 2).
+// Names follow "<sub-umbrella> <level> - <start month>", with "(n)" added on import for repeats.
 async function planGroups(parentId, rows, numbers = {}) {
   const byGroup = new Map();
   for (const row of rows) byGroup.set(row.groupId, [...(byGroup.get(row.groupId) || []), row]);
   const subs = await prisma.subCourse.findMany({ where: { parentCourseId: parentId } });
   const subByName = new Map(subs.map(sub => [sub.name, sub]));
-  const taken = new Map();
-  for (const sub of subs) {
-    const cycles = await prisma.cycle.findMany({ where: { numberingKey: sub.id }, select: { cycleNumber: true } });
-    taken.set(sub.name, new Set(cycles.map(c => c.cycleNumber)));
-  }
+  const parent = await prisma.course.findUnique({ where: { id: parentId }, select: { name: true, branches: true } });
+  const allowed = umbrellaBranches(parent);
   const imported = new Set(
     (
       await prisma.importBatch.findMany({
@@ -149,6 +147,9 @@ async function planGroups(parentId, rows, numbers = {}) {
       alreadyImported: imported.has(groupFingerprint(parentId, members)),
       errors: [
         ...cycleErrors(lead),
+        ...(lead.branch && !allowed.includes(String(lead.branch).toUpperCase())
+          ? [`${parent.name} is not open for ${lead.branch}. The main mod can open it on the umbrella card.`]
+          : []),
         ...(members.length > PRIVATE_SEAT_LIMIT
           ? [`A private cycle holds at most ${PRIVATE_SEAT_LIMIT} students; this group has ${members.length}.`]
           : [])
@@ -157,36 +158,14 @@ async function planGroups(parentId, rows, numbers = {}) {
       requested: Object.hasOwn(numbers, id) ? Number(numbers[id]) : lead.cycleNumber
     };
   });
-  // Keep requested numbers first (in file order), then suggest the next free numbers for the rest.
-  const used = name => {
-    if (!taken.has(name)) taken.set(name, new Set());
-    return taken.get(name);
-  };
   for (const group of groups) {
-    if (!group.subCourseName || group.alreadyImported || group.requested == null) continue;
-    if (!validNumber(group.requested)) {
-      group.errors.push('Cycle number must be a whole number between 1 and 2,147,483,647.');
-      group.cycleNumber = group.requested;
-    } else if (used(group.subCourseName).has(group.requested)) {
-      group.errors.push(
-        `${group.subCourseName} ${group.requested} already exists or appears twice in this file. Enter another cycle number.`
-      );
-      group.cycleNumber = group.requested;
-      group.numberConflict = true;
-    } else {
-      group.cycleNumber = group.requested;
-      used(group.subCourseName).add(group.requested);
-    }
+    if (!group.subCourseName || group.alreadyImported) continue;
     group.numberSource = Object.hasOwn(numbers, group.id) ? 'reviewed' : 'file';
-  }
-  for (const group of groups) {
-    if (!group.subCourseName || group.alreadyImported || group.requested != null) continue;
-    const set = used(group.subCourseName);
-    let next = 1;
-    while (set.has(next)) next++;
-    group.cycleNumber = next;
-    group.numberSource = 'suggested';
-    set.add(next);
+    group.cycleNumber = group.requested;
+    if (group.requested == null) {
+      group.errors.push(`Enter the level (1–${LEVEL_MAX}) for this cycle.`);
+      group.numberSource = 'missing';
+    } else if (!validLevel(group.requested)) group.errors.push(`Level must be a whole number from 1 to ${LEVEL_MAX}.`);
   }
   return {
     groups,
@@ -308,7 +287,7 @@ export const commitPrivateImport = atomic(
         if (group.alreadyImported)
           throw importError('One or more selected cycles were already imported. Review the file again.', 409);
         if (!Object.hasOwn(numbers, group.id) || Number(numbers[group.id]) !== group.cycleNumber)
-          throw importError('Cycle numbers changed since the preview. Review the file again.', 409);
+          throw importError('Cycle levels changed since the preview. Review the file again.', 409);
       }
       const students = await prisma.student.findMany({ select: studentFields }),
         choices = req.body.students || {},
@@ -413,7 +392,13 @@ export const commitPrivateImport = atomic(
             subCourseId: sub.id,
             numberingKey: sub.id,
             cycleNumber: group.cycleNumber,
-            name: `${sub.name} ${group.cycleNumber}`,
+            ...(await namedCycle({
+              prefix: sub.name,
+              numberingKey: sub.id,
+              branch: lead.branch,
+              level: group.cycleNumber,
+              startDate: new Date(lead.startDate + 'T00:00:00Z')
+            })),
             branch: lead.branch,
             startDate: new Date(lead.startDate + 'T00:00:00Z'),
             endDate: lead.endDate ? new Date(lead.endDate + 'T00:00:00Z') : null,

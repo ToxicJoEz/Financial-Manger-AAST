@@ -35,7 +35,7 @@ try {
   const cycle = ok(
     await req('/cycles', 'POST', {
       parentCourseId: 'course-ket',
-      cycleNumber: 80001,
+      cycleNumber: 1,
       branch: 'MIAMI',
       startDate: '2026-10-01',
       endDate: '2026-12-01',
@@ -348,7 +348,7 @@ try {
   const importResult = ok(
     await req('/imports/course-ket/commit', 'POST', {
       previewToken: preview.previewToken,
-      cycleNumber: 80002,
+      cycleNumber: 2,
       branch: 'MIAMI',
       courseFee: 1000,
       totalHours: 10,

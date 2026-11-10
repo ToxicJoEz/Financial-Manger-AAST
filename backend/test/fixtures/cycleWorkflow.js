@@ -67,38 +67,29 @@ try {
     ).status,
     409
   );
-  const ket = ok(await req('/courses/course-ket'));
-  assert.equal(ket.nextCycleNumber, 15);
+  // Cycles are named "<umbrella> <level> - <start month year>"; a repeat in the same branch and month gets "(n)".
   const baseCycle = {
     parentCourseId: 'course-ket',
-    cycleNumber: 12932193,
+    cycleNumber: 4,
     branch: 'MIAMI',
     totalHours: 10,
-    courseFee: 1000
+    courseFee: 1000,
+    startDate: '2027-03-05'
   };
   const manual = ok(await req('/cycles', 'POST', baseCycle));
-  assert.equal(manual.name, 'KET 12932193');
+  assert.equal(manual.name, 'KET 4 - March 2027');
+  const repeat = ok(await req('/cycles', 'POST', baseCycle));
+  assert.equal(repeat.name, 'KET 4 - March 2027 (2)');
+  assert.equal(ok(await req('/cycles', 'POST', { ...baseCycle, branch: 'FOUAD' })).name, 'KET 4 - March 2027');
   assert.equal(
-    (
-      await req('/cycles', 'POST', {
-        ...baseCycle,
-        branch: 'FOUAD'
-      })
-    ).status,
-    409
+    ok(await req('/cycles', 'POST', { ...baseCycle, parentCourseId: 'course-pet' })).name,
+    'PET 4 - March 2027'
   );
-  ok(
-    await req('/cycles', 'POST', {
-      ...baseCycle,
-      parentCourseId: 'course-pet'
-    })
-  );
-  assert.equal(ok(await req('/courses/course-ket')).nextCycleNumber, 12932194);
-  ok(
-    await req('/cycles/' + manual.id, 'PUT', {
-      cycleNumber: 12932192
-    })
-  );
+  // Changing the start month renames the cycle; the freed "(1)" is reused by the next one.
+  assert.equal(ok(await req('/cycles/' + manual.id, 'PUT', { startDate: '2027-04-02' })).name, 'KET 4 - April 2027');
+  assert.equal(ok(await req('/cycles', 'POST', baseCycle)).name, 'KET 4 - March 2027');
+  assert.equal(ok(await req('/cycles/' + manual.id, 'PUT', { cycleNumber: 2 })).name, 'KET 2 - April 2027');
+  assert.equal((await req('/cycles/' + manual.id, 'PUT', { startDate: null })).status, 400);
   assert.equal(
     ok(await req('/cycles?parentCourseId=course-ket&pageSize=100')).rows.every(c => c.parentCourseId === 'course-ket'),
     true
@@ -114,48 +105,38 @@ try {
   assert.equal(due.total, everyKet.rows.filter(c => c.totalRemainingBalance > 0).length);
   assert.equal(due.counts.tuitionDue, due.total);
   const named = ok(
-    await req('/cycles?parentCourseId=course-ket&pageSize=100&search=' + encodeURIComponent('ket 1293219'))
+    await req('/cycles?parentCourseId=course-ket&pageSize=100&search=' + encodeURIComponent('ket 2 - april'))
   );
   assert(named.rows.some(c => c.id === manual.id));
   assert.equal((await req('/cycles?pageSize=500')).status, 400);
   ok(await req('/cycles/' + manual.id, 'DELETE'));
-  assert.equal(
-    (
-      await req('/cycles', 'POST', {
-        ...baseCycle,
-        cycleNumber: 12932192
+  for (const level of [0, -1, 1.5, true, 'bad', 5])
+    assert.equal((await req('/cycles', 'POST', { ...baseCycle, cycleNumber: level })).status, 400);
+  assert.equal((await req('/cycles', 'POST', { ...baseCycle, startDate: undefined })).status, 400);
+  // Umbrellas only take cycles in the branches they are open for; only the main mod or an admin opens them.
+  ok(await req('/courses/course-ket/branches', 'PUT', { branches: ['MIAMI'] }));
+  assert.equal((await req('/cycles', 'POST', { ...baseCycle, branch: 'ASWAN' })).status, 409);
+  assert.equal((await req('/courses/course-ket/branches', 'PUT', { branches: [] })).status, 400);
+  assert.deepEqual(
+    ok(
+      await req('/courses/course-ket/branches', 'PUT', {
+        branches: ['ASWAN', 'MIAMI', 'FOUAD', 'PORT-SAID', 'SMART', 'ONLINE']
       })
-    ).status,
-    409
+    ).allowedBranches,
+    ['MIAMI', 'FOUAD', 'PORT-SAID', 'ASWAN', 'SMART', 'ONLINE']
   );
-  for (const number of [0, -1, 1.5, true, 'bad'])
-    assert.equal(
-      (
-        await req('/cycles', 'POST', {
-          ...baseCycle,
-          cycleNumber: number
-        })
-      ).status,
-      400
-    );
+  // Two people creating the same level, branch and month at once: one may be asked to retry; never a duplicate.
   const race = await Promise.all([
-    req('/cycles', 'POST', {
-      ...baseCycle,
-      cycleNumber: 25
-    }),
-    req('/cycles', 'POST', {
-      ...baseCycle,
-      cycleNumber: 25,
-      branch: 'FOUAD'
-    })
+    req('/cycles', 'POST', { ...baseCycle, startDate: '2027-06-01' }),
+    req('/cycles', 'POST', { ...baseCycle, startDate: '2027-06-09' })
   ]);
-  assert.deepEqual(race.map(r => r.status).sort(), [201, 409]);
-  const cycle = ok(
-    await req('/cycles', 'POST', {
-      ...baseCycle,
-      cycleNumber: 15
-    })
-  );
+  for (const [index, result] of race.entries())
+    if (result.status !== 201) {
+      assert.equal(result.status, 409, JSON.stringify(result.data));
+      race[index] = await req('/cycles', 'POST', { ...baseCycle, startDate: index ? '2027-06-09' : '2027-06-01' });
+    }
+  assert.notEqual(race[0].data.name, race[1].data.name);
+  const cycle = ok(await req('/cycles', 'POST', { ...baseCycle, startDate: '2027-05-01' }));
   const request = ok(
     await req(
       '/cycles/' + cycle.id + '/instructors',
@@ -263,7 +244,7 @@ try {
       id: cycle.id
     }
   });
-  assert.equal(renamed.name, 'KET UPDATED 15');
+  assert.equal(renamed.name, 'KET UPDATED 4 - May 2027');
   assert.equal(
     (await prisma.payrollEarning.findFirst({ where: { courseId: cycle.id } })).cycleName,
     original.cycleName
@@ -393,7 +374,7 @@ try {
   const bookCycle = ok(
     await req('/cycles', 'POST', {
       parentCourseId: 'course-ket',
-      cycleNumber: 990,
+      cycleNumber: 1,
       branch: 'MIAMI',
       startDate: '1901-01-01',
       courseFee: 1000

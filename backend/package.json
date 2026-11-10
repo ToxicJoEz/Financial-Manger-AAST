@@ -17,7 +17,8 @@
     "db:import-users": "node src/scripts/importUsers.js",
     "format": "prettier --write src test",
     "format:check": "prettier --check src test",
-    "db:reset-test-data": "node src/scripts/resetLocalTestData.js --confirm"
+    "db:reset-test-data": "node src/scripts/resetLocalTestData.js --confirm",
+    "db:wipe-keep-accounts": "node src/scripts/wipeBusinessData.js"
   },
   "keywords": [],
   "author": "",

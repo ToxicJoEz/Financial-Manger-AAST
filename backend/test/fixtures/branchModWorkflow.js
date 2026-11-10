@@ -30,7 +30,11 @@ try {
   const mainMod = ok(
     await req('/auth/register', 'POST', { username: 'main-mod', password: 'MainModTest!123', role: 'mod' })
   );
-  assert.equal((await req('/users/' + created.user.id + '/branch-scope', 'PUT', { branchScope: 'MIAMI' })).status, 400);
+  // Miami is a normal branch now: it can have its own branch mods.
+  assert.equal(
+    (await req('/users/' + created.user.id + '/branch-scope', 'PUT', { branchScope: 'NOWHERE' })).status,
+    400
+  );
   ok(await req('/users/' + created.user.id + '/branch-scope', 'PUT', { branchScope: 'FOUAD' }));
   const fouad = await login('fouad-mod', 'FouadModTest!123');
   const main = await login('main-mod', 'MainModTest!123');
@@ -61,12 +65,20 @@ try {
       await req(
         '/cycles',
         'POST',
-        { parentCourseId: 'course-ket', cycleNumber: 7002, branch: 'MIAMI', courseFee: 1000 },
+        { parentCourseId: 'course-ket', cycleNumber: 2, branch: 'MIAMI', courseFee: 1000, startDate: '2026-11-01' },
         fouad
       )
     ).status,
     403
   );
+  // Only admins and the main mod create or open umbrellas; branch mods only see umbrellas open for their branch.
+  assert.equal((await req('/courses', 'POST', { name: 'Branch umbrella', code: 'BR-1' }, fouad)).status, 403);
+  assert.equal((await req('/courses/course-ielts/branches', 'PUT', { branches: ['FOUAD'] }, fouad)).status, 403);
+  ok(await req('/courses/course-ielts/branches', 'PUT', { branches: ['SMART'] }, main));
+  assert(!ok(await req('/courses', 'GET', undefined, fouad)).some(c => c.id === 'course-ielts'));
+  assert.equal((await req('/courses/course-ielts', 'GET', undefined, fouad)).status, 404);
+  ok(await req('/courses/course-ielts/branches', 'PUT', { branches: ['SMART', 'FOUAD'] }, main));
+  assert(ok(await req('/courses', 'GET', undefined, fouad)).some(c => c.id === 'course-ielts'));
   const catalog = ok(await req('/courses', 'GET', undefined, fouad));
   assert(catalog.every(c => c.branches.every(b => b === 'FOUAD')));
   const fouadIncome = ok(await req('/finances/income?year=2026', 'GET', undefined, fouad));
@@ -120,7 +132,7 @@ try {
     await req(
       '/cycles',
       'POST',
-      { parentCourseId: 'course-ket', cycleNumber: 7001, branch: 'FOUAD', courseFee: 1000, startDate: '2026-11-01' },
+      { parentCourseId: 'course-ket', cycleNumber: 1, branch: 'FOUAD', courseFee: 1000, startDate: '2026-11-01' },
       fouad
     )
   );
@@ -161,7 +173,8 @@ try {
     'money on Fouad cycles counts regardless of who recorded it'
   );
   assert(checks.items.every(i => !['MIAMI', 'SMART'].includes(i.branch)));
-  assert.equal((await req('/finances/checks?branch=MIAMI')).status, 400);
+  assert.equal((await req('/finances/checks?branch=NOWHERE')).status, 400);
+  assert.equal(ok(await req('/finances/checks?branch=MIAMI&summary=1')).branch, 'MIAMI');
   assert.equal(ok(await req('/finances/checks?branch=SMART&summary=1')).branch, 'SMART');
   const pick = [
     { kind: 'PAYMENT', id: tuition.id },

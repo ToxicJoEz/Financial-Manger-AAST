@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { protect, mainManager } from '../middlewares/authMiddleware.js';
 import { deletionPreview, permanentlyDelete } from '../controllers/permanentDeletionController.js';
 import {
   getSubCourse,
@@ -11,10 +11,10 @@ import {
 // Sub-umbrellas of private courses. Creating and listing them lives under /api/courses/:id/sub-courses.
 const router = express.Router();
 router.use(protect);
-router.get('/:id/deletion-preview', modOrAbove, deletionPreview('subCourse'));
-router.delete('/:id/permanent', modOrAbove, permanentlyDelete('subCourse'));
+router.get('/:id/deletion-preview', mainManager, deletionPreview('subCourse'));
+router.delete('/:id/permanent', mainManager, permanentlyDelete('subCourse'));
 router.get('/:subId', getSubCourse);
-router.put('/:subId', modOrAbove, updateSubCourse);
-router.delete('/:subId', modOrAbove, archiveSubCourse);
-router.post('/:subId/restore', modOrAbove, restoreSubCourse);
+router.put('/:subId', mainManager, updateSubCourse);
+router.delete('/:subId', mainManager, archiveSubCourse);
+router.post('/:subId/restore', mainManager, restoreSubCourse);
 export default router;

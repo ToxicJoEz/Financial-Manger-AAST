@@ -25,6 +25,8 @@ export default function CycleImportDialog({
 }) {
   const { user } = useContext(AuthContext);
   const branchScope = branchScopeOf(user);
+  // Only branches the umbrella is open for.
+  const openBranches = parent.allowedBranches || String(parent.branches || '').split(',');
   const [page, setPage] = useState(0);
   const [file, setFile] = useState(null),
     [preview, setPreview] = useState(null),
@@ -33,7 +35,7 @@ export default function CycleImportDialog({
     [error, setError] = useState(''),
     [result, setResult] = useState(null);
   const [form, setForm] = useState({
-    cycleNumber: String(parent.nextCycleNumber || ''),
+    cycleNumber: '',
     branch: branchScope || '',
     courseFee: '',
     venue: '', classStartTime: '', classEndTime: '',
@@ -141,7 +143,7 @@ export default function CycleImportDialog({
     }));
   }
   const missingFields = [];
-  if(parent.isPrivate&&rows.length>PRIVATE_SEAT_LIMIT)missingFields.push(`At most ${PRIVATE_SEAT_LIMIT} students for a private cycle`);if (!form.cycleNumber) missingFields.push('Cycle number');
+  if(parent.isPrivate&&rows.length>PRIVATE_SEAT_LIMIT)missingFields.push(`At most ${PRIVATE_SEAT_LIMIT} students for a private cycle`);if (!form.cycleNumber) missingFields.push('Level');
   if (!form.branch) missingFields.push('Branch');
   if (!form.startDate) missingFields.push('Start date');
   if (!form.endDate) missingFields.push('End date');
@@ -166,8 +168,8 @@ export default function CycleImportDialog({
             }}>Change file</button></div>
    {preview.courseMismatch && <div className="alert-error" role="alert">The file course code ({preview.courseCode || 'missing'}) does not match {parent.code}. Choose the correct umbrella or correct the source file.</div>}
    {parent.isPrivate && rows.length>PRIVATE_SEAT_LIMIT && <p className="alert-error" role="alert">A private cycle can contain at most {PRIVATE_SEAT_LIMIT} students. Upload a smaller roster or create an empty cycle manually.</p>}<h4>Cycle details {parent.isPrivate?'· Private':''}</h4><div className="import-form-grid">
-    <Field label={subCourse ? `${subCourse.name} cycle number` : 'Cycle number'} id="import-number"><input id="import-number" className="input-field" required type="number" min="1" max="2147483647" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
-    <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={branchScope ? BRANCH_OPTIONS.filter(o => o.value === branchScope) : BRANCH_OPTIONS} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
+    <Field label={subCourse ? `${subCourse.name} level (1–4)` : 'Level (1–4)'} id="import-number"><input id="import-number" className="input-field" required type="number" min="1" max="4" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
+    <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={BRANCH_OPTIONS.filter(o => (!branchScope || o.value === branchScope) && openBranches.includes(o.value))} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
     <Field label="Start date · from Excel" id="import-start"><DateInput id="import-start" className="input-field" required  value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
     <Field label="End date · from Excel" id="import-end"><DateInput id="import-end" className="input-field" required  min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>
     <Field label="Standard tuition fee (EGP)" id="import-fee" hint="Suggested from the most common payment amount. You can edit it."><input id="import-fee" className="input-field" required type="number" min="0" step="0.01" value={form.courseFee} onChange={e => {

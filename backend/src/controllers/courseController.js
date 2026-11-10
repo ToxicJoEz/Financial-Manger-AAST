@@ -1,5 +1,11 @@
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
-import { assertPrivateSeat, cycleScope, cycleNumberTaken, parseCycleNumber } from '../utils/privateCourses.js';
+import {
+  assertPrivateSeat,
+  assertUmbrellaBranch,
+  cycleScope,
+  namedCycle,
+  parseLevel
+} from '../utils/privateCourses.js';
 import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { createStudentHandler } from './studentController.js';
@@ -202,7 +208,13 @@ export const getCourses = async (req, res) => {
       prisma.cycle.findMany({
         where,
         include: cycleInclude(req.user),
-        orderBy: [{ parentCourse: { name: 'asc' } }, { cycleNumber: 'asc' }, { id: 'asc' }],
+        orderBy: [
+          { parentCourse: { name: 'asc' } },
+          { startDate: 'desc' },
+          { cycleNumber: 'asc' },
+          { sequence: 'asc' },
+          { id: 'asc' }
+        ],
         skip: (page - 1) * pageSize,
         take: pageSize
       }),
@@ -240,22 +252,24 @@ export const createCourse = atomic(async (req, res, next) => {
     const parent = await prisma.course.findUnique({ where: { id: parentCourseId || '' } });
     if (!parent || parent.archivedAt) return res.status(400).json({ error: 'Choose an available parent course.' });
     const scope = await cycleScope(parent, req.body.subCourseId);
-    const number = parseCycleNumber(cycleNumber);
+    const number = parseLevel(cycleNumber);
     if (typeof branch !== 'string' || !branch.trim()) return res.status(400).json({ error: 'Branch is required.' });
+    assertUmbrellaBranch(parent, branch.trim().toUpperCase());
     if (branchScopeOf(req.user) && branch.trim().toUpperCase() !== branchScopeOf(req.user))
       return res.status(403).json({ error: `You can only create cycles in ${branchScopeOf(req.user)}.` });
-    const start = startDate ? new Date(startDate) : null,
+    // The start date names the cycle ("KET 1 - November 2026"), so it is required.
+    if (!startDate) return res.status(400).json({ error: 'Choose the start date. It gives the cycle its name.' });
+    const start = new Date(startDate),
       end = endDate ? new Date(endDate) : null;
-    if (
-      (start && !Number.isFinite(start.getTime())) ||
-      (end && !Number.isFinite(end.getTime())) ||
-      (start && end && end < start)
-    )
+    if (!Number.isFinite(start.getTime()) || (end && !Number.isFinite(end.getTime())) || (start && end && end < start))
       return res.status(400).json({ error: 'Choose valid dates; end date cannot precede start date.' });
-    if (await cycleNumberTaken(scope.numberingKey, number))
-      return res.status(409).json({
-        error: `${scope.prefix} ${number} already exists, including archived cycles. Choose another number.`
-      });
+    const naming = await namedCycle({
+      prefix: scope.prefix,
+      numberingKey: scope.numberingKey,
+      branch: branch.trim().toUpperCase(),
+      level: number,
+      startDate: start
+    });
     const cycle = await prisma.cycle.create({
       data: {
         ...cycleSchedule(req.body),
@@ -263,7 +277,7 @@ export const createCourse = atomic(async (req, res, next) => {
         subCourseId: scope.subCourse?.id ?? null,
         numberingKey: scope.numberingKey,
         cycleNumber: number,
-        name: `${scope.prefix} ${number}`,
+        ...naming,
         details,
         branch: branch.trim().toUpperCase(),
         startDate: start,
@@ -313,19 +327,14 @@ export const updateCourse = atomic(async (req, res, next) => {
         .status(400)
         .json({ error: 'Use the dedicated completion or payment action to change accounting state.' });
     const data = cycleSchedule(body, cycle);
-    if (body.cycleNumber !== undefined) {
-      const number = parseCycleNumber(body.cycleNumber);
-      if (await cycleNumberTaken(cycle.numberingKey, number, cycle.id))
-        return res.status(409).json({ error: 'That cycle number is already used here, including archived cycles.' });
-      data.cycleNumber = number;
-      data.name = `${cycle.parentCourse.isPrivate ? cycle.subCourse?.name : cycle.parentCourse.name} ${number}`;
-    }
+    if (body.cycleNumber !== undefined) data.cycleNumber = parseLevel(body.cycleNumber);
     if (body.branch !== undefined) {
       if (typeof body.branch !== 'string' || !body.branch.trim())
         return res.status(400).json({ error: 'Branch is required.' });
       data.branch = body.branch.trim().toUpperCase();
       if (branchScopeOf(req.user) && data.branch !== branchScopeOf(req.user))
         return res.status(403).json({ error: `Cycles stay in ${branchScopeOf(req.user)}.` });
+      if (data.branch !== cycle.branch) assertUmbrellaBranch(cycle.parentCourse, data.branch);
     }
     if (body.details !== undefined) data.details = body.details;
     for (const key of ['startDate', 'endDate'])
@@ -336,7 +345,28 @@ export const updateCourse = atomic(async (req, res, next) => {
       }
     const start = data.startDate === undefined ? cycle.startDate : data.startDate,
       end = data.endDate === undefined ? cycle.endDate : data.endDate;
+    if (!start) return res.status(400).json({ error: 'A cycle needs a start date. It gives the cycle its name.' });
     if (start && end && end < start) return res.status(400).json({ error: 'End date cannot precede start date.' });
+    // Level, branch or start month changes rename the cycle (and may change its "(n)").
+    const level = data.cycleNumber ?? cycle.cycleNumber,
+      branchNow = data.branch ?? cycle.branch;
+    if (
+      level !== cycle.cycleNumber ||
+      branchNow !== cycle.branch ||
+      !cycle.startDate ||
+      start.toISOString().slice(0, 7) !== cycle.startDate.toISOString().slice(0, 7)
+    )
+      Object.assign(
+        data,
+        await namedCycle({
+          prefix: cycle.parentCourse.isPrivate ? cycle.subCourse?.name : cycle.parentCourse.name,
+          numberingKey: cycle.numberingKey,
+          branch: branchNow,
+          level,
+          startDate: start,
+          exceptId: cycle.id
+        })
+      );
     if (body.totalHours !== undefined)
       data.totalHours =
         body.totalHours === null || body.totalHours === '' ? null : numberValue(body.totalHours, 'Cycle hours');

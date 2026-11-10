@@ -1,4 +1,4 @@
-import { cycleScope, cycleNumberTaken } from '../utils/privateCourses.js';
+import { cycleScope, namedCycle, parseLevel, assertUmbrellaBranch } from '../utils/privateCourses.js';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { auditContext } from '../utils/auditContext.js';
@@ -205,13 +205,10 @@ export const commitImport = atomic(
           `A private cycle roster can contain at most ${PRIVATE_SEAT_LIMIT} students. No records were imported.`
         );
       const scope = await cycleScope(parent, req.body.subCourseId);
-      const number = numberValue(req.body.cycleNumber, 'Cycle number', { positive: true });
-      if (!Number.isInteger(number) || number > 2147483647)
-        throw importError('Cycle number must be a positive whole number up to 2,147,483,647.');
-      if (await cycleNumberTaken(scope.numberingKey, number))
-        throw importError(`${scope.prefix} ${number} already exists, including archived cycles.`, 409);
+      const number = parseLevel(req.body.cycleNumber);
       const branch = req.body.branch;
       if (!EMPLOYEE_BRANCHES.includes(branch)) throw importError('Choose a valid branch.');
+      assertUmbrellaBranch(parent, branch);
       if (branchScopeOf(req.user) && branch !== branchScopeOf(req.user))
         throw importError(`You can only import cycles into ${branchScopeOf(req.user)}.`, 403);
       const fee = Number(moneyMinor(req.body.courseFee, 'Standard tuition fee')) / 100;
@@ -308,7 +305,13 @@ export const commitImport = atomic(
           subCourseId: scope.subCourse?.id ?? null,
           numberingKey: scope.numberingKey,
           cycleNumber: number,
-          name: `${scope.prefix} ${number}`,
+          ...(await namedCycle({
+            prefix: scope.prefix,
+            numberingKey: scope.numberingKey,
+            branch,
+            level: number,
+            startDate: new Date(startDate)
+          })),
           branch,
           startDate: new Date(startDate),
           endDate: new Date(endDate),

@@ -26,7 +26,7 @@ const typeLabels = { PAYMENT: 'Tuition payment', REFUND: 'Refund', ADJUSTMENT: '
 const methodLabels = { CASH: 'Cash', ONLINE: 'Online', CARD: 'Card', UNSPECIFIED: '' };
 const keyOf = item => `${item.kind}:${item.id}`;
 
-// Money recorded in each branch outside Miami, confirmed record by record by an admin or the main mod.
+// Money recorded in each branch, confirmed record by record by an admin or the main mod.
 export default function MoneyChecks() {
   const { user } = useContext(AuthContext);
   const canMark = canCheckBranchMoney(user);

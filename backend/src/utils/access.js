@@ -1,12 +1,11 @@
-// Who can do what with money. Admins and the main mod (a mod with no branch; Miami) handle payroll and
-// check branch money. Branch mods (one or more per other branch) are mods limited to their own branch's
+// Who can do what with money. Admins and the main mod (a mod with no branch) handle payroll and check
+// branch money. Branch mods (one or more per branch, Miami included) are mods limited to their own branch's
 // cycles, without any payroll; the money recorded for their branch is checked by the main mod.
 // Keep in sync with frontend/src/utils/access.js.
 import { EMPLOYEE_BRANCHES } from './employees.js';
 
-// Miami is the main mod's branch; every other branch can have branch mods and has its money checked.
-export const MAIN_BRANCH = 'MIAMI';
-export const CHECKED_BRANCHES = EMPLOYEE_BRANCHES.filter(branch => branch !== MAIN_BRANCH);
+// Every branch, Miami included, can have branch mods and has its money checked by the main mod.
+export const CHECKED_BRANCHES = [...EMPLOYEE_BRANCHES];
 export const MOD_BRANCH_SCOPES = CHECKED_BRANCHES;
 
 export const isManager = user => ['admin', 'mod'].includes(user?.role);

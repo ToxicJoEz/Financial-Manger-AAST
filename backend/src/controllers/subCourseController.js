@@ -3,7 +3,7 @@ import { moneyMinor } from '../utils/numbers.js';
 import { isManager } from '../utils/courseView.js';
 import { branchScopeOf } from '../utils/access.js';
 import { logAction } from '../utils/logger.js';
-import { subCourseName, nextCycleNumber } from '../utils/privateCourses.js';
+import { subCourseName, cycleName } from '../utils/privateCourses.js';
 
 // Sub-umbrellas organize private cycles (e.g. KET, PET). They never hold money themselves.
 const cycleSelect = {
@@ -30,7 +30,6 @@ async function summary(sub, user) {
     bookPrice: sub.bookPrice,
     archivedAt: sub.archivedAt,
     isPrivate: true,
-    nextCycleNumber: await nextCycleNumber(sub.id),
     cycleCount: visible.length,
     archivedCount: visible.filter(c => c.archivedAt).length,
     activeCount: live.filter(c => !c.isFinished).length,
@@ -131,10 +130,17 @@ export const updateSubCourse = atomic(async (req, res) => {
     if (name !== current.name) {
       const cycles = await prisma.cycle.findMany({
         where: { subCourseId: sub.id },
-        select: { id: true, cycleNumber: true }
+        select: { id: true, cycleNumber: true, startDate: true, sequence: true }
       });
       for (const cycle of cycles)
-        await prisma.cycle.update({ where: { id: cycle.id }, data: { name: `${name} ${cycle.cycleNumber}` } });
+        await prisma.cycle.update({
+          where: { id: cycle.id },
+          data: {
+            name: cycle.startDate
+              ? cycleName(name, cycle.cycleNumber, cycle.startDate, cycle.sequence)
+              : `${name} ${cycle.cycleNumber}`
+          }
+        });
     }
     await logAction(
       'UPDATE_SUB_COURSE',

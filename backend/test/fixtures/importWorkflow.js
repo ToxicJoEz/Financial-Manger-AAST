@@ -99,7 +99,7 @@ try {
   assert.equal(await prisma.cycle.count(), cycleCount);
   const body = {
     previewToken: p.previewToken,
-    cycleNumber: 51,
+    cycleNumber: 1,
     branch: 'MIAMI',
     courseFee: 1800,
     totalHours: 20,
@@ -166,7 +166,7 @@ try {
       await request('/imports/course-ket/commit', 'POST', {
         ...body,
         previewToken: different.previewToken,
-        cycleNumber: 52
+        cycleNumber: 2
       })
     ).status,
     409
@@ -191,7 +191,7 @@ try {
         {
           ...body,
           previewToken: reuse.previewToken,
-          cycleNumber: 52,
+          cycleNumber: 2,
           choices: {
             'IMPORT-1': {
               profile: 'keep',
@@ -209,7 +209,7 @@ try {
     await request('/imports/course-ket/commit', 'POST', {
       ...body,
       previewToken: reuse.previewToken,
-      cycleNumber: 52,
+      cycleNumber: 2,
       instructorId: (await prisma.instructor.findFirst()).id,
       hourlyRate: 100,
       choices: {
@@ -302,7 +302,7 @@ try {
     (
       await request('/imports/course-ket/commit', 'POST', {
         ...body,
-        cycleNumber: 53,
+        cycleNumber: 3,
         previewToken: late.previewToken,
         choices: {
           'ROLLBACK-1': {
@@ -344,7 +344,7 @@ try {
     (
       await request('/imports/course-ket/commit', 'POST', {
         ...body,
-        cycleNumber: 53,
+        cycleNumber: 3,
         previewToken: stale.previewToken,
         choices: {
           'IMPORT-1': {
@@ -388,7 +388,7 @@ try {
     (
       await request('/imports/course-ket/commit', 'POST', {
         ...body,
-        cycleNumber: 53,
+        cycleNumber: 3,
         previewToken: mismatch.previewToken
       })
     ).status,
@@ -415,7 +415,7 @@ try {
       await request('/imports/course-ket/commit', 'POST', {
         ...body,
         previewToken: preview.previewToken,
-        cycleNumber: 70 + offset,
+        cycleNumber: offset + 2,
         startDate: '2020-01-01',
         endDate: end,
         instructorId: '',
@@ -435,7 +435,7 @@ try {
     data: {
       parentCourseId: 'course-ket',
       numberingKey: 'course-ket',
-      cycleNumber: 99,
+      cycleNumber: 4,
       name: 'October income test',
       branch: 'MIAMI',
       startDate: new Date('2026-10-31T00:00:00Z'),

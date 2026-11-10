@@ -23,7 +23,7 @@ export async function seedFixture(client, passwordHash) {
       ['course-pet', 'PET', '1T1037'],
       ['course-ielts', 'IELTS', '1T1038']
     ])
-      await tx.course.create({ data: { id, name, code } });
+      await tx.course.create({ data: { id, name, code, branches: 'MIAMI,FOUAD,PORT-SAID,ASWAN,SMART,ONLINE' } });
     const teachers = [];
     for (let n = 1; n <= 3; n++)
       teachers.push(
@@ -53,8 +53,8 @@ export async function seedFixture(client, passwordHash) {
       {
         id: 'cycle-ket-12',
         parentCourseId: 'course-ket',
-        cycleNumber: 12,
-        name: 'KET 12',
+        cycleNumber: 1,
+        name: 'KET 1 - October 2026',
         branch: 'MIAMI',
         startDate: date('2026-10-01'),
         endDate: date('2026-10-15'),
@@ -76,8 +76,8 @@ export async function seedFixture(client, passwordHash) {
       {
         id: 'cycle-ket-13',
         parentCourseId: 'course-ket',
-        cycleNumber: 13,
-        name: 'KET 13',
+        cycleNumber: 2,
+        name: 'KET 2 - October 2026',
         branch: 'FOUAD',
         startDate: date('2026-10-02'),
         endDate: date('2026-10-16'),
@@ -91,8 +91,8 @@ export async function seedFixture(client, passwordHash) {
       {
         id: 'cycle-ket-14',
         parentCourseId: 'course-ket',
-        cycleNumber: 14,
-        name: 'KET 14',
+        cycleNumber: 3,
+        name: 'KET 3 - October 2026',
         branch: 'MIAMI',
         startDate: date('2026-10-05'),
         endDate: date('2026-11-20'),
@@ -110,9 +110,9 @@ export async function seedFixture(client, passwordHash) {
         id: 'cycle-pet-1',
         parentCourseId: 'course-pet',
         cycleNumber: 1,
-        name: 'PET 1',
+        name: 'PET 1 - October 2026',
         branch: 'FOUAD',
-        startDate: null,
+        startDate: date('2026-10-01'),
         endDate: null,
         totalHours: 12,
         courseFee: 600,
@@ -125,7 +125,7 @@ export async function seedFixture(client, passwordHash) {
         id: 'cycle-pet-2',
         parentCourseId: 'course-pet',
         cycleNumber: 2,
-        name: 'PET 2',
+        name: 'PET 2 - October 2026',
         branch: 'MIAMI',
         startDate: date('2026-10-01'),
         endDate: date('2026-10-18'),
@@ -143,7 +143,7 @@ export async function seedFixture(client, passwordHash) {
         id: 'cycle-pet-3',
         parentCourseId: 'course-pet',
         cycleNumber: 3,
-        name: 'PET 3',
+        name: 'PET 3 - October 2026',
         branch: 'FOUAD',
         archivedAt: date('2026-10-19'),
         archivedBy: 'main-admin',
@@ -160,7 +160,7 @@ export async function seedFixture(client, passwordHash) {
         id: 'cycle-ielts-1',
         parentCourseId: 'course-ielts',
         cycleNumber: 1,
-        name: 'IELTS 1',
+        name: 'IELTS 1 - October 2026',
         branch: 'SMART',
         startDate: date('2026-10-15'),
         endDate: date('2026-11-30'),

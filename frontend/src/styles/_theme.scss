@@ -231,3 +231,23 @@ button, input, select, textarea { font-family: inherit; }
 
 // Money the main mod has confirmed in Checks.
 .money-confirmed-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--success-soft); color: var(--success); font-size: 11px; font-weight: 800; }
+
+// Umbrella cards: branches the umbrella is open for (faded where no cycles run yet).
+.catalog-branch-list .catalog-open-label { font-size: 11px; font-weight: 700; color: var(--muted); margin-right: 2px; align-self: center; }
+.catalog-branch-list span.no-cycles { opacity: 0.6; border-style: dashed !important; }
+.umbrella-branches-dialog {
+  display: flex; flex-direction: column; gap: 10px; width: min(480px, 100%);
+  h3 { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; color: var(--ink-strong); }
+  .umbrella-branch-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px;
+    button { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border-radius: var(--radius-md); cursor: pointer; font-weight: 800; font-size: 13px;
+      border: 1px solid color-mix(in srgb, var(--branch-color) 35%, #fff); background: color-mix(in srgb, var(--branch-color) 8%, #fff); color: color-mix(in srgb, var(--branch-color) 80%, #000);
+      small { font-weight: 600; font-size: 11px; opacity: 0.85; }
+      &.active { background: var(--branch-color); border-color: var(--branch-color); color: #fff; } } }
+}
+
+// A cycle's branch, easy to see on cards and in the list (same names can exist in different branches).
+.branch-chip {
+  display: inline-flex !important; align-items: center; gap: 5px; padding: 4px 10px !important; border-radius: var(--radius-sm);
+  background: var(--branch-color) !important; color: #fff !important; font-size: 12px !important; font-weight: 800 !important; letter-spacing: 0.02em;
+  i { display: none; }
+}

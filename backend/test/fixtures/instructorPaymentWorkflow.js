@@ -48,10 +48,11 @@ try {
     const c = ok(
       await req('/cycles', 'POST', {
         parentCourseId: 'course-ket',
-        cycleNumber: 800 + n,
+        cycleNumber: (n % 4) + 1,
         branch: n % 2 ? 'FOUAD' : 'MIAMI',
         courseFee: 1000,
-        totalHours: 10
+        totalHours: 10,
+        startDate: '2026-12-01'
       })
     );
     ok(await req('/cycles/' + c.id + '/instructors', 'POST', { instructorId: 'demo-instructor-1', hourlyRate: 100 }));
@@ -137,10 +138,11 @@ try {
   const multi = ok(
     await req('/cycles', 'POST', {
       parentCourseId: 'course-ket',
-      cycleNumber: 900,
+      cycleNumber: 4,
       branch: 'MIAMI',
       courseFee: 1000,
-      totalHours: 10
+      totalHours: 10,
+      startDate: '2026-12-01'
     })
   );
   for (const instructorId of ['demo-instructor-1', 'demo-instructor-2'])

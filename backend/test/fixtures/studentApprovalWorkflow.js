@@ -51,10 +51,11 @@ try {
   const cycle = ok(
     await req('/cycles', 'POST', {
       parentCourseId: 'course-ket',
-      cycleNumber: 9876543,
+      cycleNumber: 4,
       branch: 'MIAMI',
       totalHours: 10,
-      courseFee: 1000
+      courseFee: 1000,
+      startDate: '2026-12-01'
     })
   );
   const enrollPath = '/cycles/' + cycle.id + '/enrollments';

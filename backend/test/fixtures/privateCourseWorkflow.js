@@ -105,17 +105,19 @@ try {
     400
   );
   const cycle = ok(await req('/cycles', 'POST', params));
-  assert.equal(cycle.name, 'KET 1');
-  assert.equal((await req('/cycles', 'POST', params)).status, 409);
+  assert.equal(cycle.name, 'KET 1 - October 2026');
+  // A second KET 1 in the same branch and month gets "(2)".
+  const twin = ok(await req('/cycles', 'POST', params));
+  assert.equal(twin.name, 'KET 1 - October 2026 (2)');
+  await prisma.cycle.delete({ where: { id: twin.id } });
   const petOne = ok(await req('/cycles', 'POST', { ...params, subCourseId: pet.id }));
-  assert.equal(petOne.name, 'PET 1');
-  assert.equal(ok(await req('/sub-courses/' + ket.id)).nextCycleNumber, 2);
+  assert.equal(petOne.name, 'PET 1 - October 2026');
   assert.equal(
     (await req('/courses/' + parent.id, 'PUT', { name: parent.name, code: parent.code, isPrivate: false })).status,
     409
   );
   ok(await req('/courses/' + parent.id, 'PUT', { name: 'Private renamed', code: parent.code, isPrivate: true }));
-  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'KET 1');
+  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'KET 1 - October 2026');
 
   // Up to 3 students per private cycle.
   const path = '/cycles/' + cycle.id + '/enrollments';
@@ -143,10 +145,10 @@ try {
 
   // Renaming the sub-umbrella renames its cycles; the cycle number is editable within it.
   ok(await req('/sub-courses/' + ket.id, 'PUT', { name: 'Pre-KET' }));
-  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'PRE-KET 1');
+  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'PRE-KET 1 - October 2026');
   assert.equal((await req('/cycles/' + petOne.id, 'PUT', { cycleNumber: 1 })).status, 200);
-  ok(await req('/cycles/' + cycle.id, 'PUT', { cycleNumber: 5 }));
-  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'PRE-KET 5');
+  ok(await req('/cycles/' + cycle.id, 'PUT', { cycleNumber: 4 }));
+  assert.equal((await prisma.cycle.findUnique({ where: { id: cycle.id } })).name, 'PRE-KET 4 - October 2026');
   assert.equal((await req('/cycles/' + cycle.id, 'PUT', { subCourseId: pet.id })).status, 400);
 
   const race = ok(await req('/cycles', 'POST', { ...params, cycleNumber: 2 }));
@@ -242,7 +244,7 @@ try {
   const importer = ok(await req('/courses', 'POST', { name: 'Private import', code: '1T9999', isPrivate: true }));
   const ielts = ok(await req('/courses/' + importer.id + '/sub-courses', 'POST', { name: 'IELTS', bookPrice: 200 }));
   const bytes = await workbook({ reg: 'PRIVATE-IMPORT', amount: 1000, code: '1T9999' });
-  const importBody = { branch: 'FOUAD', courseFee: 1000, totalHours: 10, subCourseId: ielts.id, cycleNumber: 1 };
+  const importBody = { branch: 'MIAMI', courseFee: 1000, totalHours: 10, subCourseId: ielts.id, cycleNumber: 1 };
   const preview = ok(await upload('/imports/' + importer.id + '/preview', bytes));
   assert.equal(
     (
@@ -262,7 +264,7 @@ try {
       choices: { 'PRIVATE-IMPORT': { profile: 'fill', feeMode: 'standard' } }
     })
   );
-  assert.equal(imported.cycleName, 'IELTS 1');
+  assert.match(imported.cycleName, /^IELTS 1 - [A-Z][a-z]+ \d{4}$/);
   const book = new ExcelJS.Workbook();
   await book.xlsx.load(bytes);
   const sheet = book.worksheets[0];
@@ -283,7 +285,7 @@ try {
       }
     })
   );
-  assert.equal(pair.cycleName, 'IELTS 2');
+  assert.match(pair.cycleName, /^IELTS 2 - [A-Z][a-z]+ \d{4}$/);
   assert.equal(await prisma.enrollment.count({ where: { courseId: pair.cycleId } }), 2);
   console.log(
     'PASS: private sub-umbrellas, numbering and naming, 3-seat capacity, book prices, archive/delete rules, finance metadata and roster import'

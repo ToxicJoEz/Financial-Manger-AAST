@@ -82,6 +82,8 @@ model Course {
   name String
   code String @unique
   bookPrice Float @default(0)
+  // Branches allowed to run cycles under this umbrella (comma-separated). New umbrellas open for Miami only.
+  branches String @default("MIAMI")
   archivedAt DateTime?
   archivedBy String?
   createdAt DateTime @default(now())
@@ -113,9 +115,12 @@ model Cycle {
   // Private cycles belong to a sub-umbrella; group cycles do not.
   subCourseId String?
   subCourse SubCourse? @relation(fields: [subCourseId], references: [id], onDelete: Restrict)
-  // Cycle numbers are unique per umbrella (group) or per sub-umbrella (private): the id of that scope.
+  // The umbrella (group) or sub-umbrella (private) the cycle is named after.
   numberingKey String
+  // The level the mod enters (1-4). Name: "<umbrella> <level> - <start month> <year>", plus " (n)" when the
+  // same branch already runs that level in that month (sequence n).
   cycleNumber Int
+  sequence    Int @default(1)
 
   id           String   @id @default(uuid())
   name         String
@@ -143,7 +148,7 @@ model Cycle {
   retainedIncome RetainedEnrollmentIncome[]
   enrollments  Enrollment[]
 
-  @@unique([numberingKey, cycleNumber])
+  @@unique([numberingKey, branch, name])
   @@index([parentCourseId, archivedAt])
   @@index([subCourseId])
 }

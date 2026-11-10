@@ -33,9 +33,7 @@ export default function CourseRows(props) {
         )}
       </td>
 
-      <td><span className="branch-label"><span style={{
-            "--runtime-background": getBranchColor(course.branch)
-          }} className="courses-presentation-2" />{course.branch}</span></td>
+      <td><span className="branch-chip" style={{ '--branch-color': getBranchColor(course.branch) }}>{course.branch}</span></td>
 
       <td>{course.instructors.length ? <span className="instructor-cell"><span className="mini-avatar">{initials(course.instructors[0].instructor.name)}</span><span>{course.instructors[0].instructor.name}{course.instructors.length > 1 && <small>+{course.instructors.length - 1} additional employee</small>}</span></span> : <span className="muted">Unassigned</span>}</td>
 

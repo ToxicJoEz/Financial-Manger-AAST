@@ -2,6 +2,8 @@ import { moneyMinor } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
 import { branchScopeOf } from '../utils/access.js';
+import { cycleName, umbrellaBranches } from '../utils/privateCourses.js';
+import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { logAction } from '../utils/logger.js';
 const clean = (value, field) => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 120)
@@ -22,7 +24,6 @@ const summary = (course, user) => {
     row.cycles++;
     row[c.isFinished ? 'completed' : 'active']++;
   }
-  const highest = course.cycles.reduce((n, c) => Math.max(n, c.cycleNumber), 0);
   return {
     id: course.id,
     name: course.name,
@@ -30,7 +31,8 @@ const summary = (course, user) => {
     bookPrice: course.bookPrice,
     isPrivate: course.isPrivate,
     archivedAt: course.archivedAt,
-    nextCycleNumber: highest < 2147483647 ? highest + 1 : null,
+    // Branches allowed to run cycles under this umbrella.
+    allowedBranches: umbrellaBranches(course),
     cycleCount: visible.length,
     archivedCount: visible.filter(c => c.archivedAt).length,
     activeCount: live.filter(c => !c.isFinished).length,
@@ -40,6 +42,11 @@ const summary = (course, user) => {
     students: live.reduce((n, c) => n + c._count.enrollments, 0),
     subCourseCount: course.isPrivate ? course.subCourses.filter(sub => isManager(user) || !sub.archivedAt).length : 0
   };
+};
+// Branch mods see an umbrella when it is open for their branch, or when their branch already runs cycles there.
+const visibleToBranch = (course, user) => {
+  const scope = branchScopeOf(user);
+  return !scope || umbrellaBranches(course).includes(scope) || course.cycles.some(c => c.branch === scope);
 };
 const relations = {
   subCourses: { select: { id: true, archivedAt: true } },
@@ -78,7 +85,7 @@ export const listCourses = async (req, res, next) => {
         name: 'asc'
       }
     });
-    res.json(courses.map(c => summary(c, req.user)));
+    res.json(courses.filter(c => visibleToBranch(c, req.user)).map(c => summary(c, req.user)));
   } catch (error) {
     next(error);
   }
@@ -95,6 +102,7 @@ export const getCourse = async (req, res, next) => {
       return res.status(404).json({
         error: 'Course not found.'
       });
+    if (!visibleToBranch(course, req.user)) return res.status(404).json({ error: 'Course not found.' });
     res.json(summary(course, req.user));
   } catch (error) {
     next(error);
@@ -121,7 +129,8 @@ export const createCourse = atomic(async (req, res, next) => {
         isPrivate: req.body.isPrivate === true,
         bookPrice: req.body.isPrivate === true ? 0 : Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
         name,
-        code
+        code,
+        branches: 'MIAMI'
       }
     });
     await logAction('CREATE_COURSE', `Created course ${name} (${code})`, req.user.username);
@@ -181,17 +190,21 @@ export const editCourse = atomic(async (req, res, next) => {
       },
       select: {
         id: true,
-        cycleNumber: true
+        cycleNumber: true,
+        startDate: true,
+        sequence: true
       }
     });
-    if (!course.isPrivate)
+    if (!course.isPrivate && name !== current.name)
       for (const cycle of cycles)
         await prisma.cycle.update({
           where: {
             id: cycle.id
           },
           data: {
-            name: `${name} ${cycle.cycleNumber}`
+            name: cycle.startDate
+              ? cycleName(name, cycle.cycleNumber, cycle.startDate, cycle.sequence)
+              : `${name} ${cycle.cycleNumber}`
           }
         });
     await logAction(
@@ -256,6 +269,29 @@ export const restoreCourse = atomic(async (req, res, next) => {
     });
     await logAction('RESTORE_COURSE', `Restored ${course.name}`, req.user.username);
     res.json(course);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// The main mod opens an umbrella for the branches allowed to run its cycles (new umbrellas: Miami only).
+export const setCourseBranches = atomic(async (req, res, next) => {
+  try {
+    const list = Array.isArray(req.body.branches)
+      ? [...new Set(req.body.branches.map(b => String(b).toUpperCase()))]
+      : null;
+    if (!list || !list.length || list.some(b => !EMPLOYEE_BRANCHES.includes(b)))
+      return res.status(400).json({ error: 'Choose at least one valid branch.' });
+    const current = await prisma.course.findUnique({ where: { id: req.params.id } });
+    if (!current) return res.status(404).json({ error: 'Course not found.' });
+    const branches = EMPLOYEE_BRANCHES.filter(b => list.includes(b)).join(',');
+    const course = await prisma.course.update({ where: { id: current.id }, data: { branches } });
+    await logAction(
+      'COURSE_BRANCHES',
+      `${current.name} open for ${branches.replaceAll(',', ', ')} (was ${current.branches.replaceAll(',', ', ')}).`,
+      req.user.username
+    );
+    res.json({ id: course.id, allowedBranches: umbrellaBranches(course) });
   } catch (error) {
     next(error);
   }

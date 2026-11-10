@@ -38,6 +38,12 @@ const Courses = () => {
   const dataRequest = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
   const [parentCourse, setParentCourse] = useState(null);
+  // New cycles can only go to branches the umbrella is open for.
+  const umbrellaOpen = parentCourse ? (parentCourse.umbrella ? String(parentCourse.umbrella.branches || '').split(',') : parentCourse.allowedBranches || []) : [];
+  const createBranchOptions = branchOptions.filter(o => umbrellaOpen.includes(o.value));
+  // Cycle names: "<umbrella> <level> - <start month year>".
+  const namePreview = (level, start) => parentCourse && level && start ? `${parentCourse.name} ${level} - ${new Date(start + 'T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '';
+  const openCreate = () => { resetForm(); setName(''); setBranch(createBranchOptions[0]?.value || ''); setIsAddModalOpen(true); };
   const location = useLocation();
   const navigate = useNavigate();
   const [expandedCourse, setExpandedCourse] = useState(null);
@@ -429,7 +435,7 @@ const Courses = () => {
     if (requestedBranch) setFilterBranch(requestedBranch);
     if (search) setFilterName(search);
     if (status) setFilterStatus(status);
-    if (create && user.role !== 'user') { if (!parentId) { navigate('/courses', { state: { create: true }, replace: true }); return; } setName(String(parentCourse?.nextCycleNumber || '')); setIsAddModalOpen(true); }
+    if (create && user.role !== 'user') { if (!parentId) { navigate('/courses', { state: { create: true }, replace: true }); return; } openCreate(); }
     if (openReviewId && payrollAccess) {
       const course = courses.find(c => c.pendingAssignments?.some(p => p.id === openReviewId));
       if (course) {
@@ -452,9 +458,9 @@ const Courses = () => {
 
               <div>
 
-                <label className="input-label appearance-text-emerald-900">Cycle number</label>
+                <label className="input-label appearance-text-emerald-900">Level</label>
 
-                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.cycleNumber} onChange={e => setEditingCourse({
+                <input type="number" min="1" max="4" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.cycleNumber} onChange={e => setEditingCourse({
                 ...editingCourse,
                 cycleNumber: e.target.value
               })} required />
@@ -465,7 +471,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Branch</label>
 
-                <CustomFilterDropdown options={branchOptions} value={editingCourse.branch} onChange={val => setEditingCourse({
+                <CustomFilterDropdown options={branchOptions.filter(o => umbrellaOpen.includes(o.value) || o.value === editingCourse.branch)} value={editingCourse.branch} onChange={val => setEditingCourse({
                 ...editingCourse,
                 branch: val
               })} />
@@ -554,7 +560,7 @@ const Courses = () => {
         <ExcelExportButton parentCourseId={parentId} />
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary export-format-excel" onClick={() => setImportOpen(true)}><FileSpreadsheet size={16} />Import cycle from Excel</button>}
 
-        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" onClick={() => { resetForm(); setName(String(parentCourse.nextCycleNumber || '')); setIsAddModalOpen(true); }}><Plus size={16} />New cycle</button>}
+        {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" disabled={!createBranchOptions.length} title={createBranchOptions.length ? undefined : branchScope ? 'This umbrella is not open for your branch yet.' : 'Open this umbrella for a branch first.'} onClick={openCreate}><Plus size={16} />New cycle</button>}
       </PageHeading>
 
       <div className="section-tabs" aria-label="Course status">
@@ -680,7 +686,7 @@ const Courses = () => {
 
       {/* Add Course Modal */}
 
-      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse?.umbrella ? { ...parentCourse.umbrella, nextCycleNumber: parentCourse.nextCycleNumber } : parentCourse} subCourse={parentCourse?.umbrella ? parentCourse : null} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
+      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse?.umbrella || parentCourse} subCourse={parentCourse?.umbrella ? parentCourse : null} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
       <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
 
           <div className="modal-content card max-w-lg w-full relative">
@@ -695,9 +701,9 @@ const Courses = () => {
 
               <div>
 
-                <label className="input-label appearance-text-emerald-900">Cycle number</label>
+                <label className="input-label appearance-text-emerald-900">Level</label>
 
-                <input type="number" min="1" max="2147483647" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required /><small className="muted">Suggested next number. You can enter another unused number; {subCourseId ? `Numbers are unique within ${parentCourse?.name}.` : 'Numbering is shared across branches.'}</small>
+                <input type="number" min="1" max="4" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required placeholder="1 to 4" /><small className="muted">{namePreview(name, startDate) ? <>This cycle will be named <strong>{namePreview(name, startDate)}</strong>. A second one in the same branch and month gets “(2)”.</> : 'The name is the umbrella, the level and the start month, e.g. KET 1 - November 2026.'}</small>
 
               </div>
 
@@ -705,7 +711,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Branch</label>
 
-                <CustomFilterDropdown options={branchOptions} value={branch} onChange={setBranch} />
+                <CustomFilterDropdown options={createBranchOptions} value={branch} onChange={setBranch} allowClear={false} />
 
               </div>
 
@@ -721,9 +727,9 @@ const Courses = () => {
 
                 <div className="flex-1">
 
-                  <label className="input-label appearance-text-emerald-900">Start Date</label>
+                  <label className="input-label appearance-text-emerald-900">Start Date *</label>
 
-                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} />
+                  <DateInput  className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={startDate} onChange={e => setStartDate(e.target.value)} required />
 
                 </div>
 

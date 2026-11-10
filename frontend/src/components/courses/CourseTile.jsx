@@ -27,7 +27,7 @@ export default function CourseTile(props) {
     <div className="course-tile-top">
       {onToggleSelect && <input type="checkbox" className="cycle-select-checkbox" aria-label={`Select ${course.name}`} checked={Boolean(isSelected)} onChange={e => { e.stopPropagation(); onToggleSelect(); }} />}
       <span className="course-tile-icon"><BookOpen size={22} strokeWidth={1.7} /></span>
-      <span className="cycle-card-branch"><i style={{ background: color }} />{course.branch}</span>
+      <span className="cycle-card-branch branch-chip" style={{ '--branch-color': color }}><MapPin size={12} aria-hidden="true" />{course.branch}</span>
       <Status complete={course.isFinished}>{course.isFinished ? 'Completed' : 'In progress'}</Status>
     </div>
 

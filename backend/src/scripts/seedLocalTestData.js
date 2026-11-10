@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import prisma from '../db/prisma.js';
 import { earningData } from '../utils/payrollRecord.js';
 import { EMPLOYEE_BRANCHES as branches } from '../utils/employees.js';
+import { cycleName } from '../utils/privateCourses.js';
 const date = day => new Date(`${day}T12:00:00Z`);
 const midnight = day => new Date(`${day}T00:00:00Z`);
 if (!process.argv.includes('--add-local-test-data'))
@@ -32,14 +33,18 @@ try {
             'Sample data already exists or business records were added. Nothing was deleted or replaced.'
           );
       const courses = [];
-      for (const [name, code, bookPrice, fee] of [
-        ['FCE', '1T1037', 1800, 2400],
-        ['KET', '1T1036', 1500, 1800],
-        ['PET', '1T1033', 1200, 2000]
+      // Umbrellas are open for the branches that may run them (KET is not offered online).
+      for (const [name, code, bookPrice, fee, open] of [
+        ['FCE', '1T1037', 1800, 2400, branches],
+        ['KET', '1T1036', 1500, 1800, branches.filter(b => b !== 'ONLINE')],
+        ['PET', '1T1033', 1200, 2000, branches]
       ])
-        courses.push({ ...(await tx.course.create({ data: { name, code, bookPrice } })), fee });
+        courses.push({
+          ...(await tx.course.create({ data: { name, code, bookPrice, branches: open.join(',') } })),
+          fee
+        });
       const privateUmbrella = await tx.course.create({
-        data: { name: 'CAMBRIDGE PRIVATE COURSES', code: '1T1047', isPrivate: true }
+        data: { name: 'CAMBRIDGE PRIVATE COURSES', code: '1T1047', isPrivate: true, branches: branches.join(',') }
       });
       const teachers = [];
       for (const [index, name] of [
@@ -143,15 +148,22 @@ try {
       let receipt = 620000;
       // Creates one cycle with its teaching team, payroll state, enrollments, tuition ledger and books.
       // `roster` lists { student, fee, paid, books } per enrollment; `bookPrice` is the umbrella or sub-umbrella price.
-      async function addCycle({ umbrella, sub, number, spec, chosen, roster, courseFee, bookPrice, index }) {
+      // Names: "<umbrella> <level> - <start month year>", "(n)" for a repeat in the same branch and month.
+      const sequences = new Map();
+      async function addCycle({ umbrella, sub, number, spec, chosen, roster, courseFee, bookPrice, index, branch }) {
+        const cycleBranch = branch || branches[index % branches.length];
+        const key = [sub?.id ?? umbrella.id, cycleBranch, number, spec.start.slice(0, 7)].join('|');
+        const sequence = (sequences.get(key) || 0) + 1;
+        sequences.set(key, sequence);
         const cycle = await tx.cycle.create({
           data: {
             parentCourseId: umbrella.id,
             subCourseId: sub?.id ?? null,
             numberingKey: sub?.id ?? umbrella.id,
             cycleNumber: number,
-            name: `${sub?.name ?? umbrella.name} ${number}`,
-            branch: branches[index % branches.length],
+            sequence,
+            name: cycleName(sub?.name ?? umbrella.name, number, date(spec.start), sequence),
+            branch: cycleBranch,
             details: 'بيانات تجريبية لاختبار التسجيل والمصروفات والكتب ورواتب المحاضرين.',
             startDate: date(spec.start),
             endDate: date(spec.end),
@@ -274,9 +286,20 @@ try {
               books: n < 2 ? 'OLD_PRICE' : n === 2 || n === 5 ? 'PAID' : n === 3 || n === 7 ? 'EXEMPT' : 'UNPAID'
             };
           });
+          // Levels 1-4; the two October KET/FCE/PET level 1 cycles in Miami show the "(2)" naming.
+          const plan = [
+            [1, 'MIAMI'],
+            [2, 'FOUAD'],
+            [1, 'MIAMI'],
+            [1, 'MIAMI'],
+            [2, 'PORT-SAID'],
+            [3, 'ASWAN'],
+            [4, courseIndex === 2 ? 'ONLINE' : 'SMART']
+          ][index];
           await addCycle({
             umbrella: course,
-            number: index + 1,
+            number: plan[0],
+            branch: plan[1],
             spec,
             chosen,
             roster,

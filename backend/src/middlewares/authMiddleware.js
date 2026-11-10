@@ -134,6 +134,15 @@ export const confirmedMoneyGuard = kind => async (req, res, next) => {
   }
 };
 
+// Umbrellas, sub-umbrellas and other shared setup: admins and the main mod only.
+export const mainManager = (req, res, next) => {
+  if (canSeePayroll(req.user)) next();
+  else {
+    res.status(403);
+    next(new Error('Only admins and the main mod can change course umbrellas.'));
+  }
+};
+
 export const adminOnly = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();

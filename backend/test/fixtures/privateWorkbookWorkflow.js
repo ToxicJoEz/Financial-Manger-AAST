@@ -129,16 +129,23 @@ try {
   assert.equal(pair.cycleNumber, 2);
   assert.equal(pair.numberSource, 'file');
   assert.equal(pair.newSubCourse, false);
-  assert(third.errors.some(e => e.includes('KET 2 already exists')));
+  // Levels come from the file ("KET 2"); a repeat in the same branch and month is named "(2)" on import.
+  assert.equal(third.cycleNumber, 2);
+  assert(!third.errors.some(e => e.includes('already exists')));
   assert(preview.rows.find(r => r.id === third.rowIds[0]).notes.some(n => n.includes('/ S')));
   assert.equal(free.subCourseName, 'IELTS');
-  assert.equal(free.cycleNumber, 1);
-  assert.equal(free.numberSource, 'suggested');
+  assert.equal(free.cycleNumber, null);
+  assert.equal(free.numberSource, 'missing');
+  assert(free.errors.some(e => e.includes('Enter the level')));
   assert.deepEqual(preview.newSubCourses, ['IELTS']);
 
   const edits = Object.fromEntries(preview.rows.map(r => [r.id, { ...r, branch: 'MIAMI' }]));
   preview = ok(
-    await req(path + '/review', 'POST', { previewToken: preview.previewToken, edits, numbers: { [third.id]: 3 } })
+    await req(path + '/review', 'POST', {
+      previewToken: preview.previewToken,
+      edits,
+      numbers: { [third.id]: 3, [free.id]: 1 }
+    })
   );
   assert(preview.rows.every(r => !r.errors.length));
   assert(
@@ -169,7 +176,7 @@ try {
     await req(path + '/review', 'POST', {
       previewToken: preview.previewToken,
       edits: { [free.rowIds[0]]: { hourlyRate: '' } },
-      numbers: { [third.id]: 3 }
+      numbers: { [third.id]: 3, [free.id]: 1 }
     })
   );
   assert.equal(
@@ -195,7 +202,12 @@ try {
       payrollEarnings: true
     }
   });
-  const byName = Object.fromEntries(cycles.map(c => [c.name, c]));
+  // Names are "<sub-umbrella> <level> - <start month year>"; keyed here by "<sub-umbrella> <level>".
+  assert(
+    cycles.every(c => / - [A-Z][a-z]+ \d{4}$/.test(c.name)),
+    JSON.stringify(cycles.map(c => c.name))
+  );
+  const byName = Object.fromEntries(cycles.map(c => [c.name.split(' - ')[0], c]));
   assert.deepEqual(Object.keys(byName).sort(), ['IELTS 1', 'KET 2', 'KET 3']);
   const grouped = byName['KET 2'];
   assert.equal(grouped.subCourseId, ket.id);
@@ -249,7 +261,8 @@ try {
   const changed = ok(
     await req(other + '/review', 'POST', {
       previewToken: conflict.previewToken,
-      edits: { [editRow.id]: { name: existing.name, mobile: '01033333333', branch: 'MIAMI' } }
+      edits: { [editRow.id]: { name: existing.name, mobile: '01033333333', branch: 'MIAMI' } },
+      numbers: { [conflict.groups.find(g => g.sheetId === '1').id]: 1 }
     })
   );
   const next = ok(

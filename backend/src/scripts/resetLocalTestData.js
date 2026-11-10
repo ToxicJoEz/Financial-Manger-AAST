@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prisma from '../db/prisma.js';
+import { truncateBusinessData } from '../utils/businessTables.js';
 
 if (!process.argv.includes('--confirm')) throw new Error('Run with --confirm to reset local test data.');
 const address = new URL(process.env.DATABASE_URL);
@@ -30,29 +31,9 @@ const dump = spawnSync(pgDump, ['-Fc', '-f', backup, plain.toString()], { stdio:
 if (dump.status !== 0) throw new Error('Backup failed, so nothing was deleted. Check that PostgreSQL is running.');
 console.log(`Backup saved: ${backup}`);
 
-// 2. Clear business tables in one statement. "User" and "SystemLog" are not listed.
-const tables = [
-  'PaymentEntry',
-  'BookPayment',
-  'RetainedEnrollmentIncome',
-  'PayrollEarning',
-  'InstructorPaymentBatch',
-  'PaymentRun',
-  'PayrollRecord',
-  'ImportBatch',
-  'Notification',
-  'PendingAssignment',
-  'CourseInstructor',
-  'Enrollment',
-  'Student',
-  'Cycle',
-  'SubCourse',
-  'Course',
-  'Instructor',
-  'BranchColor'
-];
+// 2. Clear business tables in one statement. Accounts and the activity log are not touched.
 const usersBefore = await prisma.user.count();
-await prisma.$executeRawUnsafe(`TRUNCATE ${tables.map(t => `"${t}"`).join(', ')}`);
+await truncateBusinessData(prisma);
 if ((await prisma.user.count()) !== usersBefore) throw new Error('User accounts changed unexpectedly.');
 await prisma.$disconnect();
 console.log(`Business data cleared. ${usersBefore} user accounts kept.`);
