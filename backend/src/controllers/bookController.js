@@ -9,8 +9,7 @@ const fail = (message, status = 400) => {
 
 export const updateBookStatus = atomic(async (req, res, next) => {
   try {
-    const canManage = ['admin', 'mod'].includes(req.user.role) || Boolean(req.user.canManageBooks);
-    if (!canManage) fail('You do not have permission to manage book payments.', 403);
+    if (!['admin', 'mod'].includes(req.user.role)) fail('Only admins and mods can change book payments.', 403);
 
     const { status, expectedPrice, paymentId } = req.body;
     if (!['PAID', 'EXEMPT', 'UNPAID'].includes(status)) fail('Choose a valid book status.');

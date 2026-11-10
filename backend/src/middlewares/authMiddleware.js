@@ -1,6 +1,6 @@
 import { auditActor } from '../utils/auditContext.js';
 import jwt from 'jsonwebtoken';
-import { canSeePayroll, branchScopeOf } from '../utils/access.js';
+import { canSeePayroll, branchScopeOf, canSeeBranch, visibleBranchesOf } from '../utils/access.js';
 import prisma from '../db/prisma.js';
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 
@@ -26,7 +26,8 @@ export const protect = async (req, res, next) => {
           isActive: true,
           isBanned: true,
           canManageBooks: true,
-          branchScope: true
+          branchScope: true,
+          branches: true
         }
       });
 
@@ -71,13 +72,12 @@ export const payrollManager = (req, res, next) => {
   }
 };
 
-// Branch mods only reach cycles in their own branch: any route with a cycle :id checks it first.
+// Branch mods and users only reach cycles in their branches: any route with a cycle :id checks it first.
 export const cycleInBranch = async (req, res, next, id) => {
   try {
-    const scope = branchScopeOf(req.user);
-    if (!scope) return next();
+    if (!visibleBranchesOf(req.user)) return next();
     const cycle = await prisma.cycle.findUnique({ where: { id: String(id) }, select: { branch: true } });
-    if (cycle && cycle.branch !== scope) return res.status(404).json({ error: 'Cycle not found.' });
+    if (cycle && !canSeeBranch(req.user, cycle.branch)) return res.status(404).json({ error: 'Cycle not found.' });
     next();
   } catch (error) {
     next(error);

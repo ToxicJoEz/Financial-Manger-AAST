@@ -122,7 +122,7 @@ try {
   // Up to 3 students per private cycle.
   const path = '/cycles/' + cycle.id + '/enrollments';
   for (const studentId of ['demo-student-1', 'demo-student-2', 'demo-student-3'])
-    ok(await req(path, 'POST', { studentId, tuitionType: 'FULL', amountPaid: 1000 }, junior));
+    ok(await req(path, 'POST', { studentId, tuitionType: 'FULL', amountPaid: 1000 }));
   const count = await prisma.student.count();
   assert.equal(
     (await req(path, 'POST', { newStudent: { name: 'لا تنشئ هذا الطالب' }, tuitionType: 'FULL', amountPaid: 1000 }))

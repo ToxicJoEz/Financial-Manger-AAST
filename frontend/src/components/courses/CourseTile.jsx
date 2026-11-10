@@ -52,7 +52,7 @@ export default function CourseTile(props) {
       </section>
     </div>
 
-    {(expectedTotal > 0 || collectedTotal > 0 || studentCount > 0) && <div className="course-tuition-meter">
+    {course.totalCollectedRevenue !== undefined && (expectedTotal > 0 || collectedTotal > 0 || studentCount > 0) && <div className="course-tuition-meter">
       <div className="tuition-meter-header">
         <span className="tuition-meter-label">Tuition collected · {percent}%</span>
         <span className="tuition-meter-amount"><strong>{money(collectedTotal)}</strong> / {money(expectedTotal)} EGP</span>

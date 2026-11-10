@@ -240,6 +240,26 @@ try {
     (await req('/cycles/' + cycle.id + '/enrollments', 'POST', { studentId: 'demo-student-6' }, main)).status,
     409
   );
+  // Users see only the branches they are given; with none, they see nothing.
+  const viewer = ok(await req('/auth/register', 'POST', { username: 'branch-viewer', password: 'ViewerTest!123' }));
+  const viewerToken = await login('branch-viewer', 'ViewerTest!123');
+  assert.equal(ok(await req('/cycles?pageSize=100', 'GET', undefined, viewerToken)).total, 0);
+  assert.equal(ok(await req('/students', 'GET', undefined, viewerToken)).total, 0);
+  assert.equal(ok(await req('/courses', 'GET', undefined, viewerToken)).length, 0);
+  assert.equal(
+    (await req('/users/' + viewer.user.id + '/branches', 'PUT', { branches: ['FOUAD'] }, fouad)).status,
+    403
+  );
+  ok(await req('/users/' + viewer.user.id + '/branches', 'PUT', { branches: ['FOUAD', 'SMART'] }, main));
+  const seen = ok(await req('/cycles?pageSize=100', 'GET', undefined, viewerToken)).rows;
+  assert(seen.length && seen.every(c => ['FOUAD', 'SMART'].includes(c.branch)));
+  assert.equal((await req('/cycles/cycle-ket-12', 'GET', undefined, viewerToken)).status, 404);
+  assert(ok(await req('/students', 'GET', undefined, viewerToken)).total > 0);
+  // A branch mod's new user gets that mod's branch.
+  const fromFouad = ok(
+    await req('/auth/register', 'POST', { username: 'fouad-viewer', password: 'ViewerTest!123' }, fouad)
+  );
+  assert.equal((await prisma.user.findUnique({ where: { id: fromFouad.user.id } })).branches, 'FOUAD');
   // Changing the role away from mod clears the branch title.
   ok(await req('/users/' + created.user.id + '/role', 'PUT', { role: 'user' }));
   assert.equal((await prisma.user.findUnique({ where: { id: created.user.id } })).branchScope, null);

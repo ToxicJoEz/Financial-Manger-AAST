@@ -8,10 +8,12 @@ import { UserPlus, ListOrdered, ShieldCheck, Pencil } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
-import { MOD_TITLE_OPTIONS, modTitle, branchName } from '../utils/access';
+import { MOD_TITLE_OPTIONS, modTitle, branchName, canSeePayroll } from '../utils/access';
+import { BRANCHES } from '../Constants';
+import { getBranchColor } from '../utils/branchColors';
 
 const ROLES = [
-  { value: 'user', label: 'User', help: 'Works with courses and students. Requests employee changes for approval.' },
+  { value: 'user', label: 'User', help: 'Views courses and students in their branches. Can only request employee changes.' },
   { value: 'mod', label: 'Mod', help: 'Manages courses, students and money. Choose the main mod or a branch.' },
   { value: 'admin', label: 'Admin', help: 'Full access, including team accounts.' }
 ];
@@ -23,7 +25,9 @@ const accessSummary = u =>
       ? u.branchScope
         ? `${branchName(u.branchScope)} only · no payroll · money checked by the main mod`
         : 'All branches · payroll · checks branch money'
-      : `Courses and students${u.canManageBooks ? ' · can mark books' : ''}`;
+      : u.branches
+        ? `Views ${u.branches.split(',').map(branchName).join(', ')} · view only`
+        : 'No branches yet · sees nothing until assigned';
 const roleLabel = u => (u.role === 'mod' ? modTitle(u) : u.role === 'admin' ? 'Admin' : 'User');
 const lastActive = value =>
   value
@@ -31,13 +35,13 @@ const lastActive = value =>
     : 'Never';
 
 // Role, mod branch and the books permission, shared by the add and edit dialogs.
-function AccessFields({ form, setForm, adminView }) {
+function AccessFields({ form, setForm, adminView, canPickBranches }) {
   const roles = adminView ? ROLES : ROLES.filter(r => r.value === 'user');
   return <>
     <label>Role</label>
     <div className="access-role-picker" role="radiogroup" aria-label="Role">{roles.map(r => <button key={r.value} type="button" role="radio" aria-checked={form.role === r.value} className={form.role === r.value ? 'active' : ''} onClick={() => setForm(f => ({ ...f, role: r.value }))}><strong>{r.label}</strong><span>{r.help}</span></button>)}</div>
     {form.role === 'mod' && <><label htmlFor="access-branch">Mod for</label><CustomFilterDropdown id="access-branch" allowClear={false} value={form.branch} onChange={value => setForm(f => ({ ...f, branch: value }))} options={MOD_TITLE_OPTIONS} placeholder="Choose main or a branch" /></>}
-    {form.role === 'user' && <label className="policy-check access-books"><input type="checkbox" checked={form.canManageBooks} onChange={e => setForm(f => ({ ...f, canManageBooks: e.target.checked }))} />Can mark book payments as paid or exempt</label>}
+    {form.role === 'user' && (canPickBranches ? <><label>Can view branches</label><div className="access-branch-boxes">{BRANCHES.map(b => { const on = form.branches.includes(b); return <button key={b} type="button" role="checkbox" aria-checked={on} className={on ? 'active' : ''} style={{ '--branch-color': getBranchColor(b) }} onClick={() => setForm(f => ({ ...f, branches: on ? f.branches.filter(x => x !== b) : [...f.branches, b] }))}>{branchName(b)}</button>; })}</div><small className="muted">Users only view courses and students in these branches. With none, they see nothing.</small></> : <small className="muted">New users see your branch only. The main mod can add more branches.</small>)}
   </>;
 }
 
@@ -46,6 +50,8 @@ const ManageUsers = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isAdmin = currentUser?.role === 'admin';
+  // Admins and the main mod choose which branches a user can view.
+  const mainManager = canSeePayroll(currentUser);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
@@ -70,7 +76,7 @@ const ManageUsers = () => {
   // Old "Add colleague" links open the add dialog here.
   useEffect(() => {
     if (location.state?.add) {
-      setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', canManageBooks: false });
+      setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] });
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, location.pathname, navigate]);
@@ -116,9 +122,9 @@ const ManageUsers = () => {
         username: adding.username.trim(),
         password: adding.password,
         role: adding.role,
-        branchScope: adding.role === 'mod' && adding.branch !== 'MAIN' ? adding.branch : null
+        branchScope: adding.role === 'mod' && adding.branch !== 'MAIN' ? adding.branch : null,
+        branches: adding.role === 'user' ? adding.branches : undefined
       });
-      if (adding.role === 'user' && adding.canManageBooks) await axios.put('/users/' + data.user.id + '/permissions', { canManageBooks: true });
       toast.success(`Account for ${data.user.username} created. Share the password privately.`);
       setAdding(null);
       fetchUsers();
@@ -138,8 +144,8 @@ const ManageUsers = () => {
       const branchScope = form.role === 'mod' && form.branch !== 'MAIN' ? form.branch : null;
       if (isAdmin && form.role === 'mod' && (target.role !== 'mod' || (target.branchScope || null) !== branchScope))
         await axios.put('/users/' + target.id + '/branch-scope', { branchScope });
-      if (form.role === 'user' && Boolean(target.canManageBooks) !== form.canManageBooks)
-        await axios.put('/users/' + target.id + '/permissions', { canManageBooks: form.canManageBooks });
+      if (form.role === 'user' && mainManager && (target.role !== 'user' || (target.branches || '') !== BRANCHES.filter(b => form.branches.includes(b)).join(',')))
+        await axios.put('/users/' + target.id + '/branches', { branches: form.branches });
       toast.success(`${target.username}'s access updated`);
       setEditing(null);
       fetchUsers();
@@ -154,7 +160,7 @@ const ManageUsers = () => {
   return <div className="manage-users-container">
     <PageHeading eyebrow="The people you work with" title="Team & access" description="Everyone in the workspace, and what they can do.">
       <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>
-      <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', canManageBooks: false })}><UserPlus size={16} />Add person</button>
+      <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] })}><UserPlus size={16} />Add person</button>
     </PageHeading>
     <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => u.isActive && !u.isBanned).length} active accounts</span></div>
     <div className="card overflow-x-auto">
@@ -169,7 +175,7 @@ const ManageUsers = () => {
             <td>{u.username === 'main-admin' ? <span className="team-root"><ShieldCheck size={15} />Root admin</span> : <div className="team-actions">
               {u.isLocked && canModify(u) && <button className="btn-sm btn-outline" onClick={() => handleUnlock(u)}>Unlock</button>}
               {canModify(u) ? <>
-                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', canManageBooks: Boolean(u.canManageBooks) } })}><Pencil size={13} />Edit access</button>
+                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [] } })}><Pencil size={13} />Edit access</button>
                 <button className="btn-sm btn-outline" onClick={() => handleStatusToggle(u, 'active')}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>
                 <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
               </> : <span className="text-muted team-managed">Managed by an admin</span>}
@@ -187,7 +193,7 @@ const ManageUsers = () => {
         <input id="new-username" className="input-field" required autoComplete="off" placeholder="e.g. sarah" value={adding.username} onChange={e => setAdding(f => ({ ...f, username: e.target.value }))} />
         <label htmlFor="initial-password">First password</label>
         <input id="initial-password" className="input-field" required type="password" autoComplete="new-password" value={adding.password} onChange={e => setAdding(f => ({ ...f, password: e.target.value }))} />
-        <AccessFields form={adding} setForm={setAdding} adminView={isAdmin} />
+        <AccessFields form={adding} setForm={setAdding} adminView={isAdmin} canPickBranches={mainManager} />
         <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setAdding(null)}>Cancel</button><button className="btn-primary" disabled={saving}><UserPlus size={16} />{saving ? 'Creating…' : 'Create account'}</button></div>
       </form>
     </Dialog>}</AnimatePresence>
@@ -196,7 +202,7 @@ const ManageUsers = () => {
       <div className="modal-content card team-dialog">
         <h3><Pencil size={17} />{editing.user.username}</h3>
         <p>Now: {roleLabel(editing.user)} · {accessSummary(editing.user)}</p>
-        <AccessFields form={editing.form} setForm={update => setEditing(e => ({ ...e, form: typeof update === 'function' ? update(e.form) : update }))} adminView={isAdmin} />
+        <AccessFields form={editing.form} setForm={update => setEditing(e => ({ ...e, form: typeof update === 'function' ? update(e.form) : update }))} adminView={isAdmin} canPickBranches={mainManager} />
         <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setEditing(null)}>Cancel</button><button type="button" className="btn-primary" disabled={saving} onClick={saveAccess}>{saving ? 'Saving…' : 'Save access'}</button></div>
       </div>
     </Dialog>}</AnimatePresence>

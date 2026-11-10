@@ -1,7 +1,7 @@
 import prisma, { atomic } from '../db/prisma.js';
 import { moneyMinor } from '../utils/numbers.js';
 import { isManager } from '../utils/courseView.js';
-import { branchScopeOf } from '../utils/access.js';
+import { visibleBranchesOf } from '../utils/access.js';
 import { logAction } from '../utils/logger.js';
 import { subCourseName, cycleName } from '../utils/privateCourses.js';
 
@@ -20,7 +20,7 @@ const cycleSelect = {
 
 async function summary(sub, user) {
   const visible = sub.cycles.filter(
-    c => (isManager(user) || !c.archivedAt) && (!branchScopeOf(user) || c.branch === branchScopeOf(user))
+    c => (isManager(user) || !c.archivedAt) && (!visibleBranchesOf(user) || visibleBranchesOf(user).includes(c.branch))
   );
   const live = visible.filter(c => !c.archivedAt);
   return {

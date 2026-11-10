@@ -1,3 +1,4 @@
+import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import prisma, { atomic } from '../db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { logAction } from '../utils/logger.js';
@@ -32,6 +33,7 @@ export const getUsers = async (req, res, next) => {
         isBanned: true,
         canManageBooks: true,
         branchScope: true,
+        branches: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -88,6 +90,7 @@ export const updateUserStatus = atomic(async (req, res, next) => {
         isBanned: true,
         canManageBooks: true,
         branchScope: true,
+        branches: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -147,7 +150,7 @@ export const updateUserRole = atomic(async (req, res, next) => {
     const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
       // Only mods carry a branch title; changing role clears it.
-      data: { role, ...(role !== 'mod' ? { branchScope: null } : {}) },
+      data: { role, ...(role !== 'mod' ? { branchScope: null } : {}), ...(role !== 'user' ? { branches: null } : {}) },
       select: {
         id: true,
         username: true,
@@ -159,6 +162,7 @@ export const updateUserRole = atomic(async (req, res, next) => {
         isBanned: true,
         canManageBooks: true,
         branchScope: true,
+        branches: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -294,6 +298,7 @@ export const updateUserPermissions = atomic(async (req, res, next) => {
         isBanned: true,
         canManageBooks: true,
         branchScope: true,
+        branches: true,
         avatar: true,
         lastLogin: true,
         createdAt: true
@@ -307,6 +312,35 @@ export const updateUserPermissions = atomic(async (req, res, next) => {
       targetUser.username
     );
 
+    res.json({ success: true, user: updatedUser });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @desc    Set the branches a user (role "user") can see; none means nothing until assigned.
+//          Admins and the main mod only.
+export const updateUserBranches = atomic(async (req, res, next) => {
+  try {
+    const list = req.body.branches;
+    if (!Array.isArray(list) || list.some(b => typeof b !== 'string' || !EMPLOYEE_BRANCHES.includes(b.toUpperCase())))
+      return res.status(400).json({ error: 'Choose valid branches.' });
+    const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    if (!targetUser) return res.status(404).json({ error: 'User not found' });
+    if (targetUser.role !== 'user') return res.status(400).json({ error: 'Only users have a list of branches.' });
+    const chosen = list.map(b => b.toUpperCase());
+    const branches = EMPLOYEE_BRANCHES.filter(b => chosen.includes(b)).join(',') || null;
+    const updatedUser = await prisma.user.update({
+      where: { id: targetUser.id },
+      data: { branches },
+      select: { id: true, username: true, role: true, branches: true }
+    });
+    await logAction(
+      'USER_BRANCHES_UPDATED',
+      `Branches for @${targetUser.username}: ${targetUser.branches || 'none'} -> ${branches || 'none'}`,
+      req.user.username,
+      targetUser.username
+    );
     res.json({ success: true, user: updatedUser });
   } catch (error) {
     next(error);

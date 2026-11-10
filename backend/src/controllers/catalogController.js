@@ -1,7 +1,7 @@
 import { moneyMinor } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
-import { branchScopeOf } from '../utils/access.js';
+import { visibleBranchesOf } from '../utils/access.js';
 import { cycleName, umbrellaBranches } from '../utils/privateCourses.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { logAction } from '../utils/logger.js';
@@ -13,9 +13,9 @@ const clean = (value, field) => {
   return value.trim().toUpperCase();
 };
 const summary = (course, user) => {
-  // Branch mods only count their own branch's cycles; cycle numbers still follow the whole umbrella.
-  const scope = branchScopeOf(user);
-  const visible = course.cycles.filter(c => (isManager(user) || !c.archivedAt) && (!scope || c.branch === scope));
+  // Branch mods and users only count their branches' cycles.
+  const seen = visibleBranchesOf(user);
+  const visible = course.cycles.filter(c => (isManager(user) || !c.archivedAt) && (!seen || seen.includes(c.branch)));
   const live = visible.filter(c => !c.archivedAt);
   // Per-branch counts, for the branch filter on the Courses page.
   const byBranch = {};
@@ -43,10 +43,12 @@ const summary = (course, user) => {
     subCourseCount: course.isPrivate ? course.subCourses.filter(sub => isManager(user) || !sub.archivedAt).length : 0
   };
 };
-// Branch mods see an umbrella when it is open for their branch, or when their branch already runs cycles there.
+// Branch mods and users see an umbrella when it is open for one of their branches, or already runs cycles there.
 const visibleToBranch = (course, user) => {
-  const scope = branchScopeOf(user);
-  return !scope || umbrellaBranches(course).includes(scope) || course.cycles.some(c => c.branch === scope);
+  const seen = visibleBranchesOf(user);
+  return (
+    !seen || seen.some(b => umbrellaBranches(course).includes(b)) || course.cycles.some(c => seen.includes(c.branch))
+  );
 };
 const relations = {
   subCourses: { select: { id: true, archivedAt: true } },

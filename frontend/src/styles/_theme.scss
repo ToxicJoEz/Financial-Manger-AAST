@@ -251,3 +251,10 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--branch-color) !important; color: #fff !important; font-size: 12px !important; font-weight: 800 !important; letter-spacing: 0.02em;
   i { display: none; }
 }
+
+// Team page: branches a user can view.
+.team-dialog .access-branch-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px;
+  button { padding: 8px 10px; border-radius: var(--radius-md); cursor: pointer; font-weight: 800; font-size: 12px;
+    border: 1px solid color-mix(in srgb, var(--branch-color) 35%, #fff); background: color-mix(in srgb, var(--branch-color) 8%, #fff); color: color-mix(in srgb, var(--branch-color) 80%, #000);
+    &.active { background: var(--branch-color); border-color: var(--branch-color); color: #fff; } } }
+.team-dialog small.muted { font-size: 12px; }

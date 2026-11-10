@@ -60,12 +60,11 @@ try {
   );
   assert.equal(await prisma.student.count(), before);
   ok(
-    await req(
-      enrollPath,
-      'POST',
-      { newStudent: { name: 'طالب ينتظر الموافقة' }, recordPayment: true, amountPaid: 1000 },
-      junior
-    )
+    await req(enrollPath, 'POST', {
+      newStudent: { name: 'طالب ينتظر الموافقة' },
+      recordPayment: true,
+      amountPaid: 1000
+    })
   );
   assert(await prisma.student.findFirst({ where: { name: 'طالب ينتظر الموافقة' } }));
   assert(
@@ -75,7 +74,7 @@ try {
   assert.equal((await req(enrollPath, 'POST', { studentId: a.id, recordPayment: false })).status, 400);
   assert.equal((await req(enrollPath, 'POST', { studentId: a.id, recordPayment: true, amountPaid: 500 })).status, 400);
   assert.equal(
-    (await req(enrollPath, 'POST', { newStudent: { name: 'طلب غير مسدد' }, recordPayment: false }, junior)).status,
+    (await req(enrollPath, 'POST', { newStudent: { name: 'طلب غير مسدد' }, recordPayment: false })).status,
     400
   );
   const discount = ok(
@@ -101,12 +100,12 @@ try {
   assert.equal(exempt.amountPaid, 0);
   assert.equal(exempt.remainingBalance, 0);
   const discountedDirect = ok(
-    await req(
-      '/cycles/cycle-pet-1/enrollments',
-      'POST',
-      { studentId: a.id, tuitionType: 'DISCOUNTED', amountPaid: 250, customFee: 250 },
-      junior
-    )
+    await req('/cycles/cycle-pet-1/enrollments', 'POST', {
+      studentId: a.id,
+      tuitionType: 'DISCOUNTED',
+      amountPaid: 250,
+      customFee: 250
+    })
   );
   assert.equal(
     (

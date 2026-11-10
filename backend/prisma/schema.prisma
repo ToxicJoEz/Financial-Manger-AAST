@@ -25,6 +25,8 @@ model User {
   canManageBooks Boolean @default(false)
   // Mods only: null = main mod (all branches, payroll); a branch (e.g. FOUAD) = branch mod whose money is checked.
   branchScope String?
+  // Users (role "user") see only these branches (comma-separated); none means nothing until assigned.
+  branches String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

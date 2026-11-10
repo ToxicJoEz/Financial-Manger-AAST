@@ -1,4 +1,4 @@
-import { branchScopeOf } from '../utils/access.js';
+import { cycleBranchWhere, visibleBranchesOf } from '../utils/access.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { activeBookInclude } from '../utils/bookPayments.js';
 import { enrollmentView, hidePayroll } from '../utils/courseView.js';
@@ -67,6 +67,9 @@ export const getStudents = async (req, res, next) => {
       pageSize > 100
     )
       return res.status(400).json({ error: 'Invalid student page.' });
+    // A user with no branches assigned sees nothing yet.
+    if (req.user.role === 'user' && !visibleBranchesOf(req.user).length)
+      return res.json({ rows: [], total: 0, page, pageSize, counts: { active: 0, archived: 0 }, noBranches: true });
     const archived = req.query.view === 'archived';
     if (archived && !isManager(req.user))
       return res.status(403).json({ error: 'Only managers can view archived students.' });
@@ -246,15 +249,13 @@ export const getStudentDetails = async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         enrollments: {
-          // Branch mods see a student's courses in their own branch only.
+          // Branch mods and users see a student's courses in their branches only.
           where: manager
-            ? branchScopeOf(req.user)
-              ? { course: { branch: branchScopeOf(req.user) } }
-              : {}
+            ? { course: cycleBranchWhere(req.user) }
             : {
                 deletedAt: null,
                 financialArchivedAt: null,
-                course: { archivedAt: null, parentCourse: { archivedAt: null } }
+                course: { archivedAt: null, parentCourse: { archivedAt: null }, ...cycleBranchWhere(req.user) }
               },
           include: {
             bookPayments: activeBookInclude,

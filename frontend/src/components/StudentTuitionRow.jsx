@@ -9,7 +9,8 @@ const money = amount => Number(amount || 0).toLocaleString('en-EG', { maximumFra
 const methodName = value => ({ CASH: 'Cash', ONLINE: 'Online', CARD: 'Card', UNSPECIFIED: 'Unspecified' })[value] || 'Unspecified';
 export default function StudentTuitionRow({ course, enrollment: row, manager, onEdit, onRemove, onBooksChanged, readOnly = false }) {
   const { user } = useContext(AuthContext);
-  const canManageBooks = manager || Boolean(user?.canManageBooks);
+  // Users only view; books are changed by admins and mods.
+  const canManageBooks = manager;
   // Branch mods can change money only until the main mod confirms it; users never change or remove it.
   const branchMod = Boolean(branchScopeOf(user));
   const LOCKED = 'Confirmed by the main mod. Ask the main mod or an admin to change it.';

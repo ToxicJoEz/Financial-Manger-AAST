@@ -152,19 +152,19 @@ try {
       hourlyRate: 100
     })
   );
+  // Users only view cycles; enrolling is for admins and mods.
+  assert.equal(
+    (await req('/cycles/' + cycle.id + '/enrollments', 'POST', { studentId: 'demo-student-1' }, junior)).status,
+    403
+  );
   const enrollmentRequest = ok(
-    await req(
-      '/cycles/' + cycle.id + '/enrollments',
-      'POST',
-      {
-        studentId: 'demo-student-1',
-        recordPayment: true,
-        amountPaid: 400,
-        tuitionType: 'DISCOUNTED',
-        customFee: 400
-      },
-      junior
-    )
+    await req('/cycles/' + cycle.id + '/enrollments', 'POST', {
+      studentId: 'demo-student-1',
+      recordPayment: true,
+      amountPaid: 400,
+      tuitionType: 'DISCOUNTED',
+      customFee: 400
+    })
   );
   // Direct enrollment
   // Direct enrollment

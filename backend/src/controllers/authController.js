@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
 import generateToken from '../utils/generateToken.js';
 import { logAction } from '../utils/logger.js';
-import { MOD_BRANCH_SCOPES } from '../utils/access.js';
+import { MOD_BRANCH_SCOPES, branchScopeOf } from '../utils/access.js';
+import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import {
   isAccountLocked,
   recordFailedAttempt,
@@ -66,7 +67,8 @@ export const loginUser = atomic(async (req, res, next) => {
           isActive: user.isActive,
           isBanned: user.isBanned,
           canManageBooks: Boolean(user.canManageBooks),
-          branchScope: user.branchScope ?? null
+          branchScope: user.branchScope ?? null,
+          branches: user.branches ?? null
         },
         token: generateToken(user.id)
       });
@@ -117,12 +119,26 @@ export const registerUser = atomic(async (req, res, next) => {
       res.status(400);
       throw new Error(`Choose main mod or one of: ${MOD_BRANCH_SCOPES.join(', ')}.`);
     }
+    // Users see only their branches. The main mod and admins choose them; a branch mod's new user gets
+    // that mod's branch.
+    let branches = null;
+    if (assignedRole === 'user') {
+      const requested = Array.isArray(req.body.branches) ? req.body.branches.map(b => String(b).toUpperCase()) : [];
+      if (requested.some(b => !EMPLOYEE_BRANCHES.includes(b))) {
+        res.status(400);
+        throw new Error('Choose valid branches.');
+      }
+      branches = branchScopeOf(req.user)
+        ? branchScopeOf(req.user)
+        : EMPLOYEE_BRANCHES.filter(b => requested.includes(b)).join(',') || null;
+    }
     const user = await prisma.user.create({
       data: {
         username,
         password: hashedPassword,
         role: assignedRole,
-        branchScope
+        branchScope,
+        branches
       }
     });
 
@@ -264,7 +280,8 @@ export const ssoLogin = atomic(async (req, res, next) => {
         isActive: user.isActive,
         isBanned: user.isBanned,
         canManageBooks: Boolean(user.canManageBooks),
-        branchScope: user.branchScope ?? null
+        branchScope: user.branchScope ?? null,
+        branches: user.branches ?? null
       },
       token: generateToken(user.id, 'SSO') // Issue a standard local token!
     });

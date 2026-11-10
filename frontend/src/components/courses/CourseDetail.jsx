@@ -135,7 +135,8 @@ export function CourseDetail({
 
                 <span>Enrolled: <strong>{enrollments.length} Students</strong></span>{(course.retainedTuition>0||course.retainedBooks>0)&&<span>Retained from removed enrollments: <strong>{Number((course.retainedTuition||0)+(course.retainedBooks||0)).toLocaleString()} EGP</strong></span>}
 
-                {<>
+                {/* Users see each student's amounts, never the cycle's totals. */}
+                {course.totalCollectedRevenue !== undefined && <>
 
                     <span>Tuition: <strong>{collectedTotal.toLocaleString()} EGP</strong></span><span>Books: <strong>{Number(course.totalBookRevenue || 0).toLocaleString()} EGP</strong></span><span>Total income: <strong>{Number(course.totalIncome ?? collectedTotal).toLocaleString()} EGP</strong></span>
 
@@ -145,7 +146,7 @@ export function CourseDetail({
 
               </div>
 
-              {!readOnly && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.isFinished || course.privateSeatOccupied} title={course.isFinished ? 'This cycle is completed. Reopen it to add students.' : course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+              {!readOnly && manager && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.isFinished || course.privateSeatOccupied} title={course.isFinished ? 'This cycle is completed. Reopen it to add students.' : course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                 <Plus size={13} /> {course.privateSeatOccupied ? `Private cycle full (${course.privateSeatCount}/${course.privateSeatLimit})` : course.isPrivate ? `Enroll student (${course.privateSeatCount}/${course.privateSeatLimit})` : "Enroll student"}
 
@@ -213,7 +214,7 @@ export function CourseDetail({
 
                 </p>
 
-                {enrollments.length === 0 && !readOnly ? course.isFinished ? <span className="muted">This cycle is completed. Reopen it to add students.</span> : <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+                {enrollments.length === 0 && !readOnly && manager ? course.isFinished ? <span className="muted">This cycle is completed. Reopen it to add students.</span> : <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                     <Plus size={13} /> Enroll first student
 

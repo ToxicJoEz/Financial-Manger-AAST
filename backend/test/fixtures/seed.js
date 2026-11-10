@@ -5,7 +5,15 @@ export async function seedFixture(client, passwordHash) {
     const accounts = JSON.parse(readFileSync(new URL('../../demo/accounts.json', import.meta.url), 'utf8'));
     for (const account of accounts)
       await tx.user.create({
-        data: { ...account, password: passwordHash, email: null, avatar: null, lastLogin: null }
+        data: {
+          ...account,
+          password: passwordHash,
+          email: null,
+          avatar: null,
+          lastLogin: null,
+          // Test users can view every branch unless a test narrows it.
+          ...(account.role === 'user' ? { branches: 'MIAMI,FOUAD,PORT-SAID,ASWAN,SMART,ONLINE,DOKKI' } : {})
+        }
       });
     const teacherNames = ['أحمد حسن إبراهيم', 'سارة محمد علي', 'محمود عادل مصطفى'];
     const studentNames = [

@@ -190,13 +190,13 @@ export default function Students() {
     }
   };
   return <div className="students-container">
-      <PageHeading eyebrow="ACADEMIC DIRECTORY" title="Students" description="Comprehensive directory of registered students across all academic branches.">
-        <button className="btn-primary" onClick={() => {
+      <PageHeading eyebrow="ACADEMIC DIRECTORY" title="Students" description={manager ? 'Comprehensive directory of registered students across all academic branches.' : 'Students and their courses in your branches. View only.'}>
+        {manager && <button className="btn-primary" onClick={() => {
         resetAddForm();
         setIsAddModalOpen(true);
       }}>
           <Plus size={16} /> Add student
-        </button>
+        </button>}
       </PageHeading>
 
             {manager&&<div className="section-tabs"><button className={!archivedView?'active':''} onClick={()=>setArchivedView(false)}>Active students</button><button className={archivedView?'active':''} onClick={()=>setArchivedView(true)}>Archived students</button></div>}
@@ -233,6 +233,7 @@ export default function Students() {
           </div>
         </div>
       )}
+      {user.role === 'user' && !user.branches && <div className="panel empty-state no-branches-note"><h3>No branches assigned yet</h3><p>Ask the main mod or an admin to choose the branches you can view.</p></div>}
       {loading ? <div className="loading-state">
           <div className="loading-spinner" />
           <span>Loading student records...</span>
@@ -244,7 +245,7 @@ export default function Students() {
           <p>
             {viewCount ? 'Try adjusting your search criteria.' : archivedView ? 'Archived students will appear here.' : 'Add your first student to get started with course enrollments.'}
           </p>
-          {!viewCount && !archivedView && <button className="btn-primary" onClick={() => {
+          {manager && !viewCount && !archivedView && <button className="btn-primary" onClick={() => {
         resetAddForm();
         setIsAddModalOpen(true);
       }}>
@@ -255,17 +256,17 @@ export default function Students() {
             <table className="students-table">
               <thead>
                 <tr>
-                  <th className="select-column"><input type="checkbox" aria-label="Select all" checked={selectedStudentIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></th>
+                  {manager && <th className="select-column"><input type="checkbox" aria-label="Select all" checked={selectedStudentIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></th>}
                   <th>Student</th>
                   <th>Registration ID</th>
                   <th>Contact</th>
                   <th>Registered On</th>
-                  <th className="students-presentation-24">Actions</th>
+                  {manager && <th className="students-presentation-24">Actions</th>}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(student => <tr key={student.id}>
-                    <td className="select-column"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedStudentIds.includes(student.id)} onChange={() => toggleSelectStudent(student.id)} /></td>
+                    {manager && <td className="select-column"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedStudentIds.includes(student.id)} onChange={() => toggleSelectStudent(student.id)} /></td>}
                     <td>
                       <div className="student-info-cell">
                         <span className="student-avatar">{initials(student.name)}</span>
@@ -293,7 +294,8 @@ export default function Students() {
                   })}
                       </span>
                     </td>
-                    <td>
+                    {/* Users only view students. */}
+                    {manager && <td>
                       <div className="student-actions-cell">
                         <button className="student-action-btn" aria-label={`Edit ${student.name}`} title="Edit student" onClick={() => setEditingStudent({
                     ...student
@@ -303,7 +305,7 @@ export default function Students() {
                         <ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>
 
                       </div>
-                    </td>
+                    </td>}
                   </tr>)}
               </tbody>
             </table>

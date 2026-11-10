@@ -13,5 +13,21 @@ export const canSeePayroll = user => user?.role === 'admin' || (user?.role === '
 export const canCheckBranchMoney = canSeePayroll;
 // The branch a user is limited to, or null when they see every branch.
 export const branchScopeOf = user => (user?.role === 'mod' && user.branchScope ? user.branchScope : null);
-// Prisma filter for cycles the user may see (spread into a Cycle where clause).
-export const cycleBranchWhere = user => (branchScopeOf(user) ? { branch: branchScopeOf(user) } : {});
+// Branches someone may see: null for everything (admins, the main mod), one for a branch mod,
+// and the assigned list for a user (an empty list until branches are assigned).
+export const parseBranches = value =>
+  String(value || '')
+    .split(',')
+    .map(b => b.trim().toUpperCase())
+    .filter(b => EMPLOYEE_BRANCHES.includes(b));
+export const visibleBranchesOf = user =>
+  user?.role === 'user' ? parseBranches(user.branches) : branchScopeOf(user) ? [branchScopeOf(user)] : null;
+export const canSeeBranch = (user, branch) => {
+  const list = visibleBranchesOf(user);
+  return !list || list.includes(branch);
+};
+// Prisma filter for cycles the person may see (spread into a Cycle where clause).
+export const cycleBranchWhere = user => {
+  const list = visibleBranchesOf(user);
+  return list ? { branch: { in: list } } : {};
+};

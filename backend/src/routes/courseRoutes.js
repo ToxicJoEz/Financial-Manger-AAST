@@ -60,10 +60,11 @@ router.post('/:id/finish', modOrAbove, markFinished);
 router.post('/:id/revert', modOrAbove, revertFinish);
 
 // Enrollment routes (accessible to all authenticated users)
-router.post('/:id/enrollments/:enrollmentId/books', updateBookStatus);
+// Users only view cycles; they may still request employee changes (approved by the main mod).
+router.post('/:id/enrollments/:enrollmentId/books', modOrAbove, updateBookStatus);
 router.get('/:id/enrollments', getCourseEnrollments);
-router.post('/:id/enrollments', enrollStudent);
-router.put('/:id/enrollments/:enrollmentId', updateEnrollment);
+router.post('/:id/enrollments', modOrAbove, enrollStudent);
+router.put('/:id/enrollments/:enrollmentId', modOrAbove, updateEnrollment);
 router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
 
 router.get('/:id/enrollments/:enrollmentId/payments', getPayments);

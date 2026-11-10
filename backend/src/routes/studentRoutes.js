@@ -19,12 +19,13 @@ router.use(protect);
 
 router.get('/', getStudents);
 router.post('/bulk-archive', modOrAbove, studentsInBranch, bulkArchiveStudents);
-router.post('/bulk-delete', studentsInBranch, confirmedMoneyGuard('student'), bulkDeleteStudents);
+// Users only view students; adding, editing and removing is for admins and mods.
+router.post('/bulk-delete', modOrAbove, studentsInBranch, confirmedMoneyGuard('student'), bulkDeleteStudents);
 router.post('/:id/archive', modOrAbove, studentsInBranch, archiveStudent);
 router.delete('/:id/permanent', modOrAbove, studentsInBranch, confirmedMoneyGuard('student'), permanentlyDeleteStudent);
 router.get('/:id', getStudentDetails);
-router.post('/', createStudent);
-router.put('/:id', updateStudent);
-router.delete('/:id', studentsInBranch, confirmedMoneyGuard('student'), deleteStudent);
+router.post('/', modOrAbove, createStudent);
+router.put('/:id', modOrAbove, updateStudent);
+router.delete('/:id', modOrAbove, studentsInBranch, confirmedMoneyGuard('student'), deleteStudent);
 
 export default router;

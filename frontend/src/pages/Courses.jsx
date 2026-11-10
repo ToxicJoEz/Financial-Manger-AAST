@@ -557,7 +557,7 @@ const Courses = () => {
       <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} />{parentCourse?.umbrella && <><Link to={'/courses/' + parentCourse.umbrella.id}>{parentCourse.umbrella.name}</Link><ChevronRight size={14} /></>}<span>{parentCourse?.name || 'All cycles'}</span></nav>
       <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
 
-        <ExcelExportButton parentCourseId={parentId} />
+        {user.role !== 'user' && <ExcelExportButton parentCourseId={parentId} />}
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary export-format-excel" onClick={() => setImportOpen(true)}><FileSpreadsheet size={16} />Import cycle from Excel</button>}
 
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" disabled={!createBranchOptions.length} title={createBranchOptions.length ? undefined : branchScope ? 'This umbrella is not open for your branch yet.' : 'Open this umbrella for a branch first.'} onClick={openCreate}><Plus size={16} />New cycle</button>}

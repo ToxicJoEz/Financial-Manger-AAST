@@ -6,9 +6,10 @@ import {
   updateProfile,
   unlockUserAccount,
   updateUserPermissions,
-  updateUserBranchScope
+  updateUserBranchScope,
+  updateUserBranches
 } from '../controllers/userController.js';
-import { protect, modOrAbove, adminOnly } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, adminOnly, mainManager } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ router.put('/:id/status', protect, modOrAbove, updateUserStatus);
 router.put('/:id/role', protect, adminOnly, updateUserRole);
 router.put('/:id/permissions', protect, modOrAbove, updateUserPermissions);
 router.put('/:id/branch-scope', protect, adminOnly, updateUserBranchScope);
+router.put('/:id/branches', protect, mainManager, updateUserBranches);
 router.post('/:id/unlock', protect, modOrAbove, unlockUserAccount);
 
 export default router;

@@ -1,9 +1,10 @@
 import { canSeePayroll } from '../utils/access.js';
 import express from 'express';
-import { protect } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
 import { exportOptions, prepareExport } from '../controllers/exportController.js';
 const router = express.Router();
-router.use(protect);
+// Exports are for admins and mods; users only view on screen.
+router.use(protect, modOrAbove);
 router.get('/options', exportOptions);
 router.post('/', prepareExport);
 router.post('/events', async (req, res) => {

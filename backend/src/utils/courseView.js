@@ -63,7 +63,22 @@ export function hidePayroll(value, user) {
   return value;
 }
 
+// Users see each student's own amounts but never a cycle's money totals.
+const totalFields = [
+  'totalExpectedRevenue',
+  'retainedTuition',
+  'retainedBooks',
+  'totalCollectedRevenue',
+  'totalBookRevenue',
+  'totalIncome',
+  'totalRemainingBalance'
+];
 export function courseView(course, user) {
+  const view = fullCourseView(course, user);
+  if (user?.role === 'user') for (const key of totalFields) delete view[key];
+  return view;
+}
+function fullCourseView(course, user) {
   const all = (course.enrollments || []).map(enrollment => enrollmentView(enrollment, course));
   const visible = isManager(user)
     ? all
