@@ -23,7 +23,7 @@ export default function DashboardLayout() {
   const [reviewRequest, setReviewRequest] = useState(null);
   const reviewLoad = useRef(0);
   const [unreadTotal, setUnreadTotal] = useState(0);
-  // Sidebar badge counts: requests to review, Fouad money to check.
+  // Sidebar badge counts: requests to review, branch money to check.
   const [attention, setAttention] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);

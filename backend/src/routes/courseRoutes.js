@@ -26,22 +26,23 @@ import {
   bulkArchiveCourses,
   getCyclesOverview
 } from '../controllers/courseController.js';
-import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, cycleInBranch, bulkCyclesInBranch } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 router.use(protect);
+router.param('id', cycleInBranch);
 router.get('/:id/removed-enrollments', modOrAbove, getRemovedEnrollments);
 router.post('/:id/removed-enrollments/:removalId/adjust', modOrAbove, adjustRemovedEnrollment);
 router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
 router.delete('/:id/permanent', modOrAbove, permanentlyDelete('cycle'));
 
-router.get('/bulk-deletion-preview', modOrAbove, bulkCycleDeletionPreview);
+router.get('/bulk-deletion-preview', modOrAbove, bulkCyclesInBranch, bulkCycleDeletionPreview);
 router.get('/overview', getCyclesOverview);
 router.get('/', getCourses);
 router.get('/:id', getCourses);
-router.post('/bulk-archive', modOrAbove, bulkArchiveCourses);
-router.post('/bulk-delete', modOrAbove, bulkDeleteCycles);
+router.post('/bulk-archive', modOrAbove, bulkCyclesInBranch, bulkArchiveCourses);
+router.post('/bulk-delete', modOrAbove, bulkCyclesInBranch, bulkDeleteCycles);
 router.post('/', modOrAbove, createCourse);
 router.put('/:id', modOrAbove, updateCourse);
 router.delete('/:id', modOrAbove, deleteCourse);

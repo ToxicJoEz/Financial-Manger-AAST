@@ -40,9 +40,10 @@ body {
   font-family: var(--font-sans);
   color: var(--ink);
   background: var(--paper);
-  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
 }
+// PDF exports are drawn letter by letter: any letter spacing breaks Arabic joining.
+.html2pdf__overlay, .html2pdf__container, .html2pdf__overlay * { letter-spacing: normal !important; }
 button, input, select, textarea { font-family: inherit; }
 [dir='auto'], [dir='rtl'] { font-family: var(--font-sans); }
 
@@ -157,3 +158,73 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 .students-card .list-pagination { padding: 0 16px 16px; }
+
+// Team & access: one row per person with a plain summary of their access.
+.team-table {
+  td { vertical-align: middle; }
+  .team-person { display: flex; align-items: center; gap: 12px;
+    img, .team-avatar { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    .team-avatar { display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 800; }
+    strong { display: block; color: var(--ink-strong); font-size: 14px; }
+    small { display: block; color: var(--muted); font-size: 12px; } }
+  .team-role { display: inline-block; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 800; background: var(--accent-soft); color: var(--accent-strong);
+    &.team-role-admin { background: #1f2b45; color: #fff; }
+    &.team-role-mod.is-branch { background: var(--warning-soft); color: var(--warning); }
+    &.team-role-user { background: #eef1f6; color: var(--ink); } }
+  .team-access { display: block; margin-top: 5px; font-size: 12px; color: var(--muted); }
+  .team-status { display: flex; flex-wrap: wrap; gap: 6px; }
+  .team-last { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .team-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; button { display: inline-flex; align-items: center; gap: 5px; } }
+  .team-root { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .team-managed { font-size: 12px; font-style: italic; }
+}
+.team-dialog {
+  display: flex; flex-direction: column; gap: 8px; width: min(520px, 100%);
+  h3 { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; color: var(--ink-strong); }
+  > p { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  label { font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+  .access-role-picker { display: grid; gap: 8px;
+    button { text-align: left; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+      strong { display: block; font-size: 14px; color: var(--ink-strong); }
+      span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+      &.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); } } }
+  .access-books { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .payment-entry-actions { margin-top: 12px; }
+}
+.team-confirm-title { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+
+// Courses page: one coloured button per branch, next to "New course umbrella".
+.branch-picker {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  button {
+    --branch-color: var(--accent);
+    padding: 7px 12px; border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer;
+    font-size: 12px; font-weight: 800; letter-spacing: 0.01em;
+    background: color-mix(in srgb, var(--branch-color) 13%, #fff); color: color-mix(in srgb, var(--branch-color) 82%, #000);
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+    &:hover { background: color-mix(in srgb, var(--branch-color) 22%, #fff); }
+    &.active { background: var(--branch-color); color: #fff; box-shadow: 0 3px 10px color-mix(in srgb, var(--branch-color) 35%, transparent); }
+  }
+}
+.course-catalog .page-heading { flex-wrap: wrap; gap: 16px; }
+.course-catalog .page-heading .page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; justify-content: flex-end; }
+
+// Period picker (Month / Range / Year) on Income.
+.period-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  .period-modes { display: inline-flex; padding: 3px; border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--line);
+    button { padding: 6px 12px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer;
+      &.active { background: var(--accent); color: #fff; } } }
+  .month-control { gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); select { border: 0; background: transparent; font-weight: 700; color: var(--ink); } }
+}
+// Month sections inside a range or year.
+.income-table {
+  .income-month-row th, .income-month-row td { background: #f1f4fb; border-top: 2px solid var(--accent-line); padding-top: 12px; padding-bottom: 12px; font-weight: 800; color: var(--ink-strong); }
+  .income-month-row th { text-align: left; font-size: 14px; small { margin-left: 10px; font-size: 12px; font-weight: 600; color: var(--muted); } }
+  .income-month-empty td { color: var(--muted); font-size: 12px; font-style: italic; }
+}
+
+// Payroll: the number of batches waiting for payment, easy to spot.
+.section-tabs .payroll-batch-count {
+  min-width: 22px; padding: 2px 8px !important; border-radius: 999px; background: #f5b452 !important; color: #3d2800 !important;
+  font-size: 12px !important; font-weight: 800; opacity: 1 !important; text-align: center;
+}

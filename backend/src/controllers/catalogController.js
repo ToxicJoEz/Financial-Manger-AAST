@@ -1,6 +1,7 @@
 import { moneyMinor } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
+import { branchScopeOf } from '../utils/access.js';
 import { logAction } from '../utils/logger.js';
 const clean = (value, field) => {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > 120)
@@ -10,8 +11,17 @@ const clean = (value, field) => {
   return value.trim().toUpperCase();
 };
 const summary = (course, user) => {
-  const visible = course.cycles.filter(c => isManager(user) || !c.archivedAt);
+  // Branch mods only count their own branch's cycles; cycle numbers still follow the whole umbrella.
+  const scope = branchScopeOf(user);
+  const visible = course.cycles.filter(c => (isManager(user) || !c.archivedAt) && (!scope || c.branch === scope));
   const live = visible.filter(c => !c.archivedAt);
+  // Per-branch counts, for the branch filter on the Courses page.
+  const byBranch = {};
+  for (const c of live) {
+    const row = (byBranch[c.branch] ||= { cycles: 0, active: 0, completed: 0 });
+    row.cycles++;
+    row[c.isFinished ? 'completed' : 'active']++;
+  }
   const highest = course.cycles.reduce((n, c) => Math.max(n, c.cycleNumber), 0);
   return {
     id: course.id,
@@ -26,6 +36,7 @@ const summary = (course, user) => {
     activeCount: live.filter(c => !c.isFinished).length,
     completedCount: live.filter(c => c.isFinished).length,
     branches: [...new Set(live.map(c => c.branch))],
+    byBranch,
     students: live.reduce((n, c) => n + c._count.enrollments, 0),
     subCourseCount: course.isPrivate ? course.subCourses.filter(sub => isManager(user) || !sub.archivedAt).length : 0
   };

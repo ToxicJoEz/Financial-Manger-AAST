@@ -1,3 +1,4 @@
+import { branchScopeOf } from '../utils/access.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { activeBookInclude } from '../utils/bookPayments.js';
 import { enrollmentView, hidePayroll } from '../utils/courseView.js';
@@ -245,8 +246,11 @@ export const getStudentDetails = async (req, res, next) => {
       where: { id: req.params.id },
       include: {
         enrollments: {
+          // Branch mods see a student's courses in their own branch only.
           where: manager
-            ? {}
+            ? branchScopeOf(req.user)
+              ? { course: { branch: branchScopeOf(req.user) } }
+              : {}
             : {
                 deletedAt: null,
                 financialArchivedAt: null,

@@ -45,8 +45,13 @@ const runLabel = run =>
 export const getFinances = async (req, res, next) => {
   try {
     const month = req.query.month;
-    if (month !== undefined && (typeof month !== 'string' || !/^(\d{4}|\d{4}-(0[1-9]|1[0-2]))$/.test(month)))
-      return res.status(400).json({ error: 'Choose a valid salary report month or year.' });
+    // A month (YYYY-MM), a year (YYYY) or a range of months (YYYY-MM:YYYY-MM), by actual payment date.
+    const PERIOD = /^(\d{4}|\d{4}-(0[1-9]|1[0-2])|\d{4}-(0[1-9]|1[0-2]):\d{4}-(0[1-9]|1[0-2]))$/;
+    if (
+      month !== undefined &&
+      (typeof month !== 'string' || !PERIOD.test(month) || (month.includes(':') && month.slice(0, 7) > month.slice(8)))
+    )
+      return res.status(400).json({ error: 'Choose a valid salary report month, range or year.' });
     const records = await prisma.payrollEarning.findMany({
       include: {
         batch: { include: { run: true } },
@@ -103,9 +108,11 @@ export const getFinances = async (req, res, next) => {
       }
     });
     const isYear = month && month.length === 4;
+    const isRange = month && month.includes(':');
     const isPeriodMatch = d => {
       if (!month || !d) return false;
       const s = d instanceof Date ? d.toISOString() : String(d);
+      if (isRange) return s.slice(0, 7) >= month.slice(0, 7) && s.slice(0, 7) <= month.slice(8);
       return isYear ? s.slice(0, 4) === month : s.slice(0, 7) === month;
     };
     const monthlyRows = month

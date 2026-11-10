@@ -1,4 +1,5 @@
-import { canSeePayroll } from '../utils/access';
+import { canSeePayroll, branchScopeOf } from '../utils/access';
+import { getCourseBranch, setCourseBranch } from '../utils/courseBranch';
 import DateInput from '../components/DateInput';
 import EnrollmentRemovalFields from '../components/EnrollmentRemovalFields';
 import CycleScheduleFields from '../components/CycleScheduleFields';
@@ -31,6 +32,9 @@ const Courses = () => {
   const { courseId: parentId, subCourseId } = useParams();
   // Hourly rates are payroll: users and branch mods request teaching-team changes instead.
   const payrollAccess = canSeePayroll(user);
+  // Branch mods work in their own branch only.
+  const branchScope = branchScopeOf(user);
+  const branchOptions = branchScope ? BRANCH_OPTIONS.filter(o => o.value === branchScope) : BRANCH_OPTIONS;
   const dataRequest = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
   const [parentCourse, setParentCourse] = useState(null);
@@ -77,7 +81,7 @@ const Courses = () => {
   // Form states
 
   const [name, setName] = useState('');
-  const [branch, setBranch] = useState(BRANCHES[0]);
+  const [branch, setBranch] = useState(branchScope || BRANCHES[0]);
   const [totalHours, setTotalHours] = useState('');
   const [courseFee, setCourseFee] = useState('');
   const [schedule, setSchedule] = useState({});
@@ -88,7 +92,9 @@ const Courses = () => {
   // Filter states
 
   const [filterName, setFilterName] = useState('');
-  const [filterBranch, setFilterBranch] = useState('');
+  // Starts from the branch picked on the Courses page, and keeps it in step.
+  const [filterBranch, setFilterBranch] = useState(() => (branchScope ? '' : getCourseBranch()));
+  useEffect(() => { if (!branchScope) setCourseBranch(filterBranch); }, [filterBranch, branchScope]);
   const [filterStatus, setFilterStatus] = useState(''); // '', 'active', 'finished'
 
   // Enrollment State
@@ -296,7 +302,7 @@ const Courses = () => {
   const resetForm = () => {
     setNewInstructorId('');setNewInstructorRate('');
     setName('');
-    setBranch(BRANCHES[0]);
+    setBranch(branchScope || BRANCHES[0]);
     setTotalHours('');
     setCourseFee(''); setSchedule({});
     setDetails('');
@@ -459,7 +465,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Branch</label>
 
-                <CustomFilterDropdown options={BRANCH_OPTIONS} value={editingCourse.branch} onChange={val => setEditingCourse({
+                <CustomFilterDropdown options={branchOptions} value={editingCourse.branch} onChange={val => setEditingCourse({
                 ...editingCourse,
                 branch: val
               })} />
@@ -565,7 +571,7 @@ const Courses = () => {
 
           <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, employees, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
 
-          <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={BRANCH_OPTIONS} placeholder="All branches" /></div>
+          <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} placeholder="All branches" /></div>
           <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">
             <span>Range:</span>
             <input type="date" aria-label="Start date from" value={dateRangeStart} onChange={e => setDateRangeStart(e.target.value)} className="bg-transparent border-none text-xs" />
@@ -699,7 +705,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Branch</label>
 
-                <CustomFilterDropdown options={BRANCH_OPTIONS} value={branch} onChange={setBranch} />
+                <CustomFilterDropdown options={branchOptions} value={branch} onChange={setBranch} />
 
               </div>
 

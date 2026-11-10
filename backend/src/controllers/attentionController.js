@@ -1,5 +1,5 @@
 import prisma from '../db/prisma.js';
-import { isManager, canSeePayroll, CHECKED_BRANCHES } from '../utils/access.js';
+import { canSeePayroll, canCheckBranchMoney, cycleBranchWhere, CHECKED_BRANCHES } from '../utils/access.js';
 import { moneyCheckSummary } from './moneyCheckController.js';
 
 // Counts of things waiting for someone, for sidebar badges and the Overview "Needs your attention" strip.
@@ -8,7 +8,7 @@ export const getAttention = async (req, res, next) => {
   try {
     const user = req.user,
       payroll = canSeePayroll(user);
-    const activeCycle = { archivedAt: null, parentCourse: { archivedAt: null } };
+    const activeCycle = { archivedAt: null, parentCourse: { archivedAt: null }, ...cycleBranchWhere(user) };
     const [pendingApprovals, myPendingRequests, unassignedCycles] = await Promise.all([
       payroll ? prisma.pendingAssignment.count({ where: { status: 'PENDING', course: activeCycle } }) : 0,
       prisma.pendingAssignment.count({ where: { status: 'PENDING', submittedById: user.id } }),
@@ -31,10 +31,19 @@ export const getAttention = async (req, res, next) => {
       result.processingPayments = { count: processing._count, amount: Number(processing._sum.amountMinor || 0n) / 100 };
       result.payrollDueCycles = unpaid.length;
     }
-    if (isManager(user)) {
-      const branch = CHECKED_BRANCHES[0];
-      const summary = await moneyCheckSummary(branch);
-      result.moneyChecks = { branch, unchecked: summary.unchecked, changed: summary.changed };
+    // Branch money waiting for the main mod: totals across branches plus each branch's share.
+    if (canCheckBranchMoney(user)) {
+      const byBranch = await Promise.all(
+        CHECKED_BRANCHES.map(async branch => {
+          const summary = await moneyCheckSummary(branch);
+          return { branch, unchecked: summary.unchecked, changed: summary.changed };
+        })
+      );
+      const sum = key => ({
+        count: byBranch.reduce((n, b) => n + b[key].count, 0),
+        amount: Math.round(byBranch.reduce((n, b) => n + b[key].amount, 0) * 100) / 100
+      });
+      result.moneyChecks = { unchecked: sum('unchecked'), changed: sum('changed'), byBranch };
     }
     res.json(result);
   } catch (error) {

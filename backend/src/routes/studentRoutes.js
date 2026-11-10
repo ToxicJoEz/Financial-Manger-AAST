@@ -10,7 +10,7 @@ import {
   bulkArchiveStudents,
   bulkDeleteStudents
 } from '../controllers/studentController.js';
-import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, studentsInBranch } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -18,13 +18,13 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/', getStudents);
-router.post('/bulk-archive', modOrAbove, bulkArchiveStudents);
-router.post('/bulk-delete', bulkDeleteStudents);
-router.post('/:id/archive', modOrAbove, archiveStudent);
-router.delete('/:id/permanent', modOrAbove, permanentlyDeleteStudent);
+router.post('/bulk-archive', modOrAbove, studentsInBranch, bulkArchiveStudents);
+router.post('/bulk-delete', studentsInBranch, bulkDeleteStudents);
+router.post('/:id/archive', modOrAbove, studentsInBranch, archiveStudent);
+router.delete('/:id/permanent', modOrAbove, studentsInBranch, permanentlyDeleteStudent);
 router.get('/:id', getStudentDetails);
 router.post('/', createStudent);
 router.put('/:id', updateStudent);
-router.delete('/:id', deleteStudent);
+router.delete('/:id', studentsInBranch, deleteStudent);
 
 export default router;

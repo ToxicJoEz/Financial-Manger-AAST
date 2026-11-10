@@ -7,7 +7,7 @@ import { cycleSchedule } from '../utils/cycleSchedule.js';
 import { assertWithinFee, financialChoice } from '../utils/tuition.js';
 import { savePayrollRecord } from '../utils/payrollRecord.js';
 import { courseView, enrollmentView, hidePayroll, isManager, paymentSummaryInclude } from '../utils/courseView.js';
-import { canSeePayroll } from '../utils/access.js';
+import { canSeePayroll, branchScopeOf, cycleBranchWhere } from '../utils/access.js';
 import { paymentFields } from '../utils/studentProfile.js';
 import { openingBalance } from '../utils/paymentLedger.js';
 import { moneyMinor } from '../utils/numbers.js';
@@ -88,7 +88,10 @@ function startRange(from, to) {
 export const getCourses = async (req, res) => {
   try {
     const manager = isManager(req.user);
-    const visibility = manager ? {} : { archivedAt: null, parentCourse: { archivedAt: null } };
+    const visibility = {
+      ...(manager ? {} : { archivedAt: null, parentCourse: { archivedAt: null } }),
+      ...cycleBranchWhere(req.user)
+    };
     if (req.params.id) {
       const course = await prisma.cycle.findFirst({
         where: { id: req.params.id, ...visibility },
@@ -201,6 +204,8 @@ export const createCourse = atomic(async (req, res, next) => {
     const scope = await cycleScope(parent, req.body.subCourseId);
     const number = parseCycleNumber(cycleNumber);
     if (typeof branch !== 'string' || !branch.trim()) return res.status(400).json({ error: 'Branch is required.' });
+    if (branchScopeOf(req.user) && branch.trim().toUpperCase() !== branchScopeOf(req.user))
+      return res.status(403).json({ error: `You can only create cycles in ${branchScopeOf(req.user)}.` });
     const start = startDate ? new Date(startDate) : null,
       end = endDate ? new Date(endDate) : null;
     if (
@@ -281,6 +286,8 @@ export const updateCourse = atomic(async (req, res, next) => {
       if (typeof body.branch !== 'string' || !body.branch.trim())
         return res.status(400).json({ error: 'Branch is required.' });
       data.branch = body.branch.trim().toUpperCase();
+      if (branchScopeOf(req.user) && data.branch !== branchScopeOf(req.user))
+        return res.status(403).json({ error: `Cycles stay in ${branchScopeOf(req.user)}.` });
     }
     if (body.details !== undefined) data.details = body.details;
     for (const key of ['startDate', 'endDate'])
@@ -1042,7 +1049,7 @@ export const bulkArchiveCourses = atomic(async (req, res, next) => {
 export const getCyclesOverview = async (req, res, next) => {
   try {
     const manager = isManager(req.user);
-    const visible = { archivedAt: null, parentCourse: { archivedAt: null } };
+    const visible = { archivedAt: null, parentCourse: { archivedAt: null }, ...cycleBranchWhere(req.user) };
     const [total, active, branchRows, recent, assigned, pendingCount, firstPending, unassigned] = await Promise.all([
       prisma.cycle.count({ where: visible }),
       prisma.cycle.count({ where: { ...visible, isFinished: false } }),

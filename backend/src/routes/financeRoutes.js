@@ -20,8 +20,8 @@ router.use(protect, modOrAbove);
 router.get('/income', getIncome);
 router.get('/overview', getYearlyOverview);
 
-// Branch money checks: every manager can see the status; admins and the main mod mark records.
-router.get('/checks', listMoneyChecks);
+// Branch money checks: admins and the main mod only.
+router.get('/checks', payrollManager, listMoneyChecks);
 router.post('/checks', payrollManager, markMoneyChecked);
 router.post('/checks/uncheck', payrollManager, unmarkMoneyChecked);
 

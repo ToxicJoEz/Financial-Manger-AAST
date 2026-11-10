@@ -4,34 +4,60 @@ import Dialog from '../components/Dialog';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { UserPlus, ListOrdered } from 'lucide-react';
-import { Link, Navigate } from 'react-router-dom';
+import { UserPlus, ListOrdered, ShieldCheck, Pencil } from 'lucide-react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
-import { MOD_TITLE_OPTIONS, modTitle } from '../utils/access';
+import { MOD_TITLE_OPTIONS, modTitle, branchName } from '../utils/access';
+
+const ROLES = [
+  { value: 'user', label: 'User', help: 'Works with courses and students. Requests employee changes for approval.' },
+  { value: 'mod', label: 'Mod', help: 'Manages courses, students and money. Choose the main mod or a branch.' },
+  { value: 'admin', label: 'Admin', help: 'Full access, including team accounts.' }
+];
+// What each person can do, in plain words.
+const accessSummary = u =>
+  u.role === 'admin'
+    ? 'Everything, including team accounts'
+    : u.role === 'mod'
+      ? u.branchScope
+        ? `${branchName(u.branchScope)} only · no payroll · money checked by the main mod`
+        : 'All branches · payroll · checks branch money'
+      : `Courses and students${u.canManageBooks ? ' · can mark books' : ''}`;
+const roleLabel = u => (u.role === 'mod' ? modTitle(u) : u.role === 'admin' ? 'Admin' : 'User');
+const lastActive = value =>
+  value
+    ? new Date(value).toLocaleDateString('en-GB', { year: '2-digit', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : 'Never';
+
+// Role, mod branch and the books permission, shared by the add and edit dialogs.
+function AccessFields({ form, setForm, adminView }) {
+  const roles = adminView ? ROLES : ROLES.filter(r => r.value === 'user');
+  return <>
+    <label>Role</label>
+    <div className="access-role-picker" role="radiogroup" aria-label="Role">{roles.map(r => <button key={r.value} type="button" role="radio" aria-checked={form.role === r.value} className={form.role === r.value ? 'active' : ''} onClick={() => setForm(f => ({ ...f, role: r.value }))}><strong>{r.label}</strong><span>{r.help}</span></button>)}</div>
+    {form.role === 'mod' && <><label htmlFor="access-branch">Mod for</label><CustomFilterDropdown id="access-branch" allowClear={false} value={form.branch} onChange={value => setForm(f => ({ ...f, branch: value }))} options={MOD_TITLE_OPTIONS} placeholder="Choose main or a branch" /></>}
+    {form.role === 'user' && <label className="policy-check access-books"><input type="checkbox" checked={form.canManageBooks} onChange={e => setForm(f => ({ ...f, canManageBooks: e.target.checked }))} />Can mark book payments as paid or exempt</label>}
+  </>;
+}
+
 const ManageUsers = () => {
-  const {
-    user: currentUser
-  } = useContext(AuthContext);
-  const isStaff = currentUser && currentUser.role === 'user';
+  const { user: currentUser } = useContext(AuthContext);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isAdmin = currentUser?.role === 'admin';
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  // Modal states
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
+  const [adding, setAdding] = useState(null); // new account form
+  const [editing, setEditing] = useState(null); // { user, form }
+  const [saving, setSaving] = useState(false);
 
   const fetchUsers = async () => {
     try {
-      const {
-        data
-      } = await axios.get('/users');
-      const roleWeight = {
-        admin: 1,
-        mod: 2,
-        user: 3
-      };
-      const sortedUsers = data.sort((a, b) => (roleWeight[a.role] || 4) - (roleWeight[b.role] || 4));
-      setUsers(sortedUsers);
+      const { data } = await axios.get('/users');
+      const weight = u => (u.role === 'admin' ? 1 : u.role === 'mod' ? (u.branchScope ? 3 : 2) : 4);
+      setUsers(data.sort((a, b) => weight(a) - weight(b) || a.username.localeCompare(b.username)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -39,202 +65,149 @@ const ManageUsers = () => {
     }
   };
   useEffect(() => {
-    if (!isStaff) fetchUsers();
-  }, [isStaff]);
-  const canModify = targetUser => {
-    if (targetUser.username === 'main-admin') return false;
-    if (currentUser.role === 'admin') return true;
-    if (currentUser.role === 'mod') {
-      return targetUser.role === 'user';
+    if (['admin', 'mod'].includes(currentUser?.role)) fetchUsers();
+  }, [currentUser?.role]);
+  // Old "Add colleague" links open the add dialog here.
+  useEffect(() => {
+    if (location.state?.add) {
+      setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', canManageBooks: false });
+      navigate(location.pathname, { replace: true, state: null });
     }
-    return false;
-  };
-  const canUnlock = targetUser => {
-    if (currentUser.role === 'admin') return true;
-    if (currentUser.role === 'mod') {
-      return targetUser.role === 'user';
-    }
-    return false;
-  };
-  const handleUnlock = async targetUser => {
+  }, [location.state, location.pathname, navigate]);
+
+  if (!currentUser || !['admin', 'mod'].includes(currentUser.role)) return <Navigate to="/" replace />;
+
+  const canModify = target => target.username !== 'main-admin' && (isAdmin || (currentUser.role === 'mod' && target.role === 'user'));
+  const handleUnlock = async target => {
     try {
-      await axios.post(`/users/${targetUser.id}/unlock`);
-      toast.success(`Account for ${targetUser.username} unlocked successfully`);
+      await axios.post(`/users/${target.id}/unlock`);
+      toast.success(`Account for ${target.username} unlocked`);
       fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to unlock account');
     }
   };
-  const executeAction = async (id, payload, endpoint) => {
-    try {
-      await axios.put(`/users/${id}/${endpoint}`, payload);
-      toast.success('Action successful');
-      fetchUsers(); // refresh
-      setConfirmModal(null);
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Action failed');
-    }
-  };
-  const handleStatusToggle = (user, type) => {
-    const isBanAction = type === 'ban';
-    const newValue = isBanAction ? !user.isBanned : !user.isActive;
+  const handleStatusToggle = (target, type) => {
+    const ban = type === 'ban';
+    const value = ban ? !target.isBanned : !target.isActive;
+    const verb = ban ? (value ? 'ban' : 'unban') : value ? 'reactivate' : 'deactivate';
     setConfirmModal({
-      title: isBanAction ? newValue ? 'Ban User' : 'Unban User' : newValue ? 'Reactivate User' : 'Deactivate User',
-      message: `Are you sure you want to ${isBanAction ? newValue ? 'ban' : 'unban' : newValue ? 'reactivate' : 'deactivate'} ${user.username}?`,
-      onConfirm: () => executeAction(user.id, {
-        [isBanAction ? 'isBanned' : 'isActive']: newValue
-      }, 'status')
+      title: verb.charAt(0).toUpperCase() + verb.slice(1) + ' ' + target.username,
+      message: `Are you sure you want to ${verb} ${target.username}?`,
+      onConfirm: async () => {
+        try {
+          await axios.put(`/users/${target.id}/status`, { [ban ? 'isBanned' : 'isActive']: value });
+          toast.success(`${target.username} updated`);
+          setConfirmModal(null);
+          fetchUsers();
+        } catch (err) {
+          toast.error(err.response?.data?.error || 'Action failed');
+        }
+      }
     });
   };
-  // Main mod (all branches, payroll) or a branch mod (no payroll; their branch's money is checked).
-  const handleModTitle = async (targetUser, value) => {
-    const branchScope = value === 'MAIN' ? null : value;
-    if ((targetUser.branchScope || null) === branchScope) return;
+
+  async function createAccount(e) {
+    e.preventDefault();
+    if (adding.role === 'mod' && !adding.branch) return toast.error('Choose the main mod or a branch.');
+    setSaving(true);
     try {
-      await axios.put('/users/' + targetUser.id + '/branch-scope', { branchScope });
-      toast.success(`${targetUser.username} is now ${modTitle({ branchScope })}`);
-      setUsers(prev => prev.map(u => (u.id === targetUser.id ? { ...u, branchScope } : u)));
+      const { data } = await axios.post('/auth/register', {
+        username: adding.username.trim(),
+        password: adding.password,
+        role: adding.role,
+        branchScope: adding.role === 'mod' && adding.branch !== 'MAIN' ? adding.branch : null
+      });
+      if (adding.role === 'user' && adding.canManageBooks) await axios.put('/users/' + data.user.id + '/permissions', { canManageBooks: true });
+      toast.success(`Account for ${data.user.username} created. Share the password privately.`);
+      setAdding(null);
+      fetchUsers();
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to update the mod title');
+      toast.error(err.response?.data?.error || 'The account could not be created.');
+    } finally {
+      setSaving(false);
     }
-  };
-  const handleToggleBooks = async targetUser => {
-    try {
-      const updated = !targetUser.canManageBooks;
-      await axios.put('/users/' + targetUser.id + '/permissions', { canManageBooks: updated });
-      toast.success(targetUser.username + ': Book permission ' + (updated ? 'granted' : 'revoked'));
-      setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, canManageBooks: updated } : u));
-    } catch (err) {
-      toast.error(err.response?.data?.error || err.response?.data?.error || 'Failed to update permissions');
-    }
-  };
-  const handleRoleChange = (user, newRole) => {
-    setConfirmModal({
-      title: 'Change Role',
-      message: `Are you sure you want to change ${user.username}'s role to ${newRole}?`,
-      onConfirm: () => executeAction(user.id, {
-        role: newRole
-      }, 'role')
-    });
-  };
-  if (!currentUser || currentUser.role !== 'admin' && currentUser.role !== 'mod') {
-    return <div className="appearance-p-8 appearance-text-center appearance-font-bold appearance-text-red-500">Access Denied: Mods and Admins Only</div>;
   }
-  if (isStaff) return <Navigate to="/" replace />;
+
+  async function saveAccess() {
+    const { user: target, form } = editing;
+    if (form.role === 'mod' && !form.branch) return toast.error('Choose the main mod or a branch.');
+    setSaving(true);
+    try {
+      if (isAdmin && form.role !== target.role) await axios.put(`/users/${target.id}/role`, { role: form.role });
+      const branchScope = form.role === 'mod' && form.branch !== 'MAIN' ? form.branch : null;
+      if (isAdmin && form.role === 'mod' && (target.role !== 'mod' || (target.branchScope || null) !== branchScope))
+        await axios.put('/users/' + target.id + '/branch-scope', { branchScope });
+      if (form.role === 'user' && Boolean(target.canManageBooks) !== form.canManageBooks)
+        await axios.put('/users/' + target.id + '/permissions', { canManageBooks: form.canManageBooks });
+      toast.success(`${target.username}'s access updated`);
+      setEditing(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Access could not be updated.');
+      fetchUsers();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return <div className="manage-users-container">
-      <PageHeading eyebrow="The people you work with" title="Team & access" description="A shared workspace, with the right access for everyone.">
-        <Link to="/logs" className="btn-secondary"><ListOrdered size={16}/>Activity log</Link>
-        <Link to="/register-user" className="btn-primary"><UserPlus size={16} />Add colleague</Link>
-      </PageHeading>
-      <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => u.isActive && !u.isBanned).length} active accounts</span></div>
-      <div className="card overflow-x-auto">
-        {loading ? <p className="text-muted">Loading users database...</p> : <table className="mu-table w-full appearance-text-left">
-            <thead>
-              <tr>
-                <th>Team member</th>
-                <th>Access Level</th>
-                <th>Permissions</th>
-                <th>Account Status</th>
-                <th>Last Active</th>
-                <th>Manage access</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => <tr key={u.id}>
-                  <td>
-                    <div className="flex items-center gap-3">
-                      {u.avatar ? <img src={u.avatar} alt="Avatar" className="w-10 h-10 appearance-rounded-full object-cover appearance-border appearance-border-gray-200" /> : <div className="w-10 h-10 appearance-rounded-full appearance-bg-blue-100 flex items-center justify-center appearance-text-blue-600 appearance-font-bold">
-                          {u.username.charAt(0).toUpperCase()}
-                        </div>}
-                      <div>
-                        <div className="appearance-font-semibold">{u.username}</div>
-                        <div className="appearance-text-xs text-muted">{u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}` : 'No Name Set'}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={"badge badge-" + u.role}>{u.role}</span>
-                    {u.role === 'mod' && (currentUser.role === 'admin' ? <div className="mod-title-select"><CustomFilterDropdown allowClear={false} value={u.branchScope || 'MAIN'} onChange={val => handleModTitle(u, val)} options={MOD_TITLE_OPTIONS} placeholder="Mod title" /></div> : <span className={`badge mod-title-badge${u.branchScope ? ' is-branch' : ''}`}>{modTitle(u)}</span>)}
-                  </td>
-                  <td>
-                    {u.role === 'admin' || u.role === 'mod' ? (
-                      <span className="permission-badge-role">Full (by role)</span>
-                    ) : (
-                      <label className="permission-toggle-label" title="Allow this accountant to mark book payments as paid or exempt">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(u.canManageBooks)}
-                          disabled={!canModify(u)}
-                          onChange={() => handleToggleBooks(u)}
-                        />
-                        <span>Books</span>
-                      </label>
-                    )}
-                  </td>
-                  <td>
-                    <div className="flex gap-2 items-center flex-wrap">
-                      {u.isActive ? <span className="badge badge-success">Active</span> : <span className="badge badge-error">Deactivated</span>}
-                      {u.isBanned && <span className="badge badge-error">Banned</span>}
-                      {u.isLocked && <span className="badge badge-error manageusers-presentation-16">Rate Locked</span>}
-                    </div>
-                  </td>
-                  <td>
-                    <span className="appearance-text-xs text-muted">
-                      {u.lastLogin ? new Date(u.lastLogin).toLocaleDateString('en-GB', { year:'2-digit',
-                    day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }) : 'Never'}
-                    </span>
-                  </td>
-                  <td>
-                    {u.username === 'main-admin' ? <span className="badge badge-admin">Root Admin</span> : <div className="flex items-center gap-2 flex-wrap">
-                        {u.isLocked && canUnlock(u) && <button onClick={() => handleUnlock(u)} className="btn-sm btn-outline appearance-text-amber-600 appearance-border-amber-300 appearance-hover-bg-amber-50" title="Unlock rate-limited account">
-                            Unlock
-                          </button>}
-                        {canModify(u) ? <>
-                            <button onClick={() => handleStatusToggle(u, 'active')} className="btn-sm btn-outline">
-                              {u.isActive ? 'Deactivate' : 'Reactivate'}
-                            </button>
-                            <button onClick={() => handleStatusToggle(u, 'ban')} className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`}>
-                              {u.isBanned ? 'Unban' : 'Ban'}
-                            </button>
+    <PageHeading eyebrow="The people you work with" title="Team & access" description="Everyone in the workspace, and what they can do.">
+      <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>
+      <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', canManageBooks: false })}><UserPlus size={16} />Add person</button>
+    </PageHeading>
+    <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => u.isActive && !u.isBanned).length} active accounts</span></div>
+    <div className="card overflow-x-auto">
+      {loading ? <p className="text-muted">Loading the team…</p> : <table className="mu-table team-table w-full">
+        <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Last active</th><th aria-label="Actions" /></tr></thead>
+        <tbody>
+          {users.map(u => <tr key={u.id}>
+            <td><div className="team-person">{u.avatar ? <img src={u.avatar} alt="" /> : <span className="team-avatar">{u.username.charAt(0).toUpperCase()}</span>}<div><strong>{u.username}</strong><small>{u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : 'No name set'}</small></div></div></td>
+            <td><span className={`team-role team-role-${u.role}${u.branchScope ? ' is-branch' : ''}`}>{roleLabel(u)}</span><small className="team-access">{accessSummary(u)}</small></td>
+            <td><div className="team-status">{u.isBanned ? <span className="badge badge-error">Banned</span> : u.isActive ? <span className="badge badge-success">Active</span> : <span className="badge badge-error">Deactivated</span>}{u.isLocked && <span className="badge badge-warning">Locked (too many sign-in attempts)</span>}</div></td>
+            <td className="team-last">{lastActive(u.lastLogin)}</td>
+            <td>{u.username === 'main-admin' ? <span className="team-root"><ShieldCheck size={15} />Root admin</span> : <div className="team-actions">
+              {u.isLocked && canModify(u) && <button className="btn-sm btn-outline" onClick={() => handleUnlock(u)}>Unlock</button>}
+              {canModify(u) ? <>
+                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', canManageBooks: Boolean(u.canManageBooks) } })}><Pencil size={13} />Edit access</button>
+                <button className="btn-sm btn-outline" onClick={() => handleStatusToggle(u, 'active')}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>
+                <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
+              </> : <span className="text-muted team-managed">Managed by an admin</span>}
+            </div>}</td>
+          </tr>)}
+        </tbody>
+      </table>}
+    </div>
 
-                            {/* Role Demote/Promote (Admin Only) */}
-                            {currentUser.role === 'admin' && <div className="w-[110px] appearance-ml-2 inline-block">
-                                <CustomFilterDropdown allowClear={false} value={u.role} onChange={val => handleRoleChange(u, val)} placeholder="Select Role" options={[{
-                      value: 'user',
-                      label: 'User'
-                    }, {
-                      value: 'mod',
-                      label: 'Mod'
-                    }, {
-                      value: 'admin',
-                      label: 'Admin'
-                    }]} />
-                              </div>}
-                          </> : !u.isLocked && <span className="appearance-text-xs text-muted appearance-italic">Managed by an administrator</span>}
-                      </div>}
-                  </td>
-                </tr>)}
-            </tbody>
-          </table>}
+    <AnimatePresence>{adding && <Dialog title="Add person" onClose={saving ? () => {} : () => setAdding(null)}>
+      <form className="modal-content card team-dialog" onSubmit={createAccount}>
+        <h3><UserPlus size={18} />Add a person</h3>
+        <p>Set a username and a first password, then share them privately. They can change the password in My profile.</p>
+        <label htmlFor="new-username">Username</label>
+        <input id="new-username" className="input-field" required autoComplete="off" placeholder="e.g. sarah" value={adding.username} onChange={e => setAdding(f => ({ ...f, username: e.target.value }))} />
+        <label htmlFor="initial-password">First password</label>
+        <input id="initial-password" className="input-field" required type="password" autoComplete="new-password" value={adding.password} onChange={e => setAdding(f => ({ ...f, password: e.target.value }))} />
+        <AccessFields form={adding} setForm={setAdding} adminView={isAdmin} />
+        <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setAdding(null)}>Cancel</button><button className="btn-primary" disabled={saving}><UserPlus size={16} />{saving ? 'Creating…' : 'Create account'}</button></div>
+      </form>
+    </Dialog>}</AnimatePresence>
+
+    <AnimatePresence>{editing && <Dialog title="Edit access" onClose={saving ? () => {} : () => setEditing(null)}>
+      <div className="modal-content card team-dialog">
+        <h3><Pencil size={17} />{editing.user.username}</h3>
+        <p>Now: {roleLabel(editing.user)} · {accessSummary(editing.user)}</p>
+        <AccessFields form={editing.form} setForm={update => setEditing(e => ({ ...e, form: typeof update === 'function' ? update(e.form) : update }))} adminView={isAdmin} />
+        <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setEditing(null)}>Cancel</button><button type="button" className="btn-primary" disabled={saving} onClick={saveAccess}>{saving ? 'Saving…' : 'Save access'}</button></div>
       </div>
+    </Dialog>}</AnimatePresence>
 
-      {/* Confirmation Modal */}
-      <AnimatePresence>{confirmModal && <Dialog title="Confirm account change" onClose={() => setConfirmModal(null)}>
-          <div className="modal-content card max-w-sm w-full relative">
-            <h3 className="appearance-text-lg appearance-font-bold appearance-mb-2">{confirmModal.title}</h3>
-            <p className="appearance-text-sm text-muted appearance-mb-6">{confirmModal.message}</p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setConfirmModal(null)} className="btn-secondary">Cancel</button>
-              <button onClick={confirmModal.onConfirm} className="btn-primary">Confirm Action</button>
-            </div>
-          </div>
-        </Dialog>}</AnimatePresence>
-
-
-    </div>;
+    <AnimatePresence>{confirmModal && <Dialog title="Confirm account change" onClose={() => setConfirmModal(null)}>
+      <div className="modal-content card max-w-sm w-full relative">
+        <h3 className="team-confirm-title">{confirmModal.title}</h3>
+        <p className="text-muted">{confirmModal.message}</p>
+        <div className="flex justify-end gap-3"><button onClick={() => setConfirmModal(null)} className="btn-secondary">Cancel</button><button onClick={confirmModal.onConfirm} className="btn-primary">Confirm</button></div>
+      </div>
+    </Dialog>}</AnimatePresence>
+  </div>;
 };
 export default ManageUsers;

@@ -1,4 +1,4 @@
-import { canSeePayroll } from '../utils/access.js';
+import { canSeePayroll, branchScopeOf, cycleBranchWhere } from '../utils/access.js';
 import { privateLabel } from '../utils/privateCourses.js';
 import prisma from '../db/prisma.js';
 import { allowedSheets, buildExport, managerRole } from '../utils/exportData.js';
@@ -10,11 +10,10 @@ const validDate = value =>
 export const exportOptions = async (req, res, next) => {
   try {
     const courses = await prisma.cycle.findMany({
-      where: managerRole(req.user)
-        ? {}
-        : {
-            archivedAt: null
-          },
+      where: {
+        ...(managerRole(req.user) ? {} : { archivedAt: null }),
+        ...cycleBranchWhere(req.user)
+      },
       select: {
         id: true,
         parentCourseId: true,
@@ -64,6 +63,12 @@ export const prepareExport = async (req, res, next) => {
       return res.status(400).json({
         error: 'Select at least one worksheet.'
       });
+    // Branch mods export their own branch only.
+    if (branchScopeOf(req.user)) {
+      if (filters.branch && filters.branch !== branchScopeOf(req.user))
+        return res.status(403).json({ error: 'You can only export your own branch.' });
+      filters.branch = branchScopeOf(req.user);
+    }
     const allowed = allowedSheets(req.user);
     for (const [sheet, columns] of Object.entries(sheets)) {
       if (!Object.hasOwn(allowed, sheet))
@@ -115,16 +120,20 @@ export const prepareExport = async (req, res, next) => {
     if (filters.salaryMonth !== undefined) {
       if (!canSeePayroll(req.user))
         return res.status(403).json({ error: 'Only admins and the main mod can export salary reports.' });
+      // A month (YYYY-MM), a year (YYYY) or a range of months (YYYY-MM:YYYY-MM).
+      const period = String(filters.salaryMonth);
       if (
-        !/^\d{4}-(0[1-9]|1[0-2])$/.test(filters.salaryMonth) ||
-        Number(filters.salaryMonth.slice(0, 4)) < 1 ||
-        Number(filters.salaryMonth.slice(0, 4)) > 9999 ||
+        !/^(\d{4}|\d{4}-(0[1-9]|1[0-2])|\d{4}-(0[1-9]|1[0-2]):\d{4}-(0[1-9]|1[0-2]))$/.test(period) ||
+        Number(period.slice(0, 4)) < 1 ||
+        (period.includes(':') && period.slice(0, 7) > period.slice(8)) ||
         Object.keys(sheets).length !== 1 ||
         !sheets.payroll
       )
-        return res.status(400).json({ error: 'Choose a valid month and the salary worksheet only.' });
-      filters.from = filters.salaryMonth + '-01';
-      const lastDay = new Date(filters.from + 'T00:00:00Z');
+        return res.status(400).json({ error: 'Choose a valid month, range or year and the salary worksheet only.' });
+      const first = period.length === 4 ? period + '-01' : period.slice(0, 7);
+      const last = period.length === 4 ? period + '-12' : period.includes(':') ? period.slice(8) : period;
+      filters.from = first + '-01';
+      const lastDay = new Date(last + '-01T00:00:00Z');
       lastDay.setUTCMonth(lastDay.getUTCMonth() + 1);
       lastDay.setUTCDate(0);
       filters.to = lastDay.toISOString().slice(0, 10);

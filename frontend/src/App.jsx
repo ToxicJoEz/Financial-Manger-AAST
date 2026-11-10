@@ -1,4 +1,4 @@
-import { canSeePayroll } from './utils/access';
+import { canSeePayroll, canCheckBranchMoney } from './utils/access';
 import MoneyChecks from './pages/MoneyChecks';
 import ActivityLog from './pages/ActivityLog';
 import FinanceLayout from './layouts/FinanceLayout';
@@ -12,7 +12,6 @@ import axios from 'axios';
 import SubCourseCatalog from './pages/SubCourseCatalog';
 import Login from './pages/Login';
 import Home from './pages/Home';
-import RegisterUser from './pages/RegisterUser';
 import NotFound from './pages/NotFound';
 import SSOHandler from './pages/SSOHandler';
 import DashboardLayout from './layouts/DashboardLayout';
@@ -81,6 +80,11 @@ const PayrollRoute = () => {
   const { user } = useContext(AuthContext);
   return canSeePayroll(user) ? <Finances /> : <Navigate to="/finances/income" replace />;
 };
+// Branch money checks are for admins and the main mod only.
+const ChecksRoute = () => {
+  const { user } = useContext(AuthContext);
+  return canCheckBranchMoney(user) ? <MoneyChecks /> : <Navigate to="/finances/income" replace />;
+};
 const App = () => {
   return <WorkspaceMotion><AuthProvider>
       <Toaster position="top-right" toastOptions={{
@@ -106,7 +110,7 @@ const App = () => {
                 <DashboardLayout />
               </ProtectedRoute>}>
             <Route path="/" element={<Home />} />
-            <Route path="/register-user" element={<RegisterUser />} />
+            <Route path="/register-user" element={<Navigate to="/users" replace state={{ add: true }} />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/users" element={<ManageUsers />} />
             <Route path="/logs" element={<ActivityLog />} />
@@ -121,7 +125,7 @@ const App = () => {
               <Route index element={<FinanceHome />} />
               <Route path="income" element={<Income />} />
               <Route path="payroll" element={<PayrollRoute />} />
-              <Route path="checks" element={<MoneyChecks />} />
+              <Route path="checks" element={<ChecksRoute />} />
             </Route>
           </Route>
 

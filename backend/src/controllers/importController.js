@@ -9,7 +9,7 @@ import { createHmac } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
-import { canSeePayroll } from '../utils/access.js';
+import { canSeePayroll, branchScopeOf } from '../utils/access.js';
 import { parseStudentsWorkbook, importError, normalizedName } from '../utils/importWorkbook.js';
 import { profileFields } from '../utils/studentProfile.js';
 import { appendPayment } from '../utils/paymentLedger.js';
@@ -212,6 +212,8 @@ export const commitImport = atomic(
         throw importError(`${scope.prefix} ${number} already exists, including archived cycles.`, 409);
       const branch = req.body.branch;
       if (!EMPLOYEE_BRANCHES.includes(branch)) throw importError('Choose a valid branch.');
+      if (branchScopeOf(req.user) && branch !== branchScopeOf(req.user))
+        throw importError(`You can only import cycles into ${branchScopeOf(req.user)}.`, 403);
       const fee = Number(moneyMinor(req.body.courseFee, 'Standard tuition fee')) / 100;
       const hours =
         req.body.totalHours === '' || req.body.totalHours == null

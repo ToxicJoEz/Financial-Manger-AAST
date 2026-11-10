@@ -50,6 +50,52 @@ try {
   assert('payroll' in ok(await req('/finances/overview?year=2026', 'GET', undefined, main)));
   const cycles = ok(await req('/cycles?pageSize=100', 'GET', undefined, fouad));
   assert(cycles.rows.length && cycles.counts.payrollDue === undefined);
+  // A branch mod only sees and changes cycles in their own branch.
+  assert(cycles.rows.every(c => c.branch === 'FOUAD'));
+  assert.equal((await req('/cycles/cycle-ket-12', 'GET', undefined, fouad)).status, 404);
+  assert.equal((await req('/cycles/cycle-ket-12', 'PUT', { details: 'x' }, fouad)).status, 404);
+  assert.equal((await req('/cycles/cycle-ket-13', 'PUT', { branch: 'MIAMI' }, fouad)).status, 403);
+  assert.equal((await req('/cycles/bulk-archive', 'POST', { ids: ['cycle-ket-12'] }, fouad)).status, 403);
+  assert.equal(
+    (
+      await req(
+        '/cycles',
+        'POST',
+        { parentCourseId: 'course-ket', cycleNumber: 7002, branch: 'MIAMI', courseFee: 1000 },
+        fouad
+      )
+    ).status,
+    403
+  );
+  const catalog = ok(await req('/courses', 'GET', undefined, fouad));
+  assert(catalog.every(c => c.branches.every(b => b === 'FOUAD')));
+  const fouadIncome = ok(await req('/finances/income?year=2026', 'GET', undefined, fouad));
+  assert(fouadIncome.cycles.every(c => c.branch === 'FOUAD'));
+  assert.equal(fouadIncome.months.length, 12);
+  // Income and salary reports take a month, a range of months or a year.
+  const range = ok(await req('/finances/income?from=2026-09&to=2026-12', 'GET', undefined, main));
+  assert.equal(range.months.length, 4);
+  assert.equal(
+    range.summary.income,
+    Math.round(range.months.reduce((sum, m) => sum + m.summary.income, 0) * 100) / 100
+  );
+  assert.equal((await req('/finances/income?from=2026-12&to=2026-01', 'GET', undefined, main)).status, 400);
+  const yearPay = ok(await req('/finances?month=2026', 'GET', undefined, main)).monthly;
+  const rangePay = ok(await req('/finances?month=2026-01:2026-12', 'GET', undefined, main)).monthly;
+  assert.equal(rangePay.totalPaid, yearPay.totalPaid);
+  assert.equal((await req('/finances?month=2026-12:2026-01', 'GET', undefined, main)).status, 400);
+  const sharedStudent = await prisma.enrollment.findFirst({
+    where: { course: { branch: 'MIAMI' } },
+    select: { studentId: true }
+  });
+  const studentView = ok(await req('/students/' + sharedStudent.studentId, 'GET', undefined, fouad));
+  assert(studentView.enrollments.every(e => e.course.branch === 'FOUAD'));
+  assert.equal((await req('/students/' + sharedStudent.studentId, 'DELETE', {}, fouad)).status, 403);
+  assert(
+    ok(await req('/employees/demo-instructor-1/details', 'GET', undefined, fouad)).courseAssignments.every(
+      a => a.course.branch === 'FOUAD'
+    )
+  );
   assert(!JSON.stringify(cycles).includes('hourlyRate'));
   assert(!JSON.stringify(cycles).includes('payrollEarnings'));
   assert(JSON.stringify(ok(await req('/cycles?pageSize=100', 'GET', undefined, main)).rows).includes('hourlyRate'));
@@ -102,8 +148,9 @@ try {
     )
   );
 
-  // Fouad money: everyone with management access can see it; only admins and the main mod mark it.
-  let checks = ok(await req('/finances/checks?branch=FOUAD', 'GET', undefined, fouad));
+  // Branch money is checked by admins and the main mod only; branch mods have no checks page.
+  assert.equal((await req('/finances/checks?branch=FOUAD', 'GET', undefined, fouad)).status, 403);
+  let checks = ok(await req('/finances/checks?branch=FOUAD', 'GET', undefined, main));
   const tuition = checks.items.find(i => i.kind === 'PAYMENT' && i.receiptNumber === 'F-100');
   const book = checks.items.find(i => i.kind === 'BOOK' && i.cycleId === cycle.id);
   assert(tuition && book);
@@ -115,6 +162,7 @@ try {
   );
   assert(checks.items.every(i => !['MIAMI', 'SMART'].includes(i.branch)));
   assert.equal((await req('/finances/checks?branch=MIAMI')).status, 400);
+  assert.equal(ok(await req('/finances/checks?branch=SMART&summary=1')).branch, 'SMART');
   const pick = [
     { kind: 'PAYMENT', id: tuition.id },
     { kind: 'BOOK', id: book.id }

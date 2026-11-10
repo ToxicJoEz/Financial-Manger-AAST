@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
 import { hidePayroll } from '../utils/courseView.js';
-import { canSeePayroll } from '../utils/access.js';
+import { canSeePayroll, branchScopeOf } from '../utils/access.js';
 import prisma, { atomic, Prisma } from '../db/prisma.js';
 import { logAction } from '../utils/logger.js';
 
@@ -197,10 +197,13 @@ export const getEmployeeDirectory = async (req, res) => {
       sort = String(req.query.sort || 'name');
     if (!['all', 'active', 'inactive', 'archived'].includes(status) || !['name', 'employeeId', 'active'].includes(sort))
       return res.status(400).json({ error: 'Invalid directory filter.' });
+    // Branch mods see every employee, but the cycle counts cover their own branch only.
+    const scope = branchScopeOf(req.user);
+    const inBranch = scope ? Prisma.sql`AND c.branch = ${scope}` : Prisma.empty;
     const directory = Prisma.sql`WITH directory AS (
    SELECT i.id,i.name,i."employeeId",i.mobile,i.branches,i."archivedAt",
-    COUNT(c.id) FILTER (WHERE NOT c."isFinished" AND c."archivedAt" IS NULL AND p."archivedAt" IS NULL)::int AS "activeCount",
-    COUNT(c.id) FILTER (WHERE c."isFinished")::int AS "completedCount"
+    COUNT(c.id) FILTER (WHERE NOT c."isFinished" AND c."archivedAt" IS NULL AND p."archivedAt" IS NULL ${inBranch})::int AS "activeCount",
+    COUNT(c.id) FILTER (WHERE c."isFinished" ${inBranch})::int AS "completedCount"
    FROM "Instructor" i LEFT JOIN "CourseInstructor" a ON a."instructorId"=i.id
    LEFT JOIN "Cycle" c ON c.id=a."courseId" LEFT JOIN "Course" p ON p.id=c."parentCourseId"
    WHERE (${status === 'archived'} = (i."archivedAt" IS NOT NULL)) AND (${search}='' OR strpos(lower(i.name),lower(${search}))>0 OR strpos(lower(COALESCE(i."employeeId",'')),lower(${search}))>0 OR strpos(COALESCE(i.mobile,''),${search})>0)
@@ -243,7 +246,9 @@ export const getEmployeeDetails = async (req, res) => {
         mobile: true,
         branches: true,
         archivedAt: true,
+        // Branch mods only see this employee's work in their own branch.
         courseAssignments: {
+          where: branchScopeOf(req.user) ? { course: { branch: branchScopeOf(req.user) } } : {},
           orderBy: { course: { startDate: 'desc' } },
           select: {
             id: true,

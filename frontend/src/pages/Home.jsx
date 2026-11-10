@@ -66,12 +66,12 @@ export default function Home() {
   const attentionCards = [
     payroll && at.pendingApprovals > 0 && { key: 'approvals', tone: 'accent', icon: ClipboardCheck, value: at.pendingApprovals, label: `request${at.pendingApprovals === 1 ? '' : 's'} to review`, to: '/courses/cycles', state: { status: 'pending' } },
     !payroll && at.myPendingRequests > 0 && { key: 'mine', tone: 'accent', icon: Clock3, value: at.myPendingRequests, label: `your request${at.myPendingRequests === 1 ? '' : 's'} awaiting review`, to: '/courses/cycles', state: { status: 'pending' } },
-    at.moneyChecks && (at.moneyChecks.unchecked.count > 0 || at.moneyChecks.changed.count > 0) && { key: 'checks', tone: at.moneyChecks.changed.count ? 'danger' : 'warning', icon: AlertTriangle, value: `${money(at.moneyChecks.unchecked.amount)} EGP`, label: `Fouad money to check (${at.moneyChecks.unchecked.count} records${at.moneyChecks.changed.count ? `, ${at.moneyChecks.changed.count} changed` : ''})`, to: '/finances/checks' },
+    at.moneyChecks && (at.moneyChecks.unchecked.count > 0 || at.moneyChecks.changed.count > 0) && { key: 'checks', tone: at.moneyChecks.changed.count ? 'danger' : 'warning', icon: AlertTriangle, value: `${money(at.moneyChecks.unchecked.amount)} EGP`, label: `branch money to check (${at.moneyChecks.unchecked.count} records${at.moneyChecks.changed.count ? `, ${at.moneyChecks.changed.count} changed` : ''})`, to: '/finances/checks' + (at.moneyChecks.byBranch?.find(b => b.unchecked.count || b.changed.count) ? '?branch=' + at.moneyChecks.byBranch.find(b => b.unchecked.count || b.changed.count).branch : '') },
     payroll && at.processingPayments?.count > 0 && { key: 'processing', tone: 'warning', icon: Wallet, value: `${money(at.processingPayments.amount)} EGP`, label: 'salary waiting for payment confirmation', to: '/finances/payroll' },
     payroll && at.payrollDueCycles > 0 && { key: 'due', tone: 'warning', icon: Wallet, value: at.payrollDueCycles, label: `completed cycle${at.payrollDueCycles === 1 ? '' : 's'} not yet in a payment batch`, to: '/finances/payroll' },
     at.unassignedCycles > 0 && { key: 'unassigned', tone: 'accent', icon: Users, value: at.unassignedCycles, label: `active cycle${at.unassignedCycles === 1 ? '' : 's'} without an employee`, to: '/courses/cycles', state: { status: 'unassigned' } }
   ].filter(Boolean);
-  const paid = finances?.payroll.totalPaid || 0;
+  const paid = finances?.payroll?.totalPaid || 0;
   const dateLabel = new Date().toLocaleDateString('en-GB', {
     day: '2-digit',
     month: '2-digit',
@@ -95,7 +95,7 @@ export default function Home() {
               '--progress': `${ov.total ? Math.round((ov.completed) / ov.total * 100) : 0}%`
             }} aria-label={'Course completion'}><div><strong>{ov.total ? Math.round((ov.completed) / ov.total * 100) : 0}<small>%</small></strong><span>completed</span></div></div>)}
           </div>
-          <div className="balance-legend"><span><i/>{payroll ? "Employees paid" : 'Completed'}<strong>{payroll ? finances?.payroll.instructorsPaid || 0 : ov.total-ov.active}</strong></span><span><i/>{payroll ? 'Cycles paid' : 'Active'}<strong>{payroll ? finances?.payroll.cyclesPaid || 0 : ov.active}</strong></span></div>
+          <div className="balance-legend"><span><i/>{payroll ? "Employees paid" : 'Completed'}<strong>{payroll ? finances?.payroll?.instructorsPaid || 0 : ov.total-ov.active}</strong></span><span><i/>{payroll ? 'Cycles paid' : 'Active'}<strong>{payroll ? finances?.payroll?.cyclesPaid || 0 : ov.active}</strong></span></div>
         </section>
         {payroll && <section className="balance-card year-income-card"><div className="balance-top"><span><Wallet size={17}/>Income snapshot</span><span className="balance-period">{year}</span></div><div className="balance-body"><div><div className="balance-label">Income from cycles starting in {year}</div><div className="balance-amount">{money(finances?.income.total || 0)}<span>EGP</span></div><Link to="/finances/income" className="balance-link">View income<ArrowUpRight size={17}/></Link></div></div><div className="balance-legend"><span><i/>Tuition<strong>{money(finances?.income.tuition || 0)} EGP</strong></span><span><i/>Books<strong>{money(finances?.income.books || 0)} EGP</strong></span></div></section>}
         <Metric tone="blue" icon={BookOpen} label="Active courses" value={String(ov.active).padStart(2, '0')} detail={`${ov.total} courses in your workspace`}><div className="metric-footer"><span className="micro-bar"><i style={{
