@@ -1,5 +1,5 @@
 // The academy's branches: the single backend list. frontend/src/Constants.js must match (checked by test/branches.test.js).
-export const EMPLOYEE_BRANCHES = ['MIAMI', 'FOUAD', 'PORT-SAID', 'ASWAN', 'SMART', 'ONLINE'];
+export const EMPLOYEE_BRANCHES = ['MIAMI', 'FOUAD', 'PORT-SAID', 'ASWAN', 'SMART', 'ONLINE', 'DOKKI'];
 export const employeeName = value =>
   String(value ?? '')
     .normalize('NFC')

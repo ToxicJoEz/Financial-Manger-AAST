@@ -146,7 +146,11 @@ export function suggestEmployeeBranches(value) {
     smart: ['SMART'],
     smartvillage: ['SMART'],
     اونلاين: ['ONLINE'],
-    online: ['ONLINE']
+    online: ['ONLINE'],
+    الدقي: ['DOKKI'],
+    دقي: ['DOKKI'],
+    dokki: ['DOKKI'],
+    doki: ['DOKKI']
   };
   return Object.hasOwn(aliases, text) ? aliases[text] : [];
 }
