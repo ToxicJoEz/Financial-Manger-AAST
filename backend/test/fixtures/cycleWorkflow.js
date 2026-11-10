@@ -325,7 +325,7 @@ try {
   assert.equal(plan.counts.imports, 1);
   const confirmation = { confirm: true, confirmationName: plan.name, version: plan.version };
   assert.equal(
-    (await req('/cycles/' + cycle.id + '/permanent', 'DELETE', { ...confirmation, confirmationName: 'wrong' })).status,
+    (await req('/cycles/' + cycle.id + '/permanent', 'DELETE', { ...confirmation, confirm: false })).status,
     400
   );
   await prisma.cycle.update({ where: { id: cycle.id }, data: { details: 'changed after deletion preview' } });

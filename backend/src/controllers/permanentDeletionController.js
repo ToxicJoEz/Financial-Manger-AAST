@@ -150,8 +150,8 @@ export const permanentlyDelete = kind =>
     async (req, res, next) => {
       try {
         const plan = await deletionPlan(kind, req.params.id);
-        if (req.body?.confirm !== true || req.body?.confirmationName !== plan.record.name)
-          fail('Type the exact name and confirm permanent deletion.');
+        // The dialog's confirmation (no typed name needed).
+        if (req.body?.confirm !== true) fail('Confirm permanent deletion.');
         if (req.body.version !== plan.version)
           fail(
             'These records changed since the deletion preview. Close this dialog and review the latest details.',

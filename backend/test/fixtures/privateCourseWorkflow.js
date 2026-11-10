@@ -224,8 +224,7 @@ try {
   assert.equal(
     (
       await req('/sub-courses/' + empty.id + '/permanent', 'DELETE', {
-        confirm: true,
-        confirmationName: 'X',
+        confirm: false,
         version: deletion.version
       })
     ).status,
