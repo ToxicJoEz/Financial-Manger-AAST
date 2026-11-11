@@ -578,12 +578,12 @@ const Courses = () => {
           <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, employees, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
 
           <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} placeholder="All branches" /></div>
-          <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded px-2 py-1">
+          <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-md px-3 py-2">
             <span>Range:</span>
             <input type="date" aria-label="Start date from" value={dateRangeStart} onChange={e => setDateRangeStart(e.target.value)} className="bg-transparent border-none text-xs" />
             <span>to</span>
             <input type="date" aria-label="Start date to" value={dateRangeEnd} onChange={e => setDateRangeEnd(e.target.value)} className="bg-transparent border-none text-xs" />
-            {(dateRangeStart || dateRangeEnd) && <button type="button" className="text-button text-emerald-700 font-semibold" onClick={selectAllInRange}>Select range</button>}
+            {(dateRangeStart || dateRangeEnd) && <button type="button" className="text-button font-semibold" onClick={selectAllInRange}>Select range</button>}
           </div>
 
           {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}

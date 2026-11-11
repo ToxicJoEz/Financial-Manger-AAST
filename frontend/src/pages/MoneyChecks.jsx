@@ -7,6 +7,8 @@ import { AuthContext } from '../context/AuthContext';
 import { Metric, EmptyState, money } from '../components/WorkspaceUI';
 import DateInput from '../components/DateInput';
 import Dialog from '../components/Dialog';
+import AnimatedNumber from '../components/AnimatedNumber';
+import { CalmRegion } from '../components/WorkspaceMotion';
 import CycleDetailsDialog from '../components/CycleDetailsDialog';
 import { CHECKED_BRANCHES, canCheckBranchMoney, branchName } from '../utils/access';
 import { useSearchParams } from 'react-router-dom';
@@ -50,13 +52,15 @@ export default function MoneyChecks() {
     [saving, setSaving] = useState(false);
   const [viewCycle, setViewCycle] = useState(null);
   const request = useRef(0);
+  // Identifies the list on screen, so it changes (with a transition) only when new records arrive.
+  const [shownKey, setShownKey] = useState('');
   async function load() {
     const id = ++request.current;
     setLoading(true);
     setError('');
     try {
       const { data } = await axios.get('/finances/checks', { params: { branch, status: status || undefined, from: from || undefined, to: to || undefined } });
-      if (id === request.current) setData(data);
+      if (id === request.current) { setData(data); setShownKey(`${branch}:${status}:${from}:${to}`); }
     } catch (e) {
       if (id === request.current) setError(e.response?.data?.error || 'Money checks could not be loaded.');
     } finally {
@@ -95,15 +99,15 @@ export default function MoneyChecks() {
     }
   }
   const summary = data?.summary;
-  return <div className="money-checks">
+  return <div className={`money-checks${loading && data ? ' is-refreshing' : ''}`}>
     <div className="money-checks-intro">
       <div><h2><ClipboardCheck size={20} />Branch money checks</h2><p>Every tuition payment, refund, correction and book payment on a branch's cycles stays unchecked until it is confirmed against the paperwork. Pick a branch, select records and mark them checked.</p></div>
     </div>
     <div className="money-check-branches" role="tablist" aria-label="Branch">{CHECKED_BRANCHES.map(b => <button key={b} type="button" role="tab" aria-selected={b === branch} className={b === branch ? 'active' : ''} style={{ '--branch-color': getBranchColor(b) }} onClick={() => { setParams({ branch: b }); setSelected([]); }}><i aria-hidden="true" />{branchName(b)}{waiting[b] > 0 && <span>{waiting[b]}</span>}</button>)}</div>
     {summary && <div className="metric-grid money-check-metrics">
-      <Metric tone="peach" icon={Clock3} label="Unchecked" value={<><small>EGP</small>{money(summary.unchecked.amount)}</>} detail={`${summary.unchecked.count} records waiting`} />
-      <Metric tone="blue" icon={AlertTriangle} label="Changed after check" value={summary.changed.count} detail="Checked records that later changed" />
-      <Metric tone="teal" icon={CircleCheck} label="Checked" value={<><small>EGP</small>{money(summary.checked.amount)}</>} detail={`${summary.checked.count} records confirmed`} />
+      <Metric tone="peach" icon={Clock3} label="Unchecked" value={<><small>EGP</small><AnimatedNumber value={summary.unchecked.amount} /></>} detail={`${summary.unchecked.count} records waiting`} />
+      <Metric tone="blue" icon={AlertTriangle} label="Changed after check" value={<AnimatedNumber value={summary.changed.count} />} detail="Checked records that later changed" />
+      <Metric tone="teal" icon={CircleCheck} label="Checked" value={<><small>EGP</small><AnimatedNumber value={summary.checked.amount} /></>} detail={`${summary.checked.count} records confirmed`} />
     </div>}
     <div className="panel payroll-controls money-check-controls">
       <div className="payroll-status-tabs">{STATES.map(([value, label]) => <button key={value} type="button" className={status === value ? 'active' : ''} aria-pressed={status === value} onClick={() => setStatus(value)}>{label}</button>)}</div>
@@ -114,7 +118,7 @@ export default function MoneyChecks() {
         {(from || to) && <button type="button" className="text-button" onClick={() => { setFrom(''); setTo(''); }}>Clear dates</button>}
       </div>
     </div>
-    {loading ? <div className="loading-state"><span className="loading-spinner" />Loading {branchLabel} money…</div> : error ? <div className="panel empty-state"><h3>{error}</h3><button className="btn-secondary" onClick={load}>Try again</button></div> : !groups.length ? <div className="panel"><EmptyState icon={CircleCheck} title={status === 'UNCHECKED' ? 'Nothing waiting to be checked' : 'No matching records'} description={status === 'UNCHECKED' ? `All recorded ${branchLabel} money has been checked.` : 'Try another filter or date range.'} /></div> : groups.map(group => {
+    <CalmRegion transitionKey={shownKey} className="money-check-groups">{loading && !data ? <div className="loading-state"><span className="loading-spinner" />Loading {branchLabel} money…</div> : error ? <div className="panel empty-state"><h3>{error}</h3><button className="btn-secondary" onClick={load}>Try again</button></div> : !groups.length ? <div className="panel"><EmptyState icon={CircleCheck} title={status === 'UNCHECKED' ? 'Nothing waiting to be checked' : 'No matching records'} description={status === 'UNCHECKED' ? `All recorded ${branchLabel} money has been checked.` : 'Try another filter or date range.'} /></div> : groups.map(group => {
       const keys = group.items.map(keyOf);
       const total = group.items.reduce((sum, i) => sum + i.amount, 0);
       return <article className="panel money-check-group" key={group.id}>
@@ -132,7 +136,7 @@ export default function MoneyChecks() {
           </tr>)}
         </tbody></table></div>
       </article>;
-    })}
+    })}</CalmRegion>
     {canMark && chosen.length > 0 && <div className="payroll-selection"><div><strong>{chosen.length} records selected</strong><span>{money(chosen.reduce((sum, i) => sum + i.amount, 0))} EGP</span></div><button className="text-button" onClick={() => setSelected([])}>Clear</button>{chosen.some(i => i.state !== 'UNCHECKED') && <button className="btn-secondary management-danger" onClick={() => setDialog({ mode: 'uncheck', items: chosen.filter(i => i.state !== 'UNCHECKED') })}>Mark as unchecked</button>}{chosen.some(i => i.state !== 'CHECKED') && <button className="btn-primary" onClick={() => setDialog({ mode: 'check', items: chosen.filter(i => i.state !== 'CHECKED') })}><CircleCheck size={16} />Mark as checked</button>}</div>}
     <AnimatePresence>{viewCycle && <CycleDetailsDialog cycleId={viewCycle} onClose={() => setViewCycle(null)} />}</AnimatePresence>
     <AnimatePresence>{dialog && <Dialog title={dialog.mode === 'check' ? 'Mark as checked' : 'Mark as unchecked'} onClose={saving ? () => {} : () => setDialog(null)}><div className="modal-content card enrollment-dialog">

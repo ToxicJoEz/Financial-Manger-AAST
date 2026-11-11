@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react';
 import { AnimatePresence, LazyMotion, MotionConfig, domAnimation, m, useIsPresent, useReducedMotion } from 'framer-motion';
 
 const ease = [0.25, 0.1, 0.25, 1];
@@ -34,6 +35,31 @@ export function MotionRegion({ transitionKey, children, className }) {
     {children}
     </MotionSurface>
   </AnimatePresence>;
+}
+
+// For content that changes in place (a new period, tab or filter): a slow cross-fade with no sliding.
+// The area keeps its height while the old content leaves, so nothing below jumps up and back down.
+export function CalmRegion({ transitionKey, children, className }) {
+  const reduced = useReducedMotion();
+  const holder = useRef(null);
+  const first = useRef(true);
+  useLayoutEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (holder.current && !reduced) holder.current.style.minHeight = holder.current.offsetHeight + 'px';
+  }, [transitionKey, reduced]);
+  const release = target => { if (holder.current && target?.opacity === 1) holder.current.style.minHeight = ''; };
+  return <div ref={holder} className="calm-region">
+    <AnimatePresence mode="wait" initial={false}>
+      <m.div key={transitionKey} className={className}
+        initial={reduced ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={reduced ? undefined : { opacity: 0, transition: { duration: 0.3, ease } }}
+        transition={{ duration: reduced ? 0 : 0.65, ease }}
+        onAnimationComplete={release}>
+        {children}
+      </m.div>
+    </AnimatePresence>
+  </div>;
 }
 
 export function MotionTab({ active, children, onClick }) {

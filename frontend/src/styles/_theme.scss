@@ -258,3 +258,86 @@ button, input, select, textarea { font-family: inherit; }
     border: 1px solid color-mix(in srgb, var(--branch-color) 35%, #fff); background: color-mix(in srgb, var(--branch-color) 8%, #fff); color: color-mix(in srgb, var(--branch-color) 80%, #000);
     &.active { background: var(--branch-color); border-color: var(--branch-color); color: #fff; } } }
 .team-dialog small.muted { font-size: 12px; }
+
+// ---- Consistency pass (visual audit) ----------------------------------------------------------------
+// Period changes on finance pages: content stays in place and dims briefly while the new numbers load.
+.salary-month-content, .income-month-content, .money-checks .money-check-group, .money-checks .money-check-metrics { transition: opacity 0.2s ease; }
+.salary-month-content.is-refreshing, .income-month-content.is-refreshing,
+.money-checks.is-refreshing .money-check-group, .money-checks.is-refreshing .money-check-metrics { opacity: 0.55; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .salary-month-content, .income-month-content, .money-checks .money-check-group { transition: none; } }
+
+// Search boxes: one corner size and height everywhere (they were 6px, 10px and 14px).
+.search-field, .students-search { border-radius: var(--radius-md) !important; border-color: var(--line) !important; }
+
+// Tags: branch chips use the same corners as status badges (they were pills).
+.branch-chip, .cycle-card-branch.branch-chip { border-radius: var(--radius-sm) !important; }
+
+// Text that matters is never below 11px: branch tags, names and amounts on cards and tables.
+.catalog-branch-list span, .branch-label, .payroll-branch, .income-branch-badge, .student-registration { font-size: 11px !important; }
+.tuition-meter-amount { font-size: 12px !important; strong { font-size: 12px !important; } }
+.tuition-meter-label { font-size: 11px !important; }
+.cycle-card-names, .cycle-card-names * { font-size: 12px !important; }
+.students-table td small, .student-details small { font-size: 11.5px !important; }
+.income-table td small { font-size: 11px; }
+
+// Students: same card and tints as the rest of the app (leftover green tints removed).
+.students-card { border-radius: var(--radius-lg) !important; border-color: var(--line) !important; box-shadow: var(--shadow-card) !important; }
+.student-avatar { background-color: var(--accent-soft) !important; color: var(--accent-strong) !important; }
+.student-reg-badge { background-color: var(--accent-soft) !important; color: #33437a !important; border-color: var(--accent-line) !important; border-radius: var(--radius-sm) !important; }
+
+// Umbrella cards: the book-price line lines up with the rest of the card text.
+.catalog-book-price { padding: 0 !important; margin: 0 0 10px; }
+
+// Payroll rows: the branch is a small tag, not a bar-edged label.
+.payroll-branch { border-left: 0 !important; padding: 3px 8px !important; border-radius: var(--radius-sm) !important; font-weight: 800 !important; background: color-mix(in srgb, var(--branch-color) 14%, #fff) !important; color: color-mix(in srgb, var(--branch-color) 80%, #000) !important; }
+// The narrow tick-box column never shows spilled header text.
+th.select-column { font-size: 0 !important; overflow: hidden; }
+
+// Checks: three summary cards fill the row (no empty fourth slot).
+.money-check-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+@media (max-width: 760px) { .money-check-metrics { grid-template-columns: 1fr !important; } }
+
+// Payroll header: title on the left; period picker and the three export buttons stay on one tidy row each.
+.payroll-header-actions { display: grid !important; justify-items: end; gap: 10px !important; }
+.payroll-header-actions .payroll-exports { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+@media (max-width: 760px) { .payroll-header-actions { justify-items: start; } .payroll-header-actions .payroll-exports { justify-content: flex-start; } }
+
+// Income by month: month rows read as headings, and empty months stay compact.
+.income-table .income-month-row th { text-transform: none; letter-spacing: 0; font-size: 14px; white-space: nowrap; small { display: inline; margin: 0 0 0 10px; text-transform: none; letter-spacing: 0; } }
+.income-table .income-month-row.is-empty th, .income-table .income-month-row.is-empty td { background: transparent; border-top: 1px solid var(--line); padding-top: 9px; padding-bottom: 9px; font-weight: 600; color: var(--muted); font-size: 13px; }
+
+// Date range box in the cycles toolbar matches the other controls.
+.filter-toolbar input[type='date'] { font-family: inherit; color: var(--ink); }
+// Income table: cycle names get room to stay on one line.
+.income-table td:first-child { min-width: 230px; }
+.income-table .income-cycle-link { white-space: nowrap; }
+
+// ---- Graceful period changes ------------------------------------------------------------------------
+// The dim only shows when loading takes a moment; figures count to their new values and rows cross-fade.
+.salary-month-content, .income-month-content { transition: opacity 0.45s ease 0.2s; }
+.salary-month-content.is-refreshing, .income-month-content.is-refreshing,
+.money-checks.is-refreshing .money-check-group, .money-checks.is-refreshing .money-check-metrics { opacity: 0.7; }
+.animated-number { font-variant-numeric: tabular-nums; }
+.money-check-groups { display: flex; flex-direction: column; gap: 18px; }
+
+// Period picker: the Month / Range / Year buttons sit at a fixed spot on the right. The inputs share one
+// fixed-size area beside them and cross-fade slowly in place, so nothing slides or changes size.
+.period-picker { flex-wrap: nowrap; justify-content: flex-end; gap: 10px; }
+.period-controls { display: grid; justify-items: end; align-items: center; }
+.period-slot {
+  grid-area: 1 / 1; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  opacity: 0; visibility: hidden;
+  transition: opacity 0.4s ease, visibility 0s linear 0.4s;
+  &.on { opacity: 1; visibility: visible; transition: opacity 0.55s ease 0.25s, visibility 0s; }
+  .month-control { flex-shrink: 0; }
+  input[type='month'] { width: 138px; }
+  select { width: 64px; }
+}
+// Small screens: no fixed area; only the active control takes space.
+@media (max-width: 1180px) {
+  .period-picker { flex-wrap: wrap; }
+  .period-controls { display: block; }
+  .period-slot { display: none; flex-wrap: wrap; &.on { display: flex; } }
+}
+@media (prefers-reduced-motion: reduce) { .period-slot, .period-slot.on { transition: none; } }
+.payroll-header-actions { min-width: 0; }
