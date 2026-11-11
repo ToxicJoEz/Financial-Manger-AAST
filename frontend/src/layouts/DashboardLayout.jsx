@@ -1,4 +1,4 @@
-import { canSeePayroll } from '../utils/access';
+import { canSeePayroll, branchScopeOf } from '../utils/access';
 import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
 import { RequestReviewContext } from '../context/RequestReviewContext';
 import { useContext, useState, useEffect, useRef } from 'react';
@@ -37,7 +37,8 @@ export default function DashboardLayout() {
   useEffect(() => {
     let alive = true;
     const fetchNotifications = () => {
-      axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
+      // Branch mods get no notifications; the main mod handles them.
+      if (!branchScopeOf(user)) axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
       axios.get('/attention').then(({ data }) => { if (alive) setAttention(data); }).catch(() => {});
     };
     fetchNotifications();
@@ -114,7 +115,7 @@ export default function DashboardLayout() {
       <div className="nav-section-label">Workspace</div>
       <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{navCount(to) > 0 ? <span className="nav-count" aria-label={`${navCount(to)} need attention`}>{navCount(to) > 99 ? '99+' : navCount(to)}</span> : to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
       <div className="nav-section-label administration-label">Settings</div>
-      <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{isManager&&<NavLink to="/logs" className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
+      <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{canSeePayroll(user)&&<NavLink to="/logs" className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
       <div className="sidebar-bottom">
         <div className="account-row"><Link to="/profile" className="account-link"><span className="avatar">{initials(user.firstName || user.username)}</span><span className="account-name">{user.firstName || user.username}<small>{user.role === 'mod' ? 'Moderator' : user.role === 'admin' ? 'Administrator' : 'Accountant'}</small></span></Link></div><button className="sidebar-logout" onClick={async () => { try { await logout(); } catch { toast.error('The sign-out activity could not be recorded.'); } finally { navigate('/login'); } }}><LogOut size={18} /><span>Sign out</span></button>
       </div>
@@ -124,7 +125,7 @@ export default function DashboardLayout() {
         <div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={14} /><strong>{pageNames[location.pathname] || (location.pathname.startsWith('/courses/') ? 'Cycles' : 'Finance')}</strong></div>
         <form className="global-search" onSubmit={searchCourses}><Search size={17} /><input ref={searchRef} aria-label="Search workspace courses" placeholder="Find a cycle…" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd></form>
         <div className="topbar-right"><div className="notification-anchor" ref={notificationRef}>
-          <button className={`icon-button notification-trigger ${showNotifications ? 'selected' : ''}`} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={showNotifications} onClick={() => setShowNotifications(!showNotifications)}><Bell size={20} strokeWidth={1.8} />{unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}</button>
+          {!branchScopeOf(user) && <button className={`icon-button notification-trigger ${showNotifications ? 'selected' : ''}`} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={showNotifications} onClick={() => setShowNotifications(!showNotifications)}><Bell size={20} strokeWidth={1.8} />{unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}</button>}
           <AnimatePresence>{showNotifications && <MotionSurface key="notifications" exit={{ opacity: 0, y: -3 }} className="notification-panel" aria-label="Notifications"><div className="panel-heading"><h3>Your updates {unread > 0 && <span className="count-chip">{unread}</span>}</h3><button className="icon-button" aria-label="Close notifications" onClick={() => setShowNotifications(false)}><X size={17} /></button></div>{unread > 0 && <button className="text-button mark-read" onClick={async () => { try { await axios.put('/notifications/read-all'); setUnreadTotal(0); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))); } catch { toast.error('Could not update notifications'); } }}><Check size={15} />Mark all as read</button>}<div className="notification-list">{notifications.length ? notifications.slice(0, 5).map(n => <button key={n.id} className={`notification-item ${!n.isRead ? 'unread' : ''}`} onClick={() => openNotification(n)}><strong>{n.title}</strong><p>{plainText(n.message)}</p><small>{n.isResolved ? `Resolved by ${n.resolvedBy}` : new Date(n.createdAt).toLocaleDateString('en-GB', { year:'2-digit', day: '2-digit', month: '2-digit' })}</small></button>) : <div className="empty-state"><span className="empty-icon"><Bell size={28} /></span><h3>You're all caught up</h3><p>New assignment updates will land here.</p></div>}</div><Link className="notification-view-all" to="/notifications" onClick={() => setShowNotifications(false)}>View all notifications<ChevronRight size={16} /></Link></MotionSurface>}</AnimatePresence>
         </div><Link className="top-avatar" to="/profile" aria-label="My profile">{initials(user.firstName || user.username)}</Link></div>
       </header>

@@ -1,3 +1,4 @@
+import { canSeePayroll } from '../utils/access';
 import DateInput from '../components/DateInput';
 import {useContext,useEffect,useState} from 'react';
 import {Navigate} from 'react-router-dom';
@@ -26,7 +27,7 @@ function ActivityDetails({id,onClose}){
  </div></Dialog>;
 }
 export default function ActivityLog(){
- const {user}=useContext(AuthContext),manager=['admin','mod'].includes(user.role);
+ const {user}=useContext(AuthContext),manager=canSeePayroll(user);
  const [filters,setFilters]=useState(empty),[page,setPage]=useState(1),[data,setData]=useState(null),[options,setOptions]=useState({users:[],actions:[],categories:[]}),[loading,setLoading]=useState(true),[error,setError]=useState(''),[refresh,setRefresh]=useState(0),[detail,setDetail]=useState(null);
  const change=(k,v)=>{setFilters(old=>({...old,[k]:v}));setPage(1);};
  useEffect(()=>{if(!manager)return;const c=new AbortController();axios.get('/logs/options',{signal:c.signal}).then(({data})=>setOptions(data)).catch(()=>{});return()=>c.abort();},[manager,refresh]);

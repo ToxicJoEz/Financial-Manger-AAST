@@ -244,9 +244,13 @@ try {
   };
   const manual = ok(await request(`/cycles/${partial.cycleId}/enrollments/${e.id}/payments`, 'POST', paymentBody));
   assert.equal(manual.paymentMethod, 'CARD');
-  const refreshedCycles = ok(
-    await request('/cycles?parentCourseId=course-ket&pageSize=100', 'GET', undefined, junior)
-  ).rows;
+  // Payment details (method, receipt) are for managers; users only see paid / not paid.
+  const juniorView = ok(await request('/cycles?parentCourseId=course-ket&pageSize=100', 'GET', undefined, junior)).rows;
+  const juniorEnrollment = juniorView.find(c => c.id === partial.cycleId).enrollments.find(row => row.id === e.id);
+  assert.equal(juniorEnrollment.paymentSummary, undefined);
+  assert.equal(juniorEnrollment.amountPaid, undefined);
+  assert(juniorEnrollment.status);
+  const refreshedCycles = ok(await request('/cycles?parentCourseId=course-ket&pageSize=100', 'GET')).rows;
   const refreshedEnrollment = refreshedCycles
     .find(c => c.id === partial.cycleId)
     .enrollments.find(row => row.id === e.id);

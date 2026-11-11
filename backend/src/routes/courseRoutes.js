@@ -67,7 +67,8 @@ router.post('/:id/enrollments', modOrAbove, enrollStudent);
 router.put('/:id/enrollments/:enrollmentId', modOrAbove, updateEnrollment);
 router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
 
-router.get('/:id/enrollments/:enrollmentId/payments', getPayments);
+// Payment history (amounts, methods, receipts) is for admins and mods; users only see paid / not paid.
+router.get('/:id/enrollments/:enrollmentId/payments', modOrAbove, getPayments);
 router.post('/:id/enrollments/:enrollmentId/payments', modOrAbove, recordPayment);
 router.post('/:id/enrollments/:enrollmentId/payments/:paymentId/reverse', modOrAbove, reversePayment);
 

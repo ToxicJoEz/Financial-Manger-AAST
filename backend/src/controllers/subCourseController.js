@@ -3,7 +3,7 @@ import { moneyMinor } from '../utils/numbers.js';
 import { isManager } from '../utils/courseView.js';
 import { visibleBranchesOf } from '../utils/access.js';
 import { logAction } from '../utils/logger.js';
-import { subCourseName, cycleName } from '../utils/privateCourses.js';
+import { subCourseName, cycleName, umbrellaBranches } from '../utils/privateCourses.js';
 
 // Sub-umbrellas organize private cycles (e.g. KET, PET). They never hold money themselves.
 const cycleSelect = {
@@ -35,6 +35,8 @@ async function summary(sub, user) {
     activeCount: live.filter(c => !c.isFinished).length,
     completedCount: live.filter(c => c.isFinished).length,
     branches: [...new Set(live.map(c => c.branch))],
+    // Per-branch counts, for hiding sub-umbrellas with nothing in the chosen branch.
+    byBranch: live.reduce((map, c) => ({ ...map, [c.branch]: (map[c.branch] || 0) + 1 }), {}),
     students: live.reduce((n, c) => n + c._count.enrollments, 0)
   };
 }
@@ -82,7 +84,10 @@ export const getSubCourse = async (req, res) => {
         name: parentCourse.name,
         code: parentCourse.code,
         archivedAt: parentCourse.archivedAt,
-        isPrivate: true
+        isPrivate: true,
+        // Branches the umbrella is open for: new cycles in this sub-umbrella can only go there.
+        branches: parentCourse.branches,
+        allowedBranches: umbrellaBranches(parentCourse)
       }
     });
   } catch (error) {

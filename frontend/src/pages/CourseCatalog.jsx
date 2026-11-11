@@ -45,7 +45,9 @@ export default function CourseCatalog() {
     [archived, setArchived] = useState(false);
   // Branch filter: branch mods always see their own branch; others pick one (or all) with the branch buttons.
   const scope = branchScopeOf(user);
-  const [pickedBranch, setPickedBranch] = useState(() => (BRANCHES.includes(getCourseBranch()) ? getCourseBranch() : ''));
+  // Users choose among their own branches only; branch mods see their one branch as a fixed tab.
+  const ownBranches = user.role === 'user' ? BRANCHES.filter(b => String(user.branches || '').split(',').includes(b)) : scope ? [scope] : BRANCHES;
+  const [pickedBranch, setPickedBranch] = useState(() => (ownBranches.includes(getCourseBranch()) ? getCourseBranch() : ''));
   const branch = scope || pickedBranch;
   const pickBranch = value => {
     setPickedBranch(value);
@@ -149,9 +151,13 @@ export default function CourseCatalog() {
       setBusy(false);
     }
   }
-  const visible = courses.filter(c => Boolean(c.archivedAt) === archived && (!search || `${c.name} ${c.code}`.toLowerCase().includes(search.toLowerCase().trim())));
+  // With a branch chosen (or for users, who only see their branches), umbrellas with no cycles there are hidden.
+  // Branch mods still see umbrellas open for their branch, so they can start the first cycle there.
+  const hasCyclesHere = c => (branch ? countsFor(c).cycles : c.cycleCount) > 0;
+  const shownForBranch = c => (scope ? hasCyclesHere(c) || (c.allowedBranches || []).includes(scope) : branch || user.role === 'user' ? hasCyclesHere(c) : true);
+  const visible = courses.filter(c => Boolean(c.archivedAt) === archived && shownForBranch(c) && (!search || `${c.name} ${c.code}`.toLowerCase().includes(search.toLowerCase().trim())));
   return <div className="courses-page course-catalog">
-    <PageHeading eyebrow="The course collection" title="Courses" description={scope ? `Course umbrellas and your ${branchName(scope)} cycles.` : 'One course. Every cycle, together.'}>{!scope && <div className="branch-picker" role="group" aria-label="Show branch"><button type="button" className={!branch ? 'active' : ''} aria-pressed={!branch} onClick={() => pickBranch('')}>All branches</button>{BRANCHES.map(b => <button key={b} type="button" className={branch === b ? 'active' : ''} aria-pressed={branch === b} style={{ '--branch-color': getBranchColor(b) }} onClick={() => pickBranch(branch === b ? '' : b)}>{branchName(b)}</button>)}</div>}{manager && <button className="btn-primary" onClick={() => open()}><Plus size={16} />New course umbrella</button>}</PageHeading>
+    <PageHeading eyebrow="The course collection" title="Courses" description={scope ? `Course umbrellas and your ${branchName(scope)} cycles.` : 'One course. Every cycle, together.'}>{scope ? <div className="branch-picker is-fixed" aria-label="Your branch"><span className="active" style={{ '--branch-color': getBranchColor(scope) }}>{branchName(scope)}</span></div> : ownBranches.length > 0 && <div className="branch-picker" role="group" aria-label="Show branch">{ownBranches.length > 1 && <button type="button" className={!branch ? 'active' : ''} aria-pressed={!branch} onClick={() => pickBranch('')}>{user.role === 'user' ? 'All my branches' : 'All branches'}</button>}{ownBranches.map(b => <button key={b} type="button" className={branch === b ? 'active' : ''} aria-pressed={branch === b} style={{ '--branch-color': getBranchColor(b) }} onClick={() => pickBranch(branch === b ? '' : b)}>{branchName(b)}</button>)}</div>}{manager && <button className="btn-primary" onClick={() => open()}><Plus size={16} />New course umbrella</button>}</PageHeading>
     <div className="catalog-toolbar"><div className="search-field"><Search size={17} /><input aria-label="Search courses" placeholder="Search course name or code…" value={search} onChange={e => setSearch(e.target.value)} /></div><span className="muted">{visible.length} courses</span>{manager && <button className="text-button" aria-pressed={archived} onClick={() => setArchived(!archived)}>{archived ? 'Back to current courses' : 'Show archived'}</button>}<Link className="text-button" to="/courses/cycles">All cycles<ArrowUpRight size={15} /></Link></div>
     {user.role === 'user' && !user.branches && <div className="panel empty-state no-branches-note"><h3>No branches assigned yet</h3><p>Ask the main mod or an admin to choose the branches you can view. Courses and students will appear here then.</p></div>}
     {loading ? <div className="loading-state"><span className="loading-spinner" />Loading courses…</div> : error ? <EmptyState title="Courses could not be loaded" description="Check your connection and try again."><button className="btn-secondary" onClick={() => {
@@ -163,7 +169,7 @@ export default function CourseCatalog() {
                 setRemoving(course);
                 setFormError('');
               }}><Archive size={15} /></button>}<button className="icon-button danger" aria-label={"Permanently delete " + course.name} title="Permanently delete" onClick={() => setPermanentTarget(course)}><Trash2 size={15} /></button></div>}</div>
-    </article>)}</div>{!visible.length && <EmptyState title={search ? 'No matching courses' : archived ? 'No archived courses' : 'Your course collection starts here'} description={search ? 'Try another course name or code.' : 'Create a course, then add its individual cycles.'}>{manager && !archived && !search && <button className="btn-primary" onClick={() => open()}>Create course</button>}</EmptyState>}</MotionRegion>}
+    </article>)}</div>{!visible.length && <EmptyState title={search ? 'No matching courses' : archived ? 'No archived courses' : branch ? `No ${branchName(branch)} cycles yet` : 'Your course collection starts here'} description={search ? 'Try another course name or code.' : 'Create a course, then add its individual cycles.'}>{manager && !archived && !search && <button className="btn-primary" onClick={() => open()}>Create course</button>}</EmptyState>}</MotionRegion>}
     {branchEdit && <Dialog title="Open for branches" onClose={busy ? () => {} : () => setBranchEdit(null)}><div className="modal-content card umbrella-branches-dialog">
       <h3><MapPin size={18} />{branchEdit.course.name}: open for</h3>
       <p className="muted">Only these branches can run {branchEdit.course.name} cycles, and their branch mods see this umbrella. Cycles that already exist stay where they are.</p>

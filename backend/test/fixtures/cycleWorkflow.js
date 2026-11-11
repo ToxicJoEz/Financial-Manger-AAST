@@ -110,7 +110,7 @@ try {
   assert(named.rows.some(c => c.id === manual.id));
   assert.equal((await req('/cycles?pageSize=500')).status, 400);
   ok(await req('/cycles/' + manual.id, 'DELETE'));
-  for (const level of [0, -1, 1.5, true, 'bad', 5])
+  for (const level of [0, -1, 1.5, true, 'bad'])
     assert.equal((await req('/cycles', 'POST', { ...baseCycle, cycleNumber: level })).status, 400);
   assert.equal((await req('/cycles', 'POST', { ...baseCycle, startDate: undefined })).status, 400);
   // Umbrellas only take cycles in the branches they are open for; only the main mod or an admin opens them.

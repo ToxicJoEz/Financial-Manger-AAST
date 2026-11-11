@@ -6,6 +6,7 @@ import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
 import { LEVEL_MAX, subCourseName, namedCycle, umbrellaBranches } from '../utils/privateCourses.js';
+import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { importedCycleFinished } from '../utils/academyDate.js';
 import { appendPayment } from '../utils/paymentLedger.js';
@@ -163,9 +164,9 @@ async function planGroups(parentId, rows, numbers = {}) {
     group.numberSource = Object.hasOwn(numbers, group.id) ? 'reviewed' : 'file';
     group.cycleNumber = group.requested;
     if (group.requested == null) {
-      group.errors.push(`Enter the level (1–${LEVEL_MAX}) for this cycle.`);
+      group.errors.push('Enter the level for this cycle.');
       group.numberSource = 'missing';
-    } else if (!validLevel(group.requested)) group.errors.push(`Level must be a whole number from 1 to ${LEVEL_MAX}.`);
+    } else if (!validLevel(group.requested)) group.errors.push('Level must be a whole number from 1 up.');
   }
   return {
     groups,
@@ -386,8 +387,12 @@ export const commitPrivateImport = atomic(
           isFinished = importedCycleFinished(lead.endDate);
         // The standard fee is the highest amount in the group; lower amounts are fully paid discounts.
         const fee = Number(moneyMinor(group.fee)) / 100;
+        const cycleId = randomUUID();
         const cycle = await prisma.cycle.create({
           data: {
+            id: cycleId,
+            chainId: cycleId,
+            chainStart: new Date(lead.startDate + 'T00:00:00Z'),
             parentCourseId: parent.id,
             subCourseId: sub.id,
             numberingKey: sub.id,

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import prisma from '../db/prisma.js';
 import { earningData } from '../utils/payrollRecord.js';
@@ -150,13 +151,31 @@ try {
       // `roster` lists { student, fee, paid, books } per enrollment; `bookPrice` is the umbrella or sub-umbrella price.
       // Names: "<umbrella> <level> - <start month year>", "(n)" for a repeat in the same branch and month.
       const sequences = new Map();
-      async function addCycle({ umbrella, sub, number, spec, chosen, roster, courseFee, bookPrice, index, branch }) {
+      async function addCycle({
+        umbrella,
+        sub,
+        number,
+        spec,
+        chosen,
+        roster,
+        courseFee,
+        bookPrice,
+        index,
+        branch,
+        previous
+      }) {
         const cycleBranch = branch || branches[index % branches.length];
         const key = [sub?.id ?? umbrella.id, cycleBranch, number, spec.start.slice(0, 7)].join('|');
         const sequence = (sequences.get(key) || 0) + 1;
         sequences.set(key, sequence);
+        const cycleId = randomUUID();
         const cycle = await tx.cycle.create({
           data: {
+            id: cycleId,
+            // Linked levels share the first level's chain, so they list together.
+            previousCycleId: previous?.id ?? null,
+            chainId: previous?.chainId ?? cycleId,
+            chainStart: previous?.chainStart ?? date(spec.start),
             parentCourseId: umbrella.id,
             subCourseId: sub?.id ?? null,
             numberingKey: sub?.id ?? umbrella.id,
@@ -270,7 +289,8 @@ try {
         return cycle;
       }
       // Group courses: 7 cycles each, 8 students per cycle (full, 20% discounted, exempt).
-      for (const [courseIndex, course] of courses.entries())
+      for (const [courseIndex, course] of courses.entries()) {
+        let firstLevel;
         for (const [index, spec] of specs.entries()) {
           const chosen = spec.sharedTeacher
             ? [teachers[0]]
@@ -292,14 +312,16 @@ try {
             [2, 'FOUAD'],
             [1, 'MIAMI'],
             [1, 'MIAMI'],
-            [2, 'PORT-SAID'],
+            [2, 'MIAMI'],
             [3, 'ASWAN'],
             [4, courseIndex === 2 ? 'ONLINE' : 'SMART']
           ][index];
-          await addCycle({
+          // The October level-2 Miami cycle is the next level of the August level-1 one.
+          const created = await addCycle({
             umbrella: course,
             number: plan[0],
             branch: plan[1],
+            previous: index === 4 ? firstLevel : undefined,
             spec,
             chosen,
             roster,
@@ -307,7 +329,9 @@ try {
             bookPrice: course.bookPrice,
             index
           });
+          if (index === 0) firstLevel = created;
         }
+      }
       // Private umbrella: sub-umbrellas with their own book prices; cycles of 1-3 students.
       const subs = {};
       for (const [name, bookPrice] of [

@@ -134,13 +134,21 @@ export const confirmedMoneyGuard = kind => async (req, res, next) => {
   }
 };
 
-// Umbrellas, sub-umbrellas and other shared setup: admins and the main mod only.
+// Umbrellas, team accounts, the activity log and other shared setup: admins and the main mod only.
 export const mainManager = (req, res, next) => {
   if (canSeePayroll(req.user)) next();
   else {
     res.status(403);
-    next(new Error('Only admins and the main mod can change course umbrellas.'));
+    next(new Error('Only admins and the main mod can do this.'));
   }
+};
+// Branch mods get no notifications (users keep theirs, e.g. answers to their employee requests).
+export const notBranchMod = (req, res, next) => {
+  if (branchScopeOf(req.user)) {
+    res.status(403);
+    return next(new Error('Notifications are handled by the main mod.'));
+  }
+  next();
 };
 
 export const adminOnly = (req, res, next) => {

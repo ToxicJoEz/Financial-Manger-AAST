@@ -35,12 +35,14 @@ const lastActive = value =>
     : 'Never';
 
 // Role, mod branch and the books permission, shared by the add and edit dialogs.
+// Admins pick any role; the main mod picks user or branch mod; branch mods add users only.
 function AccessFields({ form, setForm, adminView, canPickBranches }) {
-  const roles = adminView ? ROLES : ROLES.filter(r => r.value === 'user');
+  const roles = adminView ? ROLES : canPickBranches ? ROLES.filter(r => r.value !== 'admin') : ROLES.filter(r => r.value === 'user');
+  const modOptions = adminView ? MOD_TITLE_OPTIONS : MOD_TITLE_OPTIONS.filter(o => o.value !== 'MAIN');
   return <>
     <label>Role</label>
     <div className="access-role-picker" role="radiogroup" aria-label="Role">{roles.map(r => <button key={r.value} type="button" role="radio" aria-checked={form.role === r.value} className={form.role === r.value ? 'active' : ''} onClick={() => setForm(f => ({ ...f, role: r.value }))}><strong>{r.label}</strong><span>{r.help}</span></button>)}</div>
-    {form.role === 'mod' && <><label htmlFor="access-branch">Mod for</label><CustomFilterDropdown id="access-branch" allowClear={false} value={form.branch} onChange={value => setForm(f => ({ ...f, branch: value }))} options={MOD_TITLE_OPTIONS} placeholder="Choose main or a branch" /></>}
+    {form.role === 'mod' && <><label htmlFor="access-branch">Mod for</label><CustomFilterDropdown id="access-branch" allowClear={false} value={form.branch} onChange={value => setForm(f => ({ ...f, branch: value }))} options={modOptions} placeholder={adminView ? 'Choose main or a branch' : 'Choose a branch'} /></>}
     {form.role === 'user' && (canPickBranches ? <><label>Can view branches</label><div className="access-branch-boxes">{BRANCHES.map(b => { const on = form.branches.includes(b); return <button key={b} type="button" role="checkbox" aria-checked={on} className={on ? 'active' : ''} style={{ '--branch-color': getBranchColor(b) }} onClick={() => setForm(f => ({ ...f, branches: on ? f.branches.filter(x => x !== b) : [...f.branches, b] }))}>{branchName(b)}</button>; })}</div><small className="muted">Users only view courses and students in these branches. With none, they see nothing.</small></> : <small className="muted">New users see your branch only. The main mod can add more branches.</small>)}
   </>;
 }
@@ -83,7 +85,10 @@ const ManageUsers = () => {
 
   if (!currentUser || !['admin', 'mod'].includes(currentUser.role)) return <Navigate to="/" replace />;
 
-  const canModify = target => target.username !== 'main-admin' && (isAdmin || (currentUser.role === 'mod' && target.role === 'user'));
+  // Admins manage everyone; the main mod manages users and branch mods; branch mods manage users only.
+  const canModify = target =>
+    target.username !== 'main-admin' &&
+    (isAdmin || target.role === 'user' || (mainManager && target.role === 'mod' && Boolean(target.branchScope)));
   const handleUnlock = async target => {
     try {
       await axios.post(`/users/${target.id}/unlock`);
@@ -115,7 +120,7 @@ const ManageUsers = () => {
 
   async function createAccount(e) {
     e.preventDefault();
-    if (adding.role === 'mod' && !adding.branch) return toast.error('Choose the main mod or a branch.');
+    if (adding.role === 'mod' && (!adding.branch || (!isAdmin && adding.branch === 'MAIN'))) return toast.error(isAdmin ? 'Choose the main mod or a branch.' : 'Choose a branch for the branch mod.');
     setSaving(true);
     try {
       const { data } = await axios.post('/auth/register', {
@@ -137,12 +142,12 @@ const ManageUsers = () => {
 
   async function saveAccess() {
     const { user: target, form } = editing;
-    if (form.role === 'mod' && !form.branch) return toast.error('Choose the main mod or a branch.');
+    if (form.role === 'mod' && (!form.branch || (!isAdmin && form.branch === 'MAIN'))) return toast.error(isAdmin ? 'Choose the main mod or a branch.' : 'Choose a branch for the branch mod.');
     setSaving(true);
     try {
-      if (isAdmin && form.role !== target.role) await axios.put(`/users/${target.id}/role`, { role: form.role });
       const branchScope = form.role === 'mod' && form.branch !== 'MAIN' ? form.branch : null;
-      if (isAdmin && form.role === 'mod' && (target.role !== 'mod' || (target.branchScope || null) !== branchScope))
+      if (mainManager && form.role !== target.role) await axios.put(`/users/${target.id}/role`, { role: form.role, branchScope });
+      if (mainManager && form.role === 'mod' && target.role === 'mod' && (target.branchScope || null) !== branchScope)
         await axios.put('/users/' + target.id + '/branch-scope', { branchScope });
       if (form.role === 'user' && mainManager && (target.role !== 'user' || (target.branches || '') !== BRANCHES.filter(b => form.branches.includes(b)).join(',')))
         await axios.put('/users/' + target.id + '/branches', { branches: form.branches });
@@ -159,10 +164,10 @@ const ManageUsers = () => {
 
   return <div className="manage-users-container">
     <PageHeading eyebrow="The people you work with" title="Team & access" description="Everyone in the workspace, and what they can do.">
-      <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>
+      {mainManager && <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>}
       <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] })}><UserPlus size={16} />Add person</button>
     </PageHeading>
-    <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => u.isActive && !u.isBanned).length} active accounts</span></div>
+    <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => !u.isBanned).length} active accounts</span></div>
     <div className="card overflow-x-auto">
       {loading ? <p className="text-muted">Loading the team…</p> : <table className="mu-table team-table w-full">
         <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Last active</th><th aria-label="Actions" /></tr></thead>
@@ -176,7 +181,7 @@ const ManageUsers = () => {
               {u.isLocked && canModify(u) && <button className="btn-sm btn-outline" onClick={() => handleUnlock(u)}>Unlock</button>}
               {canModify(u) ? <>
                 <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [] } })}><Pencil size={13} />Edit access</button>
-                <button className="btn-sm btn-outline" onClick={() => handleStatusToggle(u, 'active')}>{u.isActive ? 'Deactivate' : 'Reactivate'}</button>
+
                 <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
               </> : <span className="text-muted team-managed">Managed by an admin</span>}
             </div>}</td>

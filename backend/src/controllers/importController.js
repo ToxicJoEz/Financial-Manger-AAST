@@ -1,4 +1,5 @@
-import { cycleScope, namedCycle, parseLevel, assertUmbrellaBranch } from '../utils/privateCourses.js';
+import { cycleScope, namedCycle, parseLevel, assertUmbrellaBranch, levelLink } from '../utils/privateCourses.js';
+import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { auditContext } from '../utils/auditContext.js';
@@ -298,8 +299,19 @@ export const commitImport = atomic(
           );
       }
       const isFinished = importedCycleFinished(endDate);
+      // Imported either as a new cycle or as the next level of an existing one (same umbrella and branch).
+      const newId = randomUUID();
+      const link = await levelLink({
+        previousCycleId: req.body.previousCycleId || null,
+        numberingKey: scope.numberingKey,
+        branch,
+        id: newId,
+        startDate: new Date(startDate)
+      });
       const cycle = await prisma.cycle.create({
         data: {
+          id: newId,
+          ...link,
           ...cycleSchedule(req.body),
           parentCourseId: parent.id,
           subCourseId: scope.subCourse?.id ?? null,

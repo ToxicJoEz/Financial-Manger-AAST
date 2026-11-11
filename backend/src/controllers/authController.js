@@ -95,13 +95,17 @@ export const registerUser = atomic(async (req, res, next) => {
 
     // Enforce creation hierarchy
     let assignedRole = 'user';
+    // Admins create anyone. The main mod creates users and branch mods (a branch is required).
+    // Branch mods create users only.
     if (role && role !== 'user') {
-      if (req.user.role === 'mod') {
+      const mainMod = req.user.role === 'mod' && !req.user.branchScope;
+      if (req.user.role === 'admin') assignedRole = role;
+      else if (mainMod && role === 'mod' && req.body.branchScope) assignedRole = 'mod';
+      else {
         res.status(403);
-        throw new Error('Mods can only create standard Users.');
-      }
-      if (req.user.role === 'admin') {
-        assignedRole = role; // Admins can create mods or admins
+        throw new Error(
+          mainMod ? 'The main mod can create users and branch mods only.' : 'Mods can only create standard Users.'
+        );
       }
     }
 

@@ -5,11 +5,11 @@ import {
   markAsRead,
   markAllAsRead
 } from '../controllers/notificationController.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import { protect, notBranchMod } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-router.use(protect);
+router.use(protect, notBranchMod);
 
 router.get('/', getNotifications);
 router.get('/history', getNotificationHistory);

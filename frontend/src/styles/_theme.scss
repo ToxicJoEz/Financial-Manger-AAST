@@ -341,3 +341,43 @@ th.select-column { font-size: 0 !important; overflow: hidden; }
 }
 @media (prefers-reduced-motion: reduce) { .period-slot, .period-slot.on { transition: none; } }
 .payroll-header-actions { min-width: 0; }
+
+// ---- Linked levels ---------------------------------------------------------------------------------
+.next-level-note { margin: -6px 0 14px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--accent-soft); color: #33437a; font-size: 13px; }
+.next-level-branch { display: flex; align-items: center; justify-content: space-between; background: #f5f7fc; font-weight: 700; small { font-weight: 500; color: var(--muted); font-size: 12px; } }
+.next-level-students { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-md);
+  legend { padding: 0 6px; font-size: 13px; font-weight: 800; color: var(--ink-strong); }
+  .policy-check { display: flex; align-items: center; gap: 8px; font-size: 13px; } }
+.level-links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 14px; padding: 9px 12px; border-radius: var(--radius-md); background: #f5f7fc; border: 1px dashed var(--accent-line); color: var(--muted); font-size: 13px;
+  svg { color: var(--accent); } strong { color: var(--ink-strong); } }
+// Recording tuition on a student who has not paid in full.
+.student-pay-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); background: var(--warning-soft); color: var(--warning); font-size: 13px; font-weight: 700;
+  button { display: inline-flex; align-items: center; gap: 6px; } }
+.student-pay-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; padding: 12px 14px; border-top: 1px solid var(--line); background: #f8f9fd;
+  label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 700; color: var(--ink); }
+  .student-pay-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 8px; } }
+@media (max-width: 640px) { .student-pay-form { grid-template-columns: 1fr; } }
+// Excel import: new cycle or next level of an existing one.
+.import-link-choice { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  button { text-align: left; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+    strong { display: block; font-size: 13px; color: var(--ink-strong); } span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+    &.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); } } }
+@media (max-width: 640px) { .import-link-choice { grid-template-columns: 1fr; } }
+
+// Linked levels shown together: a tinted group with a dotted outline, in both card and list views.
+.course-grid > .level-chain { grid-column: 1 / -1; padding: 12px 14px 14px; border: 1.5px dashed var(--accent-line); border-radius: var(--radius-lg); background: linear-gradient(180deg, #f3f6ff, #f8f9fe); }
+.level-chain-label { display: flex; align-items: center; gap: 7px; margin: 0 2px 12px; font-size: 12px; font-weight: 800; color: #3a4a78;
+  svg { color: var(--accent); } }
+.level-chain-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 1250px) { .level-chain-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .level-chain-cards { grid-template-columns: 1fr; } }
+// Each chain: tinted rows with a solid accent bar down the left edge, and a white gap after it, so two chains
+// in a row never look like one.
+.course-ledger tbody.level-chain-rows > tr:not(.level-chain-gap) { background: #f5f7ff; }
+.course-ledger tbody.level-chain-rows > tr:not(.level-chain-gap) > td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
+.course-ledger tr.level-chain-head td { padding: 10px 14px; font-size: 12px; font-weight: 800; color: #3a4a78; background: #eaefff; border-top: 1px solid var(--accent-line);
+  svg { vertical-align: -2px; margin-right: 6px; color: var(--accent); } }
+.course-ledger tbody.level-chain-rows > tr:nth-last-child(2) > td { border-bottom: 1px solid var(--accent-line); }
+.course-ledger tr.level-chain-gap td { height: 14px; padding: 0 !important; border: 0 !important; background: var(--surface); box-shadow: none !important; }
+// Branch mods: their branch shown as a fixed tab (not a filter).
+.branch-picker.is-fixed span { padding: 7px 14px; border-radius: var(--radius-md); font-size: 12px; font-weight: 800; color: #fff; background: var(--branch-color); }

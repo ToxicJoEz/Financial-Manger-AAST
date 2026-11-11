@@ -83,9 +83,17 @@ try {
     403
   );
   assert.equal((await req('/exports/options', 'GET', undefined, junior)).status, 403);
-  // Users see each student's amounts in a cycle, but not the cycle's totals.
+  // Users see each student's fee and paid status in a cycle, but no amounts, receipts or totals.
   const viewed = ok(await req('/cycles/' + cycle.id, 'GET', undefined, junior));
-  assert.equal(viewed.enrollments[0].amountPaid, 1000);
+  assert.equal(viewed.enrollments[0].status, 'PAID');
+  assert.equal(viewed.enrollments[0].effectiveFee, 1000);
+  assert.equal(viewed.enrollments[0].amountPaid, undefined);
+  assert.equal(viewed.enrollments[0].paymentSummary, undefined);
+  assert.equal(
+    (await req(enrollPath + '/' + viewed.enrollments[0].id + '/payments', 'GET', undefined, junior)).status,
+    403
+  );
+  assert.equal((await req('/logs', 'GET', undefined, junior)).status, 403);
   assert.equal(viewed.totalCollectedRevenue, undefined);
   assert.equal(viewed.totalIncome, undefined);
   assert.equal(ok(await req('/cycles/' + cycle.id)).totalCollectedRevenue, 1000);

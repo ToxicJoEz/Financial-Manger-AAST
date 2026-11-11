@@ -4,12 +4,12 @@ import { PRIVATE_SEAT_LIMIT } from './privateSeat.js';
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
-// Cycle levels are entered by the mod: a whole number from 1 to LEVEL_MAX.
-export const LEVEL_MAX = 4;
+// Cycle levels are entered by the mod: any whole number from 1 up.
+export const LEVEL_MAX = 2147483647;
 export function parseLevel(value) {
   const level = Number(value);
   if (!['number', 'string'].includes(typeof value) || !Number.isInteger(level) || level < 1 || level > LEVEL_MAX)
-    fail(`Level must be a whole number from 1 to ${LEVEL_MAX}.`);
+    fail('Level must be a whole number from 1 up.');
   return level;
 }
 export const startMonthLabel = date =>
@@ -96,3 +96,32 @@ export const cycleBookPrice = cycle =>
   (cycle.parentCourse?.isPrivate ? cycle.subCourse?.bookPrice : cycle.parentCourse?.bookPrice) || 0;
 
 export const privateLabel = (name, isPrivate) => (isPrivate ? `${name} (Private)` : name);
+
+// Linking a new cycle as the next level of an earlier one: same umbrella (or sub-umbrella) and same branch.
+// Returns the link fields to save; a cycle without a previous level starts its own chain.
+export async function levelLink({ previousCycleId, numberingKey, branch, id, startDate }) {
+  if (!previousCycleId) return { previousCycleId: null, chainId: id, chainStart: startDate };
+  if (typeof previousCycleId !== 'string') fail('Choose the cycle this level follows.');
+  const previous = await prisma.cycle.findUnique({
+    where: { id: previousCycleId },
+    select: {
+      id: true,
+      numberingKey: true,
+      branch: true,
+      chainId: true,
+      chainStart: true,
+      startDate: true,
+      archivedAt: true
+    }
+  });
+  if (!previous) fail('The cycle this level follows no longer exists.', 404);
+  if (previous.numberingKey !== numberingKey || previous.branch !== branch)
+    fail('A next level must be in the same umbrella and branch as the cycle it follows.', 409);
+  if (previous.startDate && startDate && new Date(startDate) < previous.startDate)
+    fail('A next level cannot start before the level it follows.');
+  return {
+    previousCycleId: previous.id,
+    chainId: previous.chainId || previous.id,
+    chainStart: previous.chainStart || previous.startDate
+  };
+}

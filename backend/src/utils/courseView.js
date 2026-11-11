@@ -73,9 +73,18 @@ const totalFields = [
   'totalIncome',
   'totalRemainingBalance'
 ];
+// Users see each student's fee and whether they paid, never the amounts, methods or receipts.
+export function studentMoneyForUser(enrollment, user) {
+  if (user?.role !== 'user' || !enrollment) return enrollment;
+  const { amountPaid, remainingBalance, paymentSummary, ...rest } = enrollment;
+  return rest;
+}
 export function courseView(course, user) {
   const view = fullCourseView(course, user);
-  if (user?.role === 'user') for (const key of totalFields) delete view[key];
+  if (user?.role === 'user') {
+    for (const key of totalFields) delete view[key];
+    view.enrollments = (view.enrollments || []).map(e => studentMoneyForUser(e, user));
+  }
   return view;
 }
 function fullCourseView(course, user) {

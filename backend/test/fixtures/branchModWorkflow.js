@@ -260,6 +260,111 @@ try {
     await req('/auth/register', 'POST', { username: 'fouad-viewer', password: 'ViewerTest!123' }, fouad)
   );
   assert.equal((await prisma.user.findUnique({ where: { id: fromFouad.user.id } })).branches, 'FOUAD');
+  // Next levels: linked to the cycle they follow (same umbrella and branch), students carried over unpaid.
+  const levelOne = ok(
+    await req(
+      '/cycles',
+      'POST',
+      { parentCourseId: 'course-pet', cycleNumber: 5, branch: 'MIAMI', courseFee: 900, startDate: '2027-01-10' },
+      main
+    )
+  );
+  assert.equal(levelOne.name, 'PET 5 - January 2027');
+  ok(
+    await req(
+      '/cycles/' + levelOne.id + '/enrollments',
+      'POST',
+      { studentId: 'demo-student-1', recordPayment: true, amountPaid: 900 },
+      main
+    )
+  );
+  ok(
+    await req(
+      '/cycles/' + levelOne.id + '/enrollments',
+      'POST',
+      { studentId: 'demo-student-2', recordPayment: true, amountPaid: 900 },
+      main
+    )
+  );
+  const nextBody = {
+    parentCourseId: 'course-pet',
+    cycleNumber: 6,
+    branch: 'MIAMI',
+    courseFee: 1000,
+    startDate: '2027-03-01',
+    previousCycleId: levelOne.id
+  };
+  assert.equal((await req('/cycles', 'POST', { ...nextBody, branch: 'SMART' }, main)).status, 409);
+  assert.equal((await req('/cycles', 'POST', { ...nextBody, parentCourseId: 'course-ket' }, main)).status, 409);
+  assert.equal((await req('/cycles', 'POST', { ...nextBody, studentIds: ['demo-student-5'] }, main)).status, 400);
+  const levelTwo = ok(await req('/cycles', 'POST', { ...nextBody, studentIds: ['demo-student-1'] }, main));
+  const linked = ok(await req('/cycles/' + levelTwo.id, 'GET', undefined, main));
+  assert.equal(linked.previousCycle.id, levelOne.id);
+  assert.equal(linked.enrollments.length, 1);
+  assert.equal(linked.enrollments[0].status, 'UNPAID');
+  assert.equal(linked.enrollments[0].amountPaid, 0);
+  assert.equal(ok(await req('/cycles/' + levelOne.id, 'GET', undefined, main)).nextCycles[0].id, levelTwo.id);
+  // Payment recorded later on the new level.
+  ok(
+    await req(
+      '/cycles/' + levelTwo.id + '/enrollments/' + linked.enrollments[0].id + '/payments',
+      'POST',
+      {
+        amount: 1000,
+        kind: 'PAYMENT',
+        note: 'Tuition payment',
+        idempotencyKey: 'next-level-pay-1',
+        paymentMethod: 'CASH'
+      },
+      main
+    )
+  );
+  assert.equal(ok(await req('/cycles/' + levelTwo.id, 'GET', undefined, main)).enrollments[0].status, 'PAID');
+  // Chains list together: the second level comes right after the first.
+  const petRows = ok(await req('/cycles?parentCourseId=course-pet&pageSize=100', 'GET', undefined, main)).rows;
+  const at = petRows.findIndex(c => c.id === levelOne.id);
+  assert.equal(petRows[at + 1]?.id, levelTwo.id);
+  assert.equal((await req('/cycles/' + levelTwo.id, 'PUT', { branch: 'SMART' }, main)).status, 409);
+
+  // The main mod manages users and branch mods only; never admins or other main mods.
+  const helper = ok(
+    await req(
+      '/auth/register',
+      'POST',
+      { username: 'aswan-helper', password: 'AswanHelper!123', role: 'mod', branchScope: 'ASWAN' },
+      main
+    )
+  );
+  assert.equal((await prisma.user.findUnique({ where: { id: helper.user.id } })).branchScope, 'ASWAN');
+  assert.equal(
+    (await req('/auth/register', 'POST', { username: 'new-admin', password: 'NewAdmin!123', role: 'admin' }, main))
+      .status,
+    403
+  );
+  assert.equal(
+    (await req('/auth/register', 'POST', { username: 'new-main', password: 'NewMain!123', role: 'mod' }, main)).status,
+    403
+  );
+  const admin = await prisma.user.findFirst({ where: { role: 'admin', username: { not: 'main-admin' } } });
+  assert.equal((await req('/users/' + admin.id + '/status', 'PUT', { isBanned: true }, main)).status, 403);
+  assert.equal((await req('/users/' + mainMod.user.id + '/status', 'PUT', { isBanned: true }, main)).status, 403);
+  ok(await req('/users/' + helper.user.id + '/status', 'PUT', { isBanned: true }, main));
+  ok(await req('/users/' + helper.user.id + '/status', 'PUT', { isBanned: false }, main));
+  assert.equal((await req('/users/' + helper.user.id + '/status', 'PUT', { isActive: false }, main)).status, 400);
+  ok(await req('/users/' + helper.user.id + '/branch-scope', 'PUT', { branchScope: 'SMART' }, main));
+  assert.equal(
+    (await req('/users/' + helper.user.id + '/branch-scope', 'PUT', { branchScope: null }, main)).status,
+    403
+  );
+  assert.equal((await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'admin' }, main)).status, 403);
+  ok(await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'user' }, main));
+  assert.equal((await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'mod' }, main)).status, 403);
+  ok(await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'mod', branchScope: 'DOKKI' }, main));
+  assert.equal((await prisma.user.findUnique({ where: { id: helper.user.id } })).branchScope, 'DOKKI');
+  // Branch mods: no activity log and no notifications.
+  assert.equal((await req('/logs', 'GET', undefined, fouad)).status, 403);
+  assert.equal((await req('/notifications/history', 'GET', undefined, fouad)).status, 403);
+  ok(await req('/logs', 'GET', undefined, main));
   // Changing the role away from mod clears the branch title.
   ok(await req('/users/' + created.user.id + '/role', 'PUT', { role: 'user' }));
   assert.equal((await prisma.user.findUnique({ where: { id: created.user.id } })).branchScope, null);

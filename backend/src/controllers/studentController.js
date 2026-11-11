@@ -1,7 +1,7 @@
 import { cycleBranchWhere, visibleBranchesOf } from '../utils/access.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { activeBookInclude } from '../utils/bookPayments.js';
-import { enrollmentView, hidePayroll } from '../utils/courseView.js';
+import { enrollmentView, hidePayroll, studentMoneyForUser } from '../utils/courseView.js';
 import { profileFields } from '../utils/studentProfile.js';
 import { financialChoice } from '../utils/tuition.js';
 import { isManager } from '../utils/courseView.js';
@@ -282,7 +282,10 @@ export const getStudentDetails = async (req, res, next) => {
         isPrivate,
         privateStudents
       };
-      return hidePayroll(enrollmentView({ ...enrollment, course: enrichedCourse }, enrichedCourse), req.user);
+      return studentMoneyForUser(
+        hidePayroll(enrollmentView({ ...enrollment, course: enrichedCourse }, enrichedCourse), req.user),
+        req.user
+      );
     });
     res.json({ student, enrollments: enrichedEnrollments });
   } catch (error) {

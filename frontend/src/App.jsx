@@ -80,6 +80,11 @@ const PayrollRoute = () => {
   const { user } = useContext(AuthContext);
   return canSeePayroll(user) ? <Finances /> : <Navigate to="/finances/income" replace />;
 };
+// The activity log is for admins and the main mod only.
+const LogsRoute = () => {
+  const { user } = useContext(AuthContext);
+  return canSeePayroll(user) ? <ActivityLog /> : <Navigate to="/" replace />;
+};
 // Branch money checks are for admins and the main mod only.
 const ChecksRoute = () => {
   const { user } = useContext(AuthContext);
@@ -113,7 +118,7 @@ const App = () => {
             <Route path="/register-user" element={<Navigate to="/users" replace state={{ add: true }} />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/users" element={<ManageUsers />} />
-            <Route path="/logs" element={<ActivityLog />} />
+            <Route path="/logs" element={<LogsRoute />} />
             <Route path="/employees" element={<Instructors />} /><Route path="/instructors" element={<Navigate to="/employees" replace />} />
             <Route path="/courses" element={<CourseCatalog />} />
             <Route path="/courses/cycles" element={<CycleRoute />} />

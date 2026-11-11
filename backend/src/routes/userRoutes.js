@@ -19,9 +19,9 @@ router.put('/profile', protect, updateProfile);
 // Admin/Mod User Management routes
 router.get('/', protect, modOrAbove, getUsers);
 router.put('/:id/status', protect, modOrAbove, updateUserStatus);
-router.put('/:id/role', protect, adminOnly, updateUserRole);
+router.put('/:id/role', protect, mainManager, updateUserRole);
 router.put('/:id/permissions', protect, modOrAbove, updateUserPermissions);
-router.put('/:id/branch-scope', protect, adminOnly, updateUserBranchScope);
+router.put('/:id/branch-scope', protect, mainManager, updateUserBranchScope);
 router.put('/:id/branches', protect, mainManager, updateUserBranches);
 router.post('/:id/unlock', protect, modOrAbove, unlockUserAccount);
 

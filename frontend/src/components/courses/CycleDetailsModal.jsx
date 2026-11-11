@@ -24,6 +24,9 @@ export default function CycleDetailsModal(props) {
           }} onRemove={id => {
             onExpand();
             props.onRemove(id);
+          }} onNextLevel={() => {
+            onExpand();
+            props.onNextLevel?.();
           }} onEnroll={() => {
             props.onEnroll();
           }} onEditEnrollment={enr => {

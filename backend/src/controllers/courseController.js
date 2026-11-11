@@ -1,11 +1,14 @@
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
+import { randomUUID } from 'node:crypto';
 import {
   assertPrivateSeat,
   assertUmbrellaBranch,
   cycleScope,
+  levelLink,
   namedCycle,
   parseLevel
 } from '../utils/privateCourses.js';
+import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { createStudentHandler } from './studentController.js';
@@ -24,6 +27,8 @@ import { logAction } from '../utils/logger.js';
 
 const CYCLE_STATUSES = ['', 'active', 'finished', 'tuition-due', 'payroll-due', 'pending', 'unassigned', 'archived'];
 const cycleInclude = user => ({
+  previousCycle: { select: { id: true, name: true } },
+  nextCycles: { select: { id: true, name: true }, orderBy: { startDate: 'asc' } },
   retainedIncome: true,
   parentCourse: true,
   subCourse: true,
@@ -208,10 +213,12 @@ export const getCourses = async (req, res) => {
       prisma.cycle.findMany({
         where,
         include: cycleInclude(req.user),
+        // Linked levels list together (newest chain first, levels in order inside it).
         orderBy: [
           { parentCourse: { name: 'asc' } },
-          { startDate: 'desc' },
-          { cycleNumber: 'asc' },
+          { chainStart: { sort: 'desc', nulls: 'last' } },
+          { chainId: 'asc' },
+          { startDate: 'asc' },
           { sequence: 'asc' },
           { id: 'asc' }
         ],
@@ -270,8 +277,36 @@ export const createCourse = atomic(async (req, res, next) => {
       level: number,
       startDate: start
     });
+    // "Create next level": linked to the cycle it follows (same umbrella and branch), with chosen students carried over.
+    const id = randomUUID();
+    const link = await levelLink({
+      previousCycleId: req.body.previousCycleId || null,
+      numberingKey: scope.numberingKey,
+      branch: branch.trim().toUpperCase(),
+      id,
+      startDate: start
+    });
+    const carried = Array.isArray(req.body.studentIds) ? [...new Set(req.body.studentIds.map(String))] : [];
+    if (carried.length && !link.previousCycleId)
+      return res.status(400).json({ error: 'Students can only be carried over into a next level.' });
+    if (carried.length) {
+      const enrolled = await prisma.enrollment.count({
+        where: {
+          courseId: link.previousCycleId,
+          studentId: { in: carried },
+          deletedAt: null,
+          student: { deletedAt: null }
+        }
+      });
+      if (enrolled !== carried.length)
+        return res.status(400).json({ error: 'Only students of the previous level can be carried over.' });
+      if (parent.isPrivate && carried.length > PRIVATE_SEAT_LIMIT)
+        return res.status(409).json({ error: `A private cycle holds at most ${PRIVATE_SEAT_LIMIT} students.` });
+    }
     const cycle = await prisma.cycle.create({
       data: {
+        id,
+        ...link,
         ...cycleSchedule(req.body),
         parentCourseId,
         subCourseId: scope.subCourse?.id ?? null,
@@ -298,7 +333,14 @@ export const createCourse = atomic(async (req, res, next) => {
         data: { courseId: cycle.id, instructorId: employee.id, hourlyRate: rate }
       });
     }
-    await logAction('CREATE_CYCLE', `Created ${cycle.name} (${cycle.branch}) under ${parent.code}`, req.user.username);
+    // Carried-over students start unpaid at the standard fee; payments are recorded on the cycle afterwards.
+    for (const studentId of carried)
+      await prisma.enrollment.create({ data: { courseId: cycle.id, studentId, amountPaid: 0 } });
+    await logAction(
+      'CREATE_CYCLE',
+      `Created ${cycle.name} (${cycle.branch}) under ${parent.code}${link.previousCycleId ? ' as a next level' : ''}${carried.length ? `; ${carried.length} students carried over unpaid` : ''}`,
+      req.user.username
+    );
     res.status(201).json(hidePayroll(cycle, req.user));
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
@@ -375,6 +417,31 @@ export const updateCourse = atomic(async (req, res, next) => {
       for (const enrollment of cycle.enrollments)
         if (enrollment.customFee === null) assertWithinFee(enrollment.amountPaid, data.courseFee);
     }
+    // Linked levels keep their order: a level cannot start before the one it follows, or after the one that follows it.
+    if (data.startDate) {
+      const [before, after] = await Promise.all([
+        cycle.previousCycleId
+          ? prisma.cycle.findUnique({ where: { id: cycle.previousCycleId }, select: { startDate: true } })
+          : null,
+        prisma.cycle.findFirst({
+          where: { previousCycleId: cycle.id, startDate: { lt: data.startDate } },
+          select: { name: true }
+        })
+      ]);
+      if (before?.startDate && data.startDate < before.startDate)
+        return res.status(400).json({ error: 'A next level cannot start before the level it follows.' });
+      if (after)
+        return res.status(400).json({ error: `This level cannot start after ${after.name}, which follows it.` });
+    }
+    // Linked levels stay in one branch; the first level's start date orders its whole chain.
+    if (
+      data.branch &&
+      data.branch !== cycle.branch &&
+      (cycle.previousCycleId || (await prisma.cycle.count({ where: { previousCycleId: cycle.id } })))
+    )
+      return res.status(409).json({ error: 'Linked levels stay in one branch.' });
+    if ((cycle.chainId || cycle.id) === cycle.id && data.startDate)
+      await prisma.cycle.updateMany({ where: { chainId: cycle.id }, data: { chainStart: data.startDate } });
     const updated = await prisma.cycle.update({
       where: { id: cycle.id },
       data,

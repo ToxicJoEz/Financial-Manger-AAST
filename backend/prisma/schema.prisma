@@ -119,10 +119,17 @@ model Cycle {
   subCourse SubCourse? @relation(fields: [subCourseId], references: [id], onDelete: Restrict)
   // The umbrella (group) or sub-umbrella (private) the cycle is named after.
   numberingKey String
-  // The level the mod enters (1-4). Name: "<umbrella> <level> - <start month> <year>", plus " (n)" when the
+  // The level the mod enters (1 and up). Name: "<umbrella> <level> - <start month> <year>", plus " (n)" when the
   // same branch already runs that level in that month (sequence n).
   cycleNumber Int
   sequence    Int @default(1)
+  // Levels taken one after another (KET 1 -> KET 2): same umbrella or sub-umbrella and same branch.
+  // chainId is the first cycle of the chain and chainStart its start date, so a chain lists together.
+  previousCycleId String?
+  previousCycle   Cycle?  @relation("NextLevel", fields: [previousCycleId], references: [id], onDelete: SetNull)
+  nextCycles      Cycle[] @relation("NextLevel")
+  chainId         String?
+  chainStart      DateTime?
 
   id           String   @id @default(uuid())
   name         String
@@ -153,6 +160,7 @@ model Cycle {
   @@unique([numberingKey, branch, name])
   @@index([parentCourseId, archivedAt])
   @@index([subCourseId])
+  @@index([chainId])
 }
 
 model CourseInstructor {

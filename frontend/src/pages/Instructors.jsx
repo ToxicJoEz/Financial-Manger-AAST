@@ -25,7 +25,8 @@ const Instructors = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [branchFilter,setBranchFilter]=useState([]),[status,setStatus]=useState('all'),[sort,setSort]=useState('name');
-  const [view,setView]=useState(()=>localStorage.getItem('aast-employee-view')==='list'?'list':'grid');
+  // List view by default; each person's choice is remembered on their browser.
+  const [view,setView]=useState(()=>{try{return localStorage.getItem('aast-employee-view')==='grid'?'grid':'list';}catch{return 'list';}});
   const [page,setPage]=useState(1),[total,setTotal]=useState(0),[refresh,setRefresh]=useState(0),[loadError,setLoadError]=useState('');
   const [profileId,setProfileId]=useState(null);
   const branchKey=branchFilter.join(',');

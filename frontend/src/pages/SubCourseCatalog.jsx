@@ -1,4 +1,5 @@
-import { canSeePayroll } from '../utils/access';
+import { canSeePayroll, branchScopeOf } from '../utils/access';
+import { getCourseBranch } from '../utils/courseBranch';
 import { useContext, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -108,7 +109,11 @@ export default function SubCourseCatalog({ courseId }) {
   if (error || !data)
     return <section className="panel"><EmptyState title="This private course could not be loaded" description="Check your connection and try again."><button className="btn-secondary" onClick={() => { setLoading(true); load(); }}>Try again</button></EmptyState></section>;
   const { parent, subCourses } = data;
-  const visible = subCourses.filter(sub => Boolean(sub.archivedAt) === archived && (!search || sub.name.toLowerCase().includes(search.toLowerCase().trim())));
+  // Sub-umbrellas with no cycles in the chosen branch (or, for users, in their branches) are hidden.
+  // Branch mods still see them all, so they can start the first cycle in one.
+  const pickedBranch = branchScopeOf(user) ? '' : getCourseBranch();
+  const shownForBranch = sub => (branchScopeOf(user) ? true : pickedBranch ? (sub.byBranch?.[pickedBranch] || 0) > 0 : user.role === 'user' ? sub.cycleCount > 0 : true);
+  const visible = subCourses.filter(sub => Boolean(sub.archivedAt) === archived && shownForBranch(sub) && (!search || sub.name.toLowerCase().includes(search.toLowerCase().trim())));
   return <div className="courses-page course-catalog sub-course-catalog">
     <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} /><span>{parent.name}</span></nav>
     <PageHeading eyebrow={parent.code} title={parent.name} description="Private tuition, organized by sub-umbrella. Each sub-umbrella numbers its own cycles.">
