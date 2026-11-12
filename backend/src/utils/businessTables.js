@@ -16,7 +16,6 @@ export const BUSINESS_TABLES = [
   'Enrollment',
   'Student',
   'Cycle',
-  'SubCourse',
   'Course',
   'Instructor',
   'BranchColor'

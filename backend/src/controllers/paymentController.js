@@ -1,3 +1,5 @@
+import { logAction } from '../utils/logger.js';
+import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import { paymentFields } from '../utils/studentProfile.js';
 import prisma, { atomic } from '../db/prisma.js';
@@ -68,6 +70,15 @@ export const recordPayment = atomic(async (req, res, next) => {
       return res.status(400).json({ error: 'A unique request key is required.' });
     let amountMinor = moneyMinor(amount, 'Amount', { signed: kind === 'ADJUSTMENT' });
     if (amountMinor === 0n) return res.status(400).json({ error: 'Enter a non-zero amount.' });
+    // Tuition is paid in one go (full, discounted or exempt), never in instalments.
+    if (kind === 'PAYMENT') {
+      const fee = moneyMinor(enrollment.customFee ?? enrollment.course.courseFee),
+        left = fee - moneyMinor(enrollment.amountPaid);
+      if (left > 0n && amountMinor !== left)
+        return res.status(400).json({
+          error: `Tuition is paid in full, not in instalments: record the whole ${Number(left) / 100} EGP, or change the tuition to discounted or exempt first.`
+        });
+    }
     if (kind === 'REFUND') amountMinor = -amountMinor;
     const date = occurredAt ? new Date(occurredAt) : new Date();
     if (!Number.isFinite(date.getTime()) || date > new Date())
@@ -127,6 +138,52 @@ export const reversePayment = atomic(async (req, res, next) => {
         receiptNumber: entry.receiptNumber
       })
     );
+  } catch (error) {
+    if (error.status) return res.status(error.status).json({ error: error.message });
+    next(error);
+  }
+});
+
+// Marks an unpaid enrollment as paid in one step: full fee, a discounted fee paid in full, or exempt.
+// Used for students carried into a next level, who start unpaid. There are no instalments.
+export const settleEnrollment = atomic(async (req, res, next) => {
+  try {
+    const enrollment = await enrollmentFor(req);
+    if (!isManager(req.user))
+      return res.status(403).json({ error: 'Only admins and mods can record tuition payments.' });
+    if (enrollment.deletedAt || enrollment.financialArchivedAt)
+      return res.status(409).json({ error: 'This enrollment is archived. Its payment history is read-only.' });
+    if (enrollment.course.archivedAt) return res.status(409).json({ error: 'Restore the archived cycle first.' });
+    const paid = await prisma.paymentEntry.count({ where: { enrollmentId: enrollment.id } });
+    if (enrollment.amountPaid !== 0 || paid)
+      return res.status(409).json({
+        error: `${enrollment.student.name}'s tuition is already recorded. Correct it from the payment history.`
+      });
+    if (typeof req.body.idempotencyKey !== 'string' || req.body.idempotencyKey.length < 8)
+      return res.status(400).json({ error: 'A unique request key is required.' });
+    const terms = enrollmentTerms(
+      { tuitionType: req.body.tuitionType, customFee: req.body.customFee },
+      enrollment.course.courseFee
+    );
+    const updated = await prisma.enrollment.update({
+      where: { id: enrollment.id },
+      data: { customFee: terms.customFee }
+    });
+    if (terms.amountPaid > 0)
+      await appendPayment(updated, enrollment.course, enrollment.student, req.user, {
+        amountMinor: moneyMinor(terms.amountPaid),
+        kind: 'PAYMENT',
+        note: terms.tuitionType === 'DISCOUNTED' ? 'Discounted tuition paid in full' : 'Full tuition paid',
+        idempotencyKey: req.body.idempotencyKey,
+        ...paymentFields(req.body)
+      });
+    const label = { FULL: 'paid in full', DISCOUNTED: 'paid at a discount', EXEMPT: 'exempt' }[terms.tuitionType];
+    await logAction(
+      'SETTLE_TUITION',
+      `${enrollment.student.name} in ${enrollment.course.name} (${enrollment.course.branch}): tuition ${label}${terms.amountPaid ? ` · ${terms.amountPaid} EGP` : ''}`,
+      req.user.username
+    );
+    res.json({ message: `Tuition ${label}.`, tuitionType: terms.tuitionType, amountPaid: terms.amountPaid });
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
     next(error);

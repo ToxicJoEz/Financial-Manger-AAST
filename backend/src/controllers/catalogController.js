@@ -1,7 +1,7 @@
 import { moneyMinor } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
-import { visibleBranchesOf } from '../utils/access.js';
+import { visibleBranchesOf, cycleBranchWhere } from '../utils/access.js';
 import { cycleName, umbrellaBranches } from '../utils/privateCourses.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { logAction } from '../utils/logger.js';
@@ -39,8 +39,7 @@ const summary = (course, user) => {
     completedCount: live.filter(c => c.isFinished).length,
     branches: [...new Set(live.map(c => c.branch))],
     byBranch,
-    students: live.reduce((n, c) => n + c._count.enrollments, 0),
-    subCourseCount: course.isPrivate ? course.subCourses.filter(sub => isManager(user) || !sub.archivedAt).length : 0
+    students: live.reduce((n, c) => n + c._count.enrollments, 0)
   };
 };
 // Branch mods and users see an umbrella when it is open for one of their branches, or already runs cycles there.
@@ -51,7 +50,6 @@ const visibleToBranch = (course, user) => {
   );
 };
 const relations = {
-  subCourses: { select: { id: true, archivedAt: true } },
   cycles: {
     select: {
       cycleNumber: true,
@@ -74,6 +72,16 @@ const relations = {
     }
   }
 };
+// Group umbrellas need a course code no other umbrella uses; Private umbrellas have no code and a unique name.
+async function assertUnique({ isPrivate, name, code, exceptId }) {
+  const other = { ...(exceptId ? { id: { not: exceptId } } : {}) };
+  if (code && (await prisma.course.findFirst({ where: { code, ...other } })))
+    throw Object.assign(new Error('This course code is already in use.'), { status: 409 });
+  if (isPrivate && (await prisma.course.findFirst({ where: { isPrivate: true, name, ...other } })))
+    throw Object.assign(new Error(`A private umbrella named ${name} already exists, including archived ones.`), {
+      status: 409
+    });
+}
 export const listCourses = async (req, res, next) => {
   try {
     const courses = await prisma.course.findMany({
@@ -112,30 +120,27 @@ export const getCourse = async (req, res, next) => {
 };
 export const createCourse = atomic(async (req, res, next) => {
   try {
-    if (req.body.isPrivate !== undefined && typeof req.body.isPrivate !== 'boolean')
-      return res.status(400).json({ error: 'Private course must be a toggle value.' });
+    // Umbrellas are created inside the Group or Private section, and stay there.
+    if (typeof req.body.isPrivate !== 'boolean')
+      return res.status(400).json({ error: 'Create the umbrella inside the Group or Private section.' });
+    const isPrivate = req.body.isPrivate;
     const name = clean(req.body.name, 'Course name'),
-      code = clean(req.body.code, 'Course code');
-    if (
-      await prisma.course.findUnique({
-        where: {
-          code
-        }
-      })
-    )
-      return res.status(409).json({
-        error: 'This course code is already in use.'
-      });
+      code = isPrivate ? null : clean(req.body.code, 'Course code');
+    await assertUnique({ isPrivate, name, code });
     const course = await prisma.course.create({
       data: {
-        isPrivate: req.body.isPrivate === true,
-        bookPrice: req.body.isPrivate === true ? 0 : Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
+        isPrivate,
+        bookPrice: Number(moneyMinor(req.body.bookPrice ?? 0, 'Book price')) / 100,
         name,
         code,
         branches: 'MIAMI'
       }
     });
-    await logAction('CREATE_COURSE', `Created course ${name} (${code})`, req.user.username);
+    await logAction(
+      'CREATE_COURSE',
+      `Created ${isPrivate ? 'private' : 'group'} umbrella ${name}${code ? ` (${code})` : ''}`,
+      req.user.username
+    );
     res.status(201).json(course);
   } catch (error) {
     next(error);
@@ -152,35 +157,19 @@ export const editCourse = atomic(async (req, res, next) => {
       return res.status(404).json({
         error: 'Course not found.'
       });
-    if (req.body.isPrivate !== undefined && typeof req.body.isPrivate !== 'boolean')
-      return res.status(400).json({ error: 'Private course must be a toggle value.' });
-    const isPrivate = req.body.isPrivate ?? current.isPrivate;
-    if (
-      isPrivate !== current.isPrivate &&
-      ((await prisma.cycle.count({ where: { parentCourseId: current.id } })) ||
-        (await prisma.subCourse.count({ where: { parentCourseId: current.id } })))
-    )
-      return res
-        .status(409)
-        .json({ error: 'Course type cannot change once cycles exist. Create a separate umbrella for the other type.' });
+    // Group or Private is permanent.
+    if (req.body.isPrivate !== undefined && req.body.isPrivate !== current.isPrivate)
+      return res.status(409).json({ error: 'An umbrella stays in the section it was created in.' });
+    const isPrivate = current.isPrivate;
     const name = clean(req.body.name ?? current.name, 'Course name'),
-      code = clean(req.body.code ?? current.code, 'Course code');
-    const duplicate = await prisma.course.findUnique({
-      where: {
-        code
-      }
-    });
-    if (duplicate && duplicate.id !== current.id)
-      return res.status(409).json({
-        error: 'This course code is already in use.'
-      });
+      code = isPrivate ? null : clean(req.body.code ?? current.code, 'Course code');
+    await assertUnique({ isPrivate, name, code, exceptId: current.id });
     const course = await prisma.course.update({
       where: {
         id: current.id
       },
       data: {
-        isPrivate,
-        bookPrice: isPrivate ? 0 : Number(moneyMinor(req.body.bookPrice ?? current.bookPrice, 'Book price')) / 100,
+        bookPrice: Number(moneyMinor(req.body.bookPrice ?? current.bookPrice, 'Book price')) / 100,
         name,
         code
       }
@@ -197,7 +186,7 @@ export const editCourse = atomic(async (req, res, next) => {
         sequence: true
       }
     });
-    if (!course.isPrivate && name !== current.name)
+    if (name !== current.name)
       for (const cycle of cycles)
         await prisma.cycle.update({
           where: {
@@ -211,7 +200,7 @@ export const editCourse = atomic(async (req, res, next) => {
         });
     await logAction(
       'UPDATE_COURSE',
-      `Updated ${current.name} (${current.code}) to ${name} (${code}); historical financial snapshots retained.`,
+      `Updated ${current.name}${current.code ? ` (${current.code})` : ''} to ${name}${code ? ` (${code})` : ''}; historical financial snapshots retained.`,
       req.user.username
     );
     res.json(course);
@@ -298,3 +287,42 @@ export const setCourseBranches = atomic(async (req, res, next) => {
     next(error);
   }
 });
+
+// Search by student: the umbrellas whose cycles have a student with this name or phone number, and who matched.
+export const studentMatches = async (req, res, next) => {
+  try {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 160) : '';
+    if (q.length < 2) return res.json([]);
+    const phone = /^[+\d\s()-]{3,}$/.test(q) ? q.replace(/[^\d+]/g, '') : '';
+    const rows = await prisma.enrollment.findMany({
+      where: {
+        deletedAt: null,
+        course: {
+          ...(isManager(req.user) ? {} : { archivedAt: null }),
+          ...cycleBranchWhere(req.user)
+        },
+        student: {
+          deletedAt: null,
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { englishName: { contains: q, mode: 'insensitive' } },
+            ...(phone ? [{ mobile: { contains: phone } }] : [])
+          ]
+        }
+      },
+      select: { student: { select: { name: true } }, course: { select: { parentCourseId: true } } },
+      take: 500
+    });
+    const byCourse = new Map();
+    for (const row of rows) {
+      const names = byCourse.get(row.course.parentCourseId) || new Set();
+      names.add(row.student.name);
+      byCourse.set(row.course.parentCourseId, names);
+    }
+    res.json(
+      [...byCourse].map(([courseId, names]) => ({ courseId, students: [...names].slice(0, 5), count: names.size }))
+    );
+  } catch (error) {
+    next(error);
+  }
+};

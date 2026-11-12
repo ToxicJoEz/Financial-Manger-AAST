@@ -7,9 +7,8 @@ import Notifications from './pages/Notifications';
 import CourseCatalog from './pages/CourseCatalog';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
-import { useContext, useEffect, useState } from 'react';
-import axios from 'axios';
-import SubCourseCatalog from './pages/SubCourseCatalog';
+import { useContext } from 'react';
+import CourseSections from './pages/CourseSections';
 import Login from './pages/Login';
 import Home from './pages/Home';
 import NotFound from './pages/NotFound';
@@ -53,20 +52,9 @@ const PublicRoute = ({
   return children;
 };
 import { Toaster } from 'react-hot-toast';
-const CycleRoute = () => { const { courseId, subCourseId } = useParams(); return <Courses key={(courseId || 'all') + ':' + (subCourseId || '')} />; };
-// Private umbrellas open their sub-umbrellas; group umbrellas open their cycles.
-const UmbrellaRoute = () => {
-  const { courseId } = useParams();
-  const [kind, setKind] = useState(null);
-  useEffect(() => {
-    let active = true;
-    setKind(null);
-    axios.get('/courses/' + courseId).then(({ data }) => { if (active) setKind(data.isPrivate ? 'private' : 'group'); }).catch(() => { if (active) setKind('group'); });
-    return () => { active = false; };
-  }, [courseId]);
-  if (!kind) return <div className="loading-state"><span className="loading-spinner" />Loading course…</div>;
-  return kind === 'private' ? <SubCourseCatalog key={courseId} courseId={courseId} /> : <Courses key={courseId} />;
-};
+const CycleRoute = () => { const { courseId } = useParams(); return <Courses key={courseId || 'all'} />; };
+// Old sub-umbrella links: each sub-umbrella is now a Private umbrella with the same id.
+const OldSubRoute = () => { const { subCourseId } = useParams(); return <Navigate to={'/courses/' + subCourseId} replace />; };
 const FinanceRoute = () => {
   const { user } = useContext(AuthContext);
   return ['admin', 'mod'].includes(user.role) ? <FinanceLayout /> : <Navigate to="/" replace />;
@@ -120,10 +108,12 @@ const App = () => {
             <Route path="/users" element={<ManageUsers />} />
             <Route path="/logs" element={<LogsRoute />} />
             <Route path="/employees" element={<Instructors />} /><Route path="/instructors" element={<Navigate to="/employees" replace />} />
-            <Route path="/courses" element={<CourseCatalog />} />
+            <Route path="/courses" element={<CourseSections />} />
+            <Route path="/courses/group" element={<CourseCatalog key="group" section="group" />} />
+            <Route path="/courses/private" element={<CourseCatalog key="private" section="private" />} />
             <Route path="/courses/cycles" element={<CycleRoute />} />
-            <Route path="/courses/:courseId" element={<UmbrellaRoute />} />
-            <Route path="/courses/:courseId/sub/:subCourseId" element={<CycleRoute />} />
+            <Route path="/courses/:courseId" element={<CycleRoute />} />
+            <Route path="/courses/:courseId/sub/:subCourseId" element={<OldSubRoute />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/students" element={<Students />} />
             <Route path="/finances" element={<FinanceRoute />}>

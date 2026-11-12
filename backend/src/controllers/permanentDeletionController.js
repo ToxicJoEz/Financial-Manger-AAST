@@ -6,10 +6,9 @@ const fail = (message, status = 400) => {
 };
 async function deletionPlan(kind, id) {
   const record = await prisma[kind].findUnique({ where: { id } });
-  if (!record)
-    fail({ course: 'Course not found.', subCourse: 'Sub-umbrella not found.' }[kind] || 'Cycle not found.', 404);
+  if (!record) fail(kind === 'course' ? 'Course not found.' : 'Cycle not found.', 404);
   const cycles = await prisma.cycle.findMany({
-    where: kind === 'course' ? { parentCourseId: id } : kind === 'subCourse' ? { subCourseId: id } : { id },
+    where: kind === 'course' ? { parentCourseId: id } : { id },
     select: { id: true, name: true, updatedAt: true },
     orderBy: { id: 'asc' }
   });
@@ -134,11 +133,7 @@ async function executePlan(kind, plan, actor) {
   await prisma.courseInstructor.deleteMany({ where });
   await prisma.enrollment.deleteMany({ where });
   await prisma.cycle.deleteMany({ where: { id: { in: plan.ids } } });
-  if (kind === 'subCourse') await prisma.subCourse.delete({ where: { id: plan.record.id } });
-  if (kind === 'course') {
-    await prisma.subCourse.deleteMany({ where: { parentCourseId: plan.record.id } });
-    await prisma.course.delete({ where: { id: plan.record.id } });
-  }
+  if (kind === 'course') await prisma.course.delete({ where: { id: plan.record.id } });
   await logAction(
     'PERMANENT_DELETE_' + kind.toUpperCase(),
     `Permanently deleted ${plan.record.name}. Removed ${JSON.stringify(plan.counts)}. Shared student/instructor profiles retained.`,
@@ -159,7 +154,7 @@ export const permanentlyDelete = kind =>
           );
         await executePlan(kind, plan, req.user.username);
         res.json({
-          message: `${{ course: 'Course', subCourse: 'Sub-umbrella' }[kind] || 'Cycle'} permanently deleted.`
+          message: `${kind === 'course' ? 'Course' : 'Cycle'} permanently deleted.`
         });
       } catch (error) {
         next(error);

@@ -20,12 +20,12 @@ test('Private dates, duration and phone normalization preserve day-first and ide
   assert.equal(dateInputValue(''), '');
 });
 
-test('Private course names map to sub-umbrella and cycle number; durations suggest rates; shared fees split exactly', async () => {
+test('Private course names map to a private umbrella and level; durations suggest rates; shared fees split exactly', async () => {
   const { courseParts, durationRate, shareAmount } = await import('../src/utils/privateWorkbook.js');
-  assert.deepEqual(courseParts('PET 2'), { subCourseName: 'PET', cycleNumber: 2 });
-  assert.deepEqual(courseParts('Pre-KET 4'), { subCourseName: 'PRE-KET', cycleNumber: 4 });
-  assert.deepEqual(courseParts('IELTS'), { subCourseName: 'IELTS', cycleNumber: null });
-  assert.deepEqual(courseParts('PET1/S'), { subCourseName: 'PET', cycleNumber: 1, courseSuffix: 'S' });
+  assert.deepEqual(courseParts('PET 2'), { umbrellaName: 'PET', cycleNumber: 2 });
+  assert.deepEqual(courseParts('Pre-KET 4'), { umbrellaName: 'PRE-KET', cycleNumber: 4 });
+  assert.deepEqual(courseParts('IELTS'), { umbrellaName: 'IELTS', cycleNumber: null });
+  assert.deepEqual(courseParts('PET1/S'), { umbrellaName: 'PET', cycleNumber: 1, courseSuffix: 'S' });
   assert.equal(durationRate('20 Hrs / 180 EGP'), '180');
   assert.equal(durationRate('18:30 Hrs / 200EGP'), '200');
   assert.equal(durationRate('20 hours'), '');

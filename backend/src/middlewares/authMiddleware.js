@@ -1,8 +1,9 @@
-import { auditActor } from '../utils/auditContext.js';
+import { auditActor, recordCause } from '../utils/auditContext.js';
 import jwt from 'jsonwebtoken';
 import { canSeePayroll, branchScopeOf, canSeeBranch, visibleBranchesOf } from '../utils/access.js';
 import prisma from '../db/prisma.js';
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
+import { assertCyclesChangeable } from '../utils/cycleLock.js';
 
 export const protect = async (req, res, next) => {
   let token;
@@ -45,8 +46,11 @@ export const protect = async (req, res, next) => {
       req.user = user;
       next();
     } catch (error) {
-      res.status(401);
-      next(new Error('Not authorized, token failed or expired'));
+      // The log keeps the exact reason (expired token, deleted or banned account); banned accounts are told so.
+      recordCause(error);
+      const banned = res.statusCode === 403;
+      res.status(banned ? 403 : 401);
+      next(new Error(banned ? error.message : 'Not authorized, token failed or expired'));
     }
   } else {
     res.status(401);
@@ -71,6 +75,14 @@ export const payrollManager = (req, res, next) => {
     next(new Error('Payroll is handled by admins and the main mod.'));
   }
 };
+// The same people (admins and the main mod), with a reason that names what was refused.
+export const managersOnly = reason => (req, res, next) => {
+  if (canSeePayroll(req.user)) next();
+  else {
+    res.status(403);
+    next(new Error(`Only admins and the main mod can ${reason}.`));
+  }
+};
 
 // Branch mods and users only reach cycles in their branches: any route with a cycle :id checks it first.
 export const cycleInBranch = async (req, res, next, id) => {
@@ -78,6 +90,8 @@ export const cycleInBranch = async (req, res, next, id) => {
     if (!visibleBranchesOf(req.user)) return next();
     const cycle = await prisma.cycle.findUnique({ where: { id: String(id) }, select: { branch: true } });
     if (cycle && !canSeeBranch(req.user, cycle.branch)) return res.status(404).json({ error: 'Cycle not found.' });
+    // Branch mods change only cycles they created, and only until the main mod checks the cycle's money.
+    if (cycle && req.method !== 'GET') await assertCyclesChangeable(req.user, [String(id)]);
     next();
   } catch (error) {
     next(error);
@@ -89,6 +103,7 @@ export const cyclesInBranch = async (user, ids) => {
   if (!scope || !Array.isArray(ids) || !ids.length) return;
   const outside = await prisma.cycle.count({ where: { id: { in: ids.map(String) }, branch: { not: scope } } });
   if (outside) throw Object.assign(new Error('Some selected cycles are outside your branch.'), { status: 403 });
+  await assertCyclesChangeable(user, ids.map(String));
 };
 export const bulkCyclesInBranch = async (req, res, next) => {
   try {
@@ -116,6 +131,12 @@ export const studentsInBranch = async (req, res, next) => {
       return res
         .status(403)
         .json({ error: 'This student also studies in another branch. Ask the main mod to remove or archive them.' });
+    // Removing or archiving a student touches every cycle they are in: each must be one this branch mod may change.
+    const cycles = await prisma.enrollment.findMany({ where: { studentId: { in: ids } }, select: { courseId: true } });
+    await assertCyclesChangeable(
+      req.user,
+      cycles.map(c => c.courseId)
+    );
     next();
   } catch (error) {
     next(error);

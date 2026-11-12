@@ -15,7 +15,7 @@ export const updateBookStatus = atomic(async (req, res, next) => {
     if (!['PAID', 'EXEMPT', 'UNPAID'].includes(status)) fail('Choose a valid book status.');
     const row = await prisma.enrollment.findFirst({
       where: { id: req.params.enrollmentId, courseId: req.params.id },
-      include: { student: true, course: { include: { parentCourse: true, subCourse: true } } }
+      include: { student: true, course: { include: { parentCourse: true } } }
     });
     if (!row) fail('Enrollment not found.', 404);
     const current = await prisma.bookPayment.findUnique({ where: { activeKey: row.id } });

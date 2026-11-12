@@ -1,4 +1,4 @@
-import { auditContext } from '../utils/auditContext.js';
+import { auditContext, recordCause } from '../utils/auditContext.js';
 import { auditData, snapshotChange } from '../utils/auditEvent.js';
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
@@ -11,7 +11,6 @@ const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'dele
 const auditedModels = new Set([
   'user',
   'course',
-  'subCourse',
   'cycle',
   'instructor',
   'student',
@@ -116,6 +115,8 @@ export function atomic(handler, { timeout = 20000 } = {}) {
       res.status(response.status).json(response.body);
     } catch (error) {
       if (error.bufferedResponse) return res.status(error.bufferedResponse.status).json(error.bufferedResponse.body);
+      // Keep the real cause (e.g. a database conflict code) for the activity log.
+      recordCause(error);
       if (error.status) return res.status(error.status).json({ error: error.message });
       if (['P2002', 'P2025', 'P2034', 'P2028'].includes(error.code))
         return res.status(409).json({

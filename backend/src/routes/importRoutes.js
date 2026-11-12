@@ -4,19 +4,19 @@ import {
   commitPrivateImport
 } from '../controllers/privateImportController.js';
 import express from 'express';
-import { protect, modOrAbove, payrollManager } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, managersOnly } from '../middlewares/authMiddleware.js';
 import { previewImport, commitImport } from '../controllers/importController.js';
 const router = express.Router();
 router.use(protect, modOrAbove);
-// Private workbooks set an employee hourly rate per cycle: admins and the main mod only.
+// Private workbooks go into the Private section (missing umbrellas are created). They set an employee hourly rate per cycle: admins and the main mod only.
 router.post(
-  '/:parentId/private/preview',
-  payrollManager,
+  '/private/preview',
+  managersOnly('import private courses'),
   express.raw({ type: 'application/octet-stream', limit: '2mb' }),
   previewPrivateImport
 );
-router.post('/:parentId/private/review', payrollManager, reviewPrivateImport);
-router.post('/:parentId/private/commit', payrollManager, commitPrivateImport);
+router.post('/private/review', managersOnly('import private courses'), reviewPrivateImport);
+router.post('/private/commit', managersOnly('import private courses'), commitPrivateImport);
 router.post(
   '/:parentId/preview',
   express.raw({

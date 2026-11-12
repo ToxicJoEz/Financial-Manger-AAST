@@ -54,11 +54,15 @@ model SystemLog {
   durationMs     Int?
   recordCount    Int      @default(0)
   details        Json?
+  // Failures: what kind (INVALID_INPUT, NOT_ALLOWED, BLOCKED_BY_RULE, UNEXPECTED, ...) and the exact reason.
+  errorKind      String?
+  errorMessage   String?
 
   @@index([createdAt, id])
   @@index([actorRole, createdAt])
   @@index([actorUsername, createdAt])
   @@index([category, outcome, createdAt])
+  @@index([errorKind, createdAt])
 }
 
 model Instructor {
@@ -77,12 +81,13 @@ model Instructor {
   pendingAssignments PendingAssignment[]
 }
 
-// Umbrella: no branch, teaching defaults, enrollment, or financial state.
+// Umbrella: no branch, teaching defaults, enrollment, or financial state. Umbrellas sit in one of two fixed
+// sections: Group (each has a unique course code) or Private (no code). Cycles sit directly under an umbrella.
 model Course {
   isPrivate Boolean @default(false)
   id String @id @default(uuid())
   name String
-  code String @unique
+  code String? @unique
   bookPrice Float @default(0)
   // Branches allowed to run cycles under this umbrella (comma-separated). New umbrellas open for Miami only.
   branches String @default("MIAMI")
@@ -91,39 +96,18 @@ model Course {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   cycles Cycle[]
-  subCourses SubCourse[]
-}
-
-// Private umbrellas only: an organizing level (e.g. KET, PET) between the umbrella and its cycles.
-// Money stays on cycles; the sub-umbrella supplies cycle names, numbering and the book price.
-model SubCourse {
-  id             String    @id @default(uuid())
-  parentCourseId String
-  parentCourse   Course    @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
-  name           String
-  bookPrice      Float     @default(0)
-  archivedAt     DateTime?
-  archivedBy     String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  cycles         Cycle[]
-
-  @@unique([parentCourseId, name])
 }
 
 model Cycle {
   parentCourseId String
   parentCourse Course @relation(fields: [parentCourseId], references: [id], onDelete: Restrict)
-  // Private cycles belong to a sub-umbrella; group cycles do not.
-  subCourseId String?
-  subCourse SubCourse? @relation(fields: [subCourseId], references: [id], onDelete: Restrict)
-  // The umbrella (group) or sub-umbrella (private) the cycle is named after.
+  // The umbrella the cycle is named and numbered after (its id).
   numberingKey String
   // The level the mod enters (1 and up). Name: "<umbrella> <level> - <start month> <year>", plus " (n)" when the
   // same branch already runs that level in that month (sequence n).
   cycleNumber Int
   sequence    Int @default(1)
-  // Levels taken one after another (KET 1 -> KET 2): same umbrella or sub-umbrella and same branch.
+  // Levels taken one after another (KET 1 -> KET 2): same umbrella and same branch.
   // chainId is the first cycle of the chain and chainStart its start date, so a chain lists together.
   previousCycleId String?
   previousCycle   Cycle?  @relation("NextLevel", fields: [previousCycleId], references: [id], onDelete: SetNull)
@@ -132,6 +116,8 @@ model Cycle {
   chainStart      DateTime?
 
   id           String   @id @default(uuid())
+  // Who created the cycle. A branch mod can only change cycles they created, until the main mod checks its money.
+  createdById  String?
   name         String
   venue        String?
   classStartTime String? // Local class time HH:mm
@@ -159,8 +145,8 @@ model Cycle {
 
   @@unique([numberingKey, branch, name])
   @@index([parentCourseId, archivedAt])
-  @@index([subCourseId])
   @@index([chainId])
+  @@index([createdById])
 }
 
 model CourseInstructor {
@@ -168,7 +154,11 @@ model CourseInstructor {
   courseId     String
   instructorId String
   hourlyRate   Float      // The specific rate for this instructor in this course
-  hoursTaught  Float?     // Filled when course is finished
+  hoursTaught  Float?     // Filled when the course is finished, or when this employee's hours are closed early
+  // Hours closed before the course ends (e.g. 15 of 20, with another employee finishing the rest). Closed hours
+  // are fixed and already in payroll as unpaid earnings.
+  closedAt     DateTime?
+  closedBy     String?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -184,7 +174,8 @@ model PendingAssignment {
   instructorId    String?  // null if requesting removal
   submittedById   String
   status          String   @default("PENDING") // PENDING, APPROVED, REJECTED
-  type            String   @default("ASSIGN")  // ASSIGN, REMOVE
+  type            String   @default("ASSIGN")  // ASSIGN, REMOVE, REPLACE, CLOSE_HOURS
+  hours           Float?   // CLOSE_HOURS: the hours to close the employee at
   replacedAssignmentId String?
   replacedInstructorId String?
   resolvedById    String?

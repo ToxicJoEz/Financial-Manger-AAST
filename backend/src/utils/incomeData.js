@@ -54,11 +54,10 @@ export function incomeReport(cycles) {
     return {
       id: cycle.id,
       parentCourseId: cycle.parentCourseId,
-      subCourseId: cycle.subCourseId ?? null,
       name: cycle.name,
       isPrivate: Boolean(cycle.parentCourse.isPrivate),
       privateStudents: cycle.parentCourse.isPrivate ? cycle.enrollments.map(e => e.student?.name).filter(Boolean) : [],
-      courseCode: cycle.parentCourse.code,
+      courseCode: cycle.parentCourse.code || '',
       branch: cycle.branch,
       startDate: cycle.startDate,
       endDate: cycle.endDate,

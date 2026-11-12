@@ -102,7 +102,6 @@ export const getFinances = async (req, res, next) => {
         id: true,
         name: true,
         parentCourseId: true,
-        subCourseId: true,
         branch: true,
         parentCourse: { select: { isPrivate: true } }
       }

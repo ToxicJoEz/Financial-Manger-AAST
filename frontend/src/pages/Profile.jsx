@@ -70,7 +70,7 @@ const Profile = () => {
   return <div>
     <PageHeading eyebrow="Make yourself at home" title="My profile" description="Your details, just the way you like them." />
     <div className="settings-layout">
-      <aside className="panel identity-card"><div className="identity-avatar">{avatarSource && failedAvatar !== avatarSource ? <img key={avatarSource} src={avatarSource} alt="Your avatar" className="profile-presentation-17" onError={() => setFailedAvatar(avatarSource)} /> : <User size={36} strokeWidth={1.6} role="img" aria-label="Default profile avatar" />}</div><h2>{firstName || user.username}{lastName ? ' ' + lastName : ''}</h2><p>@{user.username}</p><span className="status-badge status-active">{user.role === 'admin' ? 'Administrator' : user.role === 'mod' ? 'Moderator' : 'Accountant'}</span></aside>
+      <aside className="panel identity-card"><div className="identity-avatar">{avatarSource && failedAvatar !== avatarSource ? <img key={avatarSource} src={avatarSource} alt="Your avatar" className="profile-presentation-17" onError={() => setFailedAvatar(avatarSource)} /> : <User size={36} strokeWidth={1.6} role="img" aria-label="Default profile avatar" />}</div><h2>{firstName || user.username}{lastName ? ' ' + lastName : ''}</h2><p>@{user.username}</p><span className="status-badge status-active">{user.role === 'admin' ? 'Administrator' : user.role === 'mod' ? 'Moderator' : 'User'}</span></aside>
       <form className="panel settings-form" onSubmit={handleUpdate}>
         <h2><User size={18} />A little about you</h2><p>These details appear on your workspace profile.</p>
         {msg.text && <div className={'alert-' + msg.type + " profile-presentation-18"} role="status">{msg.text}</div>}

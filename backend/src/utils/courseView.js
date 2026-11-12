@@ -109,8 +109,7 @@ function fullCourseView(course, user) {
       privateSeatOccupied: Boolean(course.parentCourse?.isPrivate && all.length >= PRIVATE_SEAT_LIMIT),
       privateSeatCount: course.parentCourse?.isPrivate ? all.length : 0,
       privateSeatLimit: course.parentCourse?.isPrivate ? PRIVATE_SEAT_LIMIT : null,
-      effectiveBookPrice:
-        (course.parentCourse?.isPrivate ? course.subCourse?.bookPrice : course.parentCourse?.bookPrice) || 0,
+      effectiveBookPrice: course.parentCourse?.bookPrice || 0,
       totalEnrolled: visible.filter(
         entry => !entry.deletedAt && !entry.student?.deletedAt && !entry.financialArchivedAt
       ).length,

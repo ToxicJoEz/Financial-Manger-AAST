@@ -5,7 +5,7 @@ import {
   bulkCycleDeletionPreview,
   bulkDeleteCycles
 } from '../controllers/permanentDeletionController.js';
-import { getPayments, recordPayment, reversePayment } from '../controllers/paymentController.js';
+import { getPayments, recordPayment, reversePayment, settleEnrollment } from '../controllers/paymentController.js';
 import { updateBookStatus } from '../controllers/bookController.js';
 import express from 'express';
 import {
@@ -24,14 +24,17 @@ import {
   updateEnrollment,
   removeEnrollment,
   bulkArchiveCourses,
-  getCyclesOverview
+  getCyclesOverview,
+  closeInstructorHours,
+  reopenInstructorHours
 } from '../controllers/courseController.js';
 import {
   protect,
   modOrAbove,
   cycleInBranch,
   bulkCyclesInBranch,
-  confirmedMoneyGuard
+  confirmedMoneyGuard,
+  managersOnly
 } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -57,7 +60,16 @@ router.delete('/:id/instructors/:courseInstructorId', removeInstructor);
 router.post('/:id/instructors/:courseInstructorId/replace', replaceInstructor);
 router.post('/:id/restore', modOrAbove, restoreCourse);
 router.post('/:id/finish', modOrAbove, markFinished);
+// Reopening a completed cycle, and undoing an early close, is for admins and the main mod.
+// Admins and the main mod reopen any cycle; a branch mod reopens a cycle they created until its money is checked.
 router.post('/:id/revert', modOrAbove, revertFinish);
+// Closing an employee's hours early: direct for admins and the main mod, a request for everyone else.
+router.post('/:id/instructors/:courseInstructorId/close', closeInstructorHours);
+router.post(
+  '/:id/instructors/:courseInstructorId/reopen',
+  managersOnly('reopen closed employee hours'),
+  reopenInstructorHours
+);
 
 // Enrollment routes (accessible to all authenticated users)
 // Users only view cycles; they may still request employee changes (approved by the main mod).
@@ -70,6 +82,8 @@ router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
 // Payment history (amounts, methods, receipts) is for admins and mods; users only see paid / not paid.
 router.get('/:id/enrollments/:enrollmentId/payments', modOrAbove, getPayments);
 router.post('/:id/enrollments/:enrollmentId/payments', modOrAbove, recordPayment);
+// Unpaid students (carried into a next level) are settled in one step: full, discounted or exempt.
+router.post('/:id/enrollments/:enrollmentId/settle', modOrAbove, settleEnrollment);
 router.post('/:id/enrollments/:enrollmentId/payments/:paymentId/reverse', modOrAbove, reversePayment);
 
 export default router;

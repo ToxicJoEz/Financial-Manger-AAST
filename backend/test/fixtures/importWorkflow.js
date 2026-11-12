@@ -232,10 +232,23 @@ try {
   );
   const pay = ok(await request(`/cycles/${partial.cycleId}/enrollments`));
   const e = pay.enrollments.find(e => e.studentId === student.id);
-  // Existing pre-policy partial balances still support the immutable payment ledger.
+  // An older part-paid balance can only be completed by paying everything that is left (no instalments).
   await prisma.enrollment.update({ where: { id: e.id }, data: { customFee: 1800 } });
+  const left = 1800 - e.amountPaid;
+  assert.equal(
+    (
+      await request(`/cycles/${partial.cycleId}/enrollments/${e.id}/payments`, 'POST', {
+        amount: 100,
+        kind: 'PAYMENT',
+        note: 'instalment',
+        idempotencyKey: 'test-import-instalment',
+        paymentMethod: 'CARD'
+      })
+    ).status,
+    400
+  );
   const paymentBody = {
-    amount: 100,
+    amount: left,
     kind: 'PAYMENT',
     note: 'test payment',
     idempotencyKey: 'test-import-manual-payment',
@@ -256,7 +269,7 @@ try {
     .enrollments.find(row => row.id === e.id);
   assert(
     refreshedEnrollment.paymentSummary.some(
-      p => p.paymentMethod === 'CARD' && p.receiptNumber === 'MANUAL-001' && p.amount === 100
+      p => p.paymentMethod === 'CARD' && p.receiptNumber === 'MANUAL-001' && p.amount === left
     )
   );
   assert.equal(refreshedEnrollment.payments, undefined);

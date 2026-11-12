@@ -12,7 +12,7 @@ import {
   initiateSalarySelection,
   completeRun
 } from '../controllers/financeController.js';
-import { protect, modOrAbove, payrollManager } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, payrollManager, managersOnly } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -21,9 +21,9 @@ router.get('/income', getIncome);
 router.get('/overview', getYearlyOverview);
 
 // Branch money checks: admins and the main mod only.
-router.get('/checks', payrollManager, listMoneyChecks);
-router.post('/checks', payrollManager, markMoneyChecked);
-router.post('/checks/uncheck', payrollManager, unmarkMoneyChecked);
+router.get('/checks', managersOnly('check branch money'), listMoneyChecks);
+router.post('/checks', managersOnly('check branch money'), markMoneyChecked);
+router.post('/checks/uncheck', managersOnly('undo money checks'), unmarkMoneyChecked);
 
 // Everything below is payroll: admins and the main mod only.
 router.use(payrollManager);

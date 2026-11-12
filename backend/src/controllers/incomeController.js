@@ -4,7 +4,6 @@ import { incomeReport } from '../utils/incomeData.js';
 const incomeCycleSelect = {
   id: true,
   parentCourseId: true,
-  subCourseId: true,
   name: true,
   branch: true,
   startDate: true,

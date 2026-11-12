@@ -70,10 +70,10 @@ test('Audit history survives failures and deletions with role-scoped access', ()
 test('Management corrections preserve balances, identity and access boundaries', () =>
   fixture('managementWorkflow.js'));
 
-test('Private sub-umbrellas own cycle numbering, names and book prices; private cycles hold up to 3 students', () =>
+test('Group and Private umbrellas; private cycles hold up to 3 students; hours can be closed early', () =>
   fixture('privateCourseWorkflow.js'));
 
-test('Private workbooks group merged rows into shared cycles inside sub-umbrellas', () =>
+test('Private workbooks group merged rows into shared cycles inside private umbrellas', () =>
   fixture('privateWorkbookWorkflow.js'));
 test('Bulk cycle and employee deletion keeps single-delete safeguards', () => fixture('bulkDeletionWorkflow.js'));
 test('Branch mods have no payroll; Fouad money is checked by admins and the main mod', () =>

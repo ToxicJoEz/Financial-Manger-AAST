@@ -16,7 +16,6 @@ const money = value => Number(value || 0).toLocaleString('en-EG', {
 });
 export default function CycleImportDialog({
   parent,
-  subCourse,
   instructors,
   manager,
   onClose,
@@ -49,15 +48,15 @@ export default function CycleImportDialog({
     hourlyRate: '',
     paymentDate: ''
   });
-  // Cycles this import may follow: same umbrella or sub-umbrella and the chosen branch, newest first.
+  // Cycles this import may follow: same umbrella and the chosen branch, newest first.
   useEffect(() => {
     if (linkMode !== 'next' || !form.branch) return;
     let active = true;
-    axios.get('/cycles', { params: { parentCourseId: parent.id, subCourseId: subCourse?.id, branch: form.branch, pageSize: 100 } })
+    axios.get('/cycles', { params: { parentCourseId: parent.id, branch: form.branch, pageSize: 100 } })
       .then(({ data }) => { if (active) setCandidates([...data.rows].sort((a, b) => String(b.startDate).localeCompare(String(a.startDate)))); })
       .catch(() => { if (active) setCandidates([]); });
     return () => { active = false; };
-  }, [linkMode, form.branch, parent.id, subCourse?.id]);
+  }, [linkMode, form.branch, parent.id]);
   const set = (key, value) => setForm(old => ({
     ...old,
     [key]: value
@@ -114,7 +113,6 @@ export default function CycleImportDialog({
         data
       } = await axios.post(`/imports/${parent.id}/commit`, {
         ...form,
-        subCourseId: subCourse?.id,
         previousCycleId: linkMode === 'next' && previousId ? previousId : undefined,
         choices,
         previewToken: preview.previewToken
@@ -170,7 +168,7 @@ export default function CycleImportDialog({
   return <Dialog title="Import cycle from Excel" onClose={busy ? () => {} : onClose}><div className="modal-content card cycle-import">
   <div className="import-heading"><span className="import-symbol"><FileSpreadsheet size={24} /></span><div><span className="eyebrow">REGISTRATION IMPORT</span><h3>{result ? 'Cycle ready' : 'Import cycle from Excel'}</h3></div><button className="icon-button" aria-label="Close import" disabled={busy} onClick={onClose}><X size={20} /></button></div>
   {result ? <div className="import-success"><CheckCircle2 size={40} /><h3>{result.cycleName}<PrivateBadge record={parent}/> was created</h3><p>{result.enrolled} students enrolled · {result.created} new · {result.reused} existing</p><p className="muted">{result.isFinished ? "Marked completed automatically because its end date is today or earlier. " : "Imported as an active cycle. "}Payments and student details are saved. {form.instructorId && !manager ? "The employee request is awaiting manager approval." : ''}</p><button className="btn-primary" onClick={() => onSaved(result)}>View cycle</button></div> : <>
-  <div className="student-form-group"><label htmlFor="import-parent">Course umbrella</label><input id="import-parent" className="input-field" readOnly value={`${parent.name}${subCourse ? ' · ' + subCourse.name : ''} · ${parent.code}`} /></div>
+  <div className="student-form-group"><label htmlFor="import-parent">Course umbrella</label><input id="import-parent" className="input-field" readOnly value={parent.code ? `${parent.name} · ${parent.code}` : `${parent.name} · Private`} /></div>
   <p className="muted">One registration roster creates one cycle. Fields marked <Required /> are required; other fields are optional.</p>
   {error && <div className="alert-error" role="alert">{error}</div>}
   {!preview ? <div><label className="import-dropzone" htmlFor="import-file"><Upload size={30} /><strong>{file?.name || 'Choose a registration workbook'}<Required /></strong><span>.xlsx · Up to 2 MB · Up to 1,000 students</span><input id="import-file" type="file" accept=".xlsx" required disabled={busy} onChange={e => { const selected = e.target.files[0]; if (selected) readFile(selected); e.target.value = ''; }} /></label>{busy && <p role="status" className="policy-note">Reading workbook…</p>}<div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>Cancel</button></div></div> : <form onSubmit={commit}>
@@ -180,9 +178,9 @@ export default function CycleImportDialog({
             }}>Change file</button></div>
    {preview.courseMismatch && <div className="alert-error" role="alert">The file course code ({preview.courseCode || 'missing'}) does not match {parent.code}. Choose the correct umbrella or correct the source file.</div>}
    {parent.isPrivate && rows.length>PRIVATE_SEAT_LIMIT && <p className="alert-error" role="alert">A private cycle can contain at most {PRIVATE_SEAT_LIMIT} students. Upload a smaller roster or create an empty cycle manually.</p>}<h4>Cycle details {parent.isPrivate?'· Private':''}</h4><div className="import-form-grid">
-    <div className="import-link-choice" role="radiogroup" aria-label="How to import this cycle"><button type="button" role="radio" aria-checked={linkMode === 'new'} className={linkMode === 'new' ? 'active' : ''} onClick={() => { setLinkMode('new'); setPreviousId(''); }}><strong>New cycle</strong><span>Not linked to another level</span></button><button type="button" role="radio" aria-checked={linkMode === 'next'} className={linkMode === 'next' ? 'active' : ''} onClick={() => setLinkMode('next')}><strong>Next level of…</strong><span>Follows an existing cycle in this {subCourse ? 'sub-umbrella' : 'umbrella'} and branch</span></button></div>
+    <div className="import-link-choice" role="radiogroup" aria-label="How to import this cycle"><button type="button" role="radio" aria-checked={linkMode === 'new'} className={linkMode === 'new' ? 'active' : ''} onClick={() => { setLinkMode('new'); setPreviousId(''); }}><strong>New cycle</strong><span>Not linked to another level</span></button><button type="button" role="radio" aria-checked={linkMode === 'next'} className={linkMode === 'next' ? 'active' : ''} onClick={() => setLinkMode('next')}><strong>Next level of…</strong><span>Follows an existing cycle in this umbrella and branch</span></button></div>
     {linkMode === 'next' && <Field label="Follows cycle" id="import-previous"><CustomFilterDropdown id="import-previous" searchable required value={previousId} onChange={value => { setPreviousId(value); const prev = candidates.find(c => c.id === value); if (prev) set('cycleNumber', String((prev.cycleNumber || 0) + 1)); }} placeholder={form.branch ? (candidates.length ? 'Choose the previous level' : `No ${form.branch} cycles here yet`) : 'Choose the branch first'} options={candidates.map(c => ({ value: c.id, label: `${c.name} · starts ${c.startDate ? new Date(c.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : 'no date'}` }))} /></Field>}
-    <Field label={subCourse ? `${subCourse.name} level` : 'Level'} id="import-number"><input id="import-number" className="input-field" required type="number" min="1" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
+    <Field label="Level" id="import-number"><input id="import-number" className="input-field" required type="number" min="1" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
     <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={BRANCH_OPTIONS.filter(o => (!branchScope || o.value === branchScope) && openBranches.includes(o.value))} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
     <Field label="Start date · from Excel" id="import-start"><DateInput id="import-start" className="input-field" required  value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
     <Field label="End date · from Excel" id="import-end"><DateInput id="import-end" className="input-field" required  min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>

@@ -1,0 +1,162 @@
+// ---- Group and Private sections ------------------------------------------------------------------
+// Each section has its own colour (matching the Group / Private badges): a light flat wash, a border in that
+// colour, a solid icon or name tab, and a faint icon in the corner. No gradients or coloured edges.
+.is-group, .section-group { --section: #0b7a5c; --section-strong: #075c45; --section-soft: #e6f4ee; --section-line: #c6e6da; --section-wash: #f5fbf8; }
+.is-private, .section-private { --section: #6d3fd8; --section-strong: #5429b8; --section-soft: #f0eafd; --section-line: #ddd1f8; --section-wash: #faf8ff; }
+// A large, faint outline of the section's icon in the corner: easy to recognise, never in the way.
+.section-watermark {
+  position: absolute; right: -26px; bottom: -38px; width: 190px; height: 190px;
+  color: var(--section); opacity: 0.07; pointer-events: none;
+}
+
+// The top of every page inside a section: a plain white panel with the section's name tab pinned to it.
+.section-hero {
+  position: relative;
+  margin: 0 0 26px;
+  padding: 26px 28px 4px;
+  overflow: hidden;
+  border: 1px solid var(--section-line);
+  border-radius: var(--radius-lg);
+  background: var(--section-wash);
+  box-shadow: var(--shadow-card);
+  > :not(.section-watermark):not(.section-hero-tag) { position: relative; }
+  .course-breadcrumb { margin-bottom: 14px; a { color: var(--section-strong); font-weight: 600; } }
+  .page-heading { margin-bottom: 22px; }
+  .page-heading .eyebrow { color: var(--section-strong); }
+}
+// The section's name, hanging from the top edge like a folder tab, on every page inside it.
+.section-hero-tag {
+  position: absolute;
+  top: -1px;
+  right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 1;
+  padding: 6px 13px 7px;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--section);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.section-chip {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 10px; padding: 4px 10px;
+  border-radius: var(--radius-sm); background: var(--section-soft); color: var(--section-strong);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+}
+// Inside a section, umbrella cards pick up its colour.
+.section-group, .section-private {
+  .catalog-card { --catalog-accent: var(--section); --catalog-tint: var(--section-soft); }
+  .catalog-card:hover { border-color: var(--section-line); }
+}
+.catalog-student-hit, .cycle-student-hit {
+  display: flex; align-items: center; gap: 6px; color: var(--accent-strong); font-size: 12px;
+  strong { font-weight: 700; color: var(--ink-strong); }
+  svg { flex-shrink: 0; }
+}
+.catalog-student-hit { margin: -6px 0 12px; }
+.cycle-student-hit { margin-top: 6px; font-size: 11px; }
+
+// The Courses home: two cards sharing the full width, built like the umbrella cards.
+.section-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.section-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--section-line);
+  border-radius: var(--radius-lg);
+  background: var(--section-wash);
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  &:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); border-color: var(--section); }
+  &:hover .section-watermark { opacity: 0.1; }
+  &:hover .section-card-arrow { transform: translate(2px, -2px); }
+  &:hover .section-card-footer svg { transform: translateX(3px); }
+  &:focus-visible { outline: 2px solid var(--section); outline-offset: 3px; }
+  h2 { margin: 0 0 8px; font-size: 28px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; color: var(--ink-strong); }
+  p { max-width: 470px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+}
+.section-card-body { position: relative; flex: 1; padding: 26px 28px 24px; }
+.section-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+.section-card-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: var(--radius-lg); background: var(--section); color: #fff; }
+.section-card-count {
+  margin-left: auto; padding: 4px 10px; border-radius: var(--radius-sm); background: var(--section-soft);
+  color: var(--section-strong); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.section-card-arrow { color: var(--section); transition: transform 0.2s ease, color 0.2s ease; }
+.section-card:hover .section-card-arrow { color: var(--section); }
+// Same style as the umbrella cards: "▤ 3 active cycles   18 completed".
+.section-card-stats {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 20px;
+  color: var(--muted); font-size: 13px;
+  > svg { margin-right: -12px; color: var(--section); }
+  strong { margin-right: 4px; color: var(--ink-strong); font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+}
+.section-card-footer {
+  position: relative; display: flex; align-items: center; gap: 8px; padding: 14px 28px; border-top: 1px solid var(--section-line);
+  background: var(--section-soft); color: var(--section-strong); font-size: 12px; font-weight: 700;
+  svg { transition: transform 0.2s ease; }
+}
+.section-cards-foot { display: flex; justify-content: flex-end; margin-top: 18px; }
+.course-sections .page-heading { flex-wrap: wrap; gap: 16px; }
+@media (max-width: 900px) {
+  .section-cards { grid-template-columns: 1fr; }
+  .section-card h2 { font-size: 24px; }
+}
+@media (max-width: 600px) {
+  .section-hero { padding: 40px 18px 2px; }
+  .section-hero-tag { right: 18px; }
+  .section-card-body { padding: 22px 20px 20px; }
+  .section-card-footer { padding: 12px 20px; }
+}
+@media (max-width: 600px) { .section-watermark { width: 140px; height: 140px; } }
+@media (prefers-reduced-motion: reduce) { .section-card, .section-card-arrow, .section-card-footer svg { transition: none; } }
+
+// ---- Teaching team: clearer rates and hours closed early ------------------------------------------
+.teaching-team .team-line { flex-wrap: wrap; gap: 8px 12px; padding: 12px 0;
+  > .text-button { display: inline-flex; align-items: center; gap: 5px; }
+}
+.team-line-who { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin-right: auto; }
+.team-line-name { font-size: 13px; font-weight: 700; color: var(--ink-strong); }
+.team-line-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  small { display: inline; margin: 0; }
+}
+// The hourly rate: easy to find at a glance, without shouting.
+.team-rate {
+  display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 9px;
+  border: 1px solid var(--accent-line); border-radius: var(--radius-sm); background: var(--accent-soft);
+  color: #4a5b7d; font-size: 11px; font-weight: 600; white-space: nowrap;
+  strong { color: var(--ink-strong); font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+}
+.team-closed {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-sm);
+  background: var(--success-soft); color: var(--success); font-size: 11px; font-weight: 700;
+}
+.close-hours-form, .close-hours-confirm {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--accent-line); border-radius: var(--radius-md); background: #f8f9ff;
+  label, > span:first-child { font-size: 12px; font-weight: 700; color: var(--ink); }
+  .input-field { width: 96px; min-height: 36px; }
+  .muted { font-size: 12px; margin-right: auto; }
+  .btn-primary, .btn-secondary { min-height: 34px; padding: 7px 12px; }
+}
+.close-hours-confirm { width: auto; }
+.close-hours-note { margin-top: 12px; padding: 9px 12px; border-radius: var(--radius-md); background: var(--success-soft); color: var(--success); font-size: 12px; font-weight: 600; }
+.finish-closed-note { color: var(--success); font-weight: 600; }
+
+// Marking tuition paid: full, discounted or exempt, in one step.
+.student-pay-types, .student-pay-left { grid-column: 1 / -1; }
+.student-pay-types { display: flex; flex-wrap: wrap; gap: 6px;
+  button { padding: 7px 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); color: var(--ink); font-size: 12px; font-weight: 700; cursor: pointer; }
+  button.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); }
+}
+.student-pay-left { margin: 0; font-size: 12px; color: var(--muted); strong { color: var(--ink-strong); } }
+
+// A cycle a branch mod can view but not change (not theirs, or its money was checked).
+.cycle-lock-note { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 13px; border: 1px solid #f1dcb0; border-radius: var(--radius-md); background: var(--warning-soft); color: var(--warning); font-size: 12px; font-weight: 600; svg { flex-shrink: 0; } }

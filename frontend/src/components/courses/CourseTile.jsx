@@ -10,6 +10,7 @@ const date = value =>
 const money = value => Number(value || 0).toLocaleString();
 
 // Grid card for one cycle: header, then team and students side by side, tuition progress and schedule.
+import StudentHit from './StudentHit';
 export default function CourseTile(props) {
   const { course, isSelected, onToggleSelect, expanded, onExpand } = props;
   const color = getBranchColor(course.branch);
@@ -34,6 +35,7 @@ export default function CourseTile(props) {
     <div className="cycle-card-heading">
       <button className="course-tile-title" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course} /></button>
       <div className="course-tile-date"><CalendarDays size={14} />{date(course.startDate)}{course.endDate ? ' — ' + date(course.endDate) : ''}</div>
+      <StudentHit course={course} query={props.studentQuery} />
     </div>
 
     <div className="cycle-card-facts">

@@ -1,13 +1,7 @@
+import { cycleLocks } from '../utils/cycleLock.js';
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import { randomUUID } from 'node:crypto';
-import {
-  assertPrivateSeat,
-  assertUmbrellaBranch,
-  cycleScope,
-  levelLink,
-  namedCycle,
-  parseLevel
-} from '../utils/privateCourses.js';
+import { assertPrivateSeat, assertUmbrellaBranch, levelLink, namedCycle, parseLevel } from '../utils/privateCourses.js';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
@@ -16,6 +10,7 @@ import { activeBookInclude } from '../utils/bookPayments.js';
 import { cycleSchedule } from '../utils/cycleSchedule.js';
 import { assertWithinFee, financialChoice } from '../utils/tuition.js';
 import { savePayrollRecord } from '../utils/payrollRecord.js';
+import { closePlan, closeEmployeeHours, reopenEmployeeHours, reverseCompletionEarnings } from '../utils/closeHours.js';
 import { courseView, enrollmentView, hidePayroll, isManager, paymentSummaryInclude } from '../utils/courseView.js';
 import { canSeePayroll, branchScopeOf, cycleBranchWhere } from '../utils/access.js';
 import { paymentFields } from '../utils/studentProfile.js';
@@ -31,7 +26,6 @@ const cycleInclude = user => ({
   nextCycles: { select: { id: true, name: true }, orderBy: { startDate: 'asc' } },
   retainedIncome: true,
   parentCourse: true,
-  subCourse: true,
   ...(canSeePayroll(user) ? { payrollEarnings: { include: { batch: true } } } : {}),
   instructors: { include: { instructor: true } },
   pendingAssignments: {
@@ -99,14 +93,23 @@ async function withConfirmations(cycles) {
     })
   }));
 }
+// For branch mods: why a cycle is read-only for them (not theirs, or its money was checked), so screens lock it.
+async function withLocks(user, cycles) {
+  const list = Array.isArray(cycles) ? cycles : [cycles];
+  const locks = await cycleLocks(
+    user,
+    list.map(c => c.id)
+  );
+  const out = list.map(c => ({ ...c, lockedReason: locks.get(c.id) || null, mine: c.createdById === user.id }));
+  return Array.isArray(cycles) ? out : out[0];
+}
 // Cycles where at least one counted student still owes tuition (the same rule as the cycle cards).
-async function tuitionDueIds(parentCourseId, subCourseId) {
+async function tuitionDueIds(parentCourseId) {
   const rows = await prisma.$queryRaw(Prisma.sql`SELECT DISTINCT e."courseId" AS id FROM "Enrollment" e
     JOIN "Cycle" c ON c.id = e."courseId"
     WHERE e."financialArchivedAt" IS NULL AND c."archivedAt" IS NULL
       AND COALESCE(e."customFee", c."courseFee") - e."amountPaid" >= 0.005
-      ${parentCourseId ? Prisma.sql`AND c."parentCourseId" = ${parentCourseId}` : Prisma.empty}
-      ${subCourseId ? Prisma.sql`AND c."subCourseId" = ${subCourseId}` : Prisma.empty}`);
+      ${parentCourseId ? Prisma.sql`AND c."parentCourseId" = ${parentCourseId}` : Prisma.empty}`);
   return rows.map(r => r.id);
 }
 const payrollDueWhere = {
@@ -145,15 +148,17 @@ export const getCourses = async (req, res) => {
         include: cycleInclude(req.user)
       });
       return course
-        ? res.json((await withConfirmations([cycleOut(course, req.user)]))[0])
+        ? res.json(await withLocks(req.user, (await withConfirmations([cycleOut(course, req.user)]))[0]))
         : res.status(404).json({ error: 'Cycle not found.' });
     }
     const q = req.query;
-    const keys = ['parentCourseId', 'subCourseId', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
+    const keys = ['parentCourseId', 'section', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
     if (keys.some(key => q[key] !== undefined && typeof q[key] !== 'string'))
       return res.status(400).json({ error: 'Invalid filters.' });
-    const parentCourseId = q.parentCourseId || null,
-      subCourseId = q.subCourseId || null;
+    const parentCourseId = q.parentCourseId || null;
+    // "group" or "private": every cycle of that section of Courses.
+    if (q.section && !['group', 'private'].includes(q.section))
+      return res.status(400).json({ error: 'Invalid section.' });
     const status = q.status || '';
     if (!CYCLE_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status filter.' });
     if (!manager && status === 'archived')
@@ -166,14 +171,14 @@ export const getCourses = async (req, res) => {
     if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
       return res.status(400).json({ error: 'Invalid page.' });
     const search = (q.search || '').trim().slice(0, 160);
+    const phoneSearch = /^[+\d\s()-]{3,}$/.test(search) ? search.replace(/[^\d+]/g, '') : '';
     const range = startRange(q.from, q.to);
     const scope = {
       ...visibility,
       ...(parentCourseId ? { parentCourseId } : {}),
-      ...(subCourseId ? { subCourseId } : {}),
-      ...(!manager && subCourseId ? { subCourse: { archivedAt: null } } : {})
+      ...(q.section ? { parentCourse: { ...(visibility.parentCourse || {}), isPrivate: q.section === 'private' } } : {})
     };
-    const tuitionIds = await tuitionDueIds(parentCourseId, subCourseId);
+    const tuitionIds = await tuitionDueIds(parentCourseId);
     const statusWhere = {
       '': { archivedAt: null },
       active: { archivedAt: null, isFinished: false },
@@ -193,7 +198,23 @@ export const getCourses = async (req, res) => {
               OR: [
                 { name: { contains: search, mode: 'insensitive' } },
                 { branch: { contains: search, mode: 'insensitive' } },
-                { instructors: { some: { instructor: { name: { contains: search, mode: 'insensitive' } } } } }
+                { instructors: { some: { instructor: { name: { contains: search, mode: 'insensitive' } } } } },
+                // Students by name or phone number.
+                {
+                  enrollments: {
+                    some: {
+                      deletedAt: null,
+                      student: {
+                        deletedAt: null,
+                        OR: [
+                          { name: { contains: search, mode: 'insensitive' } },
+                          { englishName: { contains: search, mode: 'insensitive' } },
+                          ...(phoneSearch ? [{ mobile: { contains: phoneSearch } }] : [])
+                        ]
+                      }
+                    }
+                  }
+                }
               ]
             }
           ]
@@ -234,7 +255,7 @@ export const getCourses = async (req, res) => {
       manager ? count(statusWhere.archived) : 0
     ]);
     res.json({
-      rows: await withConfirmations(rows.map(course => cycleOut(course, req.user))),
+      rows: await withLocks(req.user, await withConfirmations(rows.map(course => cycleOut(course, req.user)))),
       total,
       page,
       pageSize,
@@ -258,7 +279,7 @@ export const createCourse = atomic(async (req, res, next) => {
     const { parentCourseId, cycleNumber, details, branch, startDate, endDate, totalHours, courseFee } = req.body;
     const parent = await prisma.course.findUnique({ where: { id: parentCourseId || '' } });
     if (!parent || parent.archivedAt) return res.status(400).json({ error: 'Choose an available parent course.' });
-    const scope = await cycleScope(parent, req.body.subCourseId);
+    const scope = { numberingKey: parent.id, prefix: parent.name };
     const number = parseLevel(cycleNumber);
     if (typeof branch !== 'string' || !branch.trim()) return res.status(400).json({ error: 'Branch is required.' });
     assertUmbrellaBranch(parent, branch.trim().toUpperCase());
@@ -309,7 +330,6 @@ export const createCourse = atomic(async (req, res, next) => {
         ...link,
         ...cycleSchedule(req.body),
         parentCourseId,
-        subCourseId: scope.subCourse?.id ?? null,
         numberingKey: scope.numberingKey,
         cycleNumber: number,
         ...naming,
@@ -321,9 +341,10 @@ export const createCourse = atomic(async (req, res, next) => {
           totalHours === undefined || totalHours === null || totalHours === ''
             ? null
             : numberValue(totalHours, 'Cycle hours'),
-        courseFee: Number(moneyMinor(courseFee || 0, 'Tuition fee')) / 100
+        courseFee: Number(moneyMinor(courseFee || 0, 'Tuition fee')) / 100,
+        createdById: req.user.id
       },
-      include: { parentCourse: true, subCourse: true }
+      include: { parentCourse: true }
     });
     if (req.body.instructorId) {
       const employee = await prisma.instructor.findFirst({ where: { id: req.body.instructorId, archivedAt: null } });
@@ -338,7 +359,7 @@ export const createCourse = atomic(async (req, res, next) => {
       await prisma.enrollment.create({ data: { courseId: cycle.id, studentId, amountPaid: 0 } });
     await logAction(
       'CREATE_CYCLE',
-      `Created ${cycle.name} (${cycle.branch}) under ${parent.code}${link.previousCycleId ? ' as a next level' : ''}${carried.length ? `; ${carried.length} students carried over unpaid` : ''}`,
+      `Created ${cycle.name} (${cycle.branch}) under ${parent.code || parent.name}${link.previousCycleId ? ' as a next level' : ''}${carried.length ? `; ${carried.length} students carried over unpaid` : ''}`,
       req.user.username
     );
     res.status(201).json(hidePayroll(cycle, req.user));
@@ -352,14 +373,12 @@ export const updateCourse = atomic(async (req, res, next) => {
   try {
     const cycle = await prisma.cycle.findUnique({
       where: { id: req.params.id },
-      include: { enrollments: true, parentCourse: true, subCourse: true }
+      include: { enrollments: true, parentCourse: true }
     });
     if (!cycle) return res.status(404).json({ error: 'Cycle not found.' });
     const body = req.body;
     if (body.parentCourseId !== undefined && body.parentCourseId !== cycle.parentCourseId)
       return res.status(400).json({ error: 'Cycles cannot be moved to another course.' });
-    if (body.subCourseId !== undefined && body.subCourseId !== cycle.subCourseId)
-      return res.status(400).json({ error: 'Cycles cannot be moved to another sub-umbrella.' });
     if (
       (body.isFinished !== undefined && body.isFinished !== cycle.isFinished) ||
       (body.isPaid !== undefined && body.isPaid !== cycle.isPaid) ||
@@ -401,7 +420,7 @@ export const updateCourse = atomic(async (req, res, next) => {
       Object.assign(
         data,
         await namedCycle({
-          prefix: cycle.parentCourse.isPrivate ? cycle.subCourse?.name : cycle.parentCourse.name,
+          prefix: cycle.parentCourse.name,
           numberingKey: cycle.numberingKey,
           branch: branchNow,
           level,
@@ -445,7 +464,7 @@ export const updateCourse = atomic(async (req, res, next) => {
     const updated = await prisma.cycle.update({
       where: { id: cycle.id },
       data,
-      include: { parentCourse: true, subCourse: true }
+      include: { parentCourse: true }
     });
     await logAction('UPDATE_CYCLE', `Updated ${updated.name}; financial snapshots retained.`, req.user.username);
     res.json(hidePayroll(updated, req.user));
@@ -587,6 +606,10 @@ export const removeInstructor = atomic(async (req, res) => {
     });
     if (!assignment || assignment.courseId !== id)
       return res.status(404).json({ error: 'Employee assignment not found for this course.' });
+    if (assignment.closedAt)
+      return res
+        .status(409)
+        .json({ error: `${assignment.instructor?.name || 'This employee'}'s hours are closed. Reopen them first.` });
 
     if (!canSeePayroll(req.user)) {
       const existingPending = await prisma.pendingAssignment.findFirst({
@@ -676,6 +699,8 @@ export const markFinished = atomic(async (req, res) => {
       return res.status(400).json({ error: 'Cannot complete a course without an assigned instructor.' });
     }
     if (course.archivedAt) return res.status(409).json({ error: 'Restore the archived course before completing it.' });
+    if (course.isFinished && !canSeePayroll(req.user))
+      return res.status(403).json({ error: 'This cycle is already completed. Reopen it first to change its hours.' });
 
     const total = numberValue(totalHours);
     if (isNaN(total) || !isFinite(total) || total <= 0) {
@@ -704,62 +729,58 @@ export const markFinished = atomic(async (req, res) => {
           'The submitted instructor assignments do not match this course. Review the assigned instructors, refresh the course, and choose the correct allocation before trying again. No changes have been saved.'
       });
     }
+    // Employees whose hours were closed early keep them; the rest share the hours left.
+    const closed = course.instructors.filter(ci => ci.closedAt),
+      open = course.instructors.filter(ci => !ci.closedAt);
+    const closedSum = closed.reduce((n, ci) => n + numberValue(ci.hoursTaught || 0), 0);
+    const remaining = Math.round((total - closedSum) * 100) / 100;
+    if (remaining < -0.01)
+      return res
+        .status(400)
+        .json({ error: `Hours already closed (${closedSum} h) are more than the total course hours (${total} h).` });
+    const supplied = (instructorHours || []).filter(ih => open.some(ci => ci.id === ih.courseInstructorId));
     let finalInstructorHours = [];
 
-    if (course.instructors.length === 1) {
-      // Single instructor: either hours provided or automatically assigned full total
-      const singleCi = course.instructors[0];
-      if (instructorHours && Array.isArray(instructorHours) && instructorHours.length > 0) {
-        const entry = instructorHours.find(ih => ih.courseInstructorId === singleCi.id);
-        const hours = numberValue(entry.hoursTaught);
-        if (isNaN(hours) || !isFinite(hours) || hours <= 0) {
-          return res.status(400).json({ error: 'Employee hours taught must be a positive number.' });
-        }
-        if (Math.abs(hours - total) > 0.01) {
-          return res.status(400).json({ error: `Employee hours (${hours}) must equal total course hours (${total}).` });
-        }
-        finalInstructorHours = [{ courseInstructorId: singleCi.id, hoursTaught: hours }];
-      } else {
-        finalInstructorHours = [{ courseInstructorId: singleCi.id, hoursTaught: total }];
-      }
+    if (open.length === 0) {
+      if (Math.abs(remaining) > 0.01)
+        return res.status(400).json({
+          error: `Every employee's hours are closed (${closedSum} h). Total course hours must be ${closedSum} h.`
+        });
+    } else if (open.length === 1) {
+      // One employee left: either hours provided or automatically given the hours left.
+      const singleCi = open[0];
+      const entry = supplied.find(ih => ih.courseInstructorId === singleCi.id);
+      const hours = entry ? numberValue(entry.hoursTaught) : remaining;
+      if (isNaN(hours) || !isFinite(hours) || hours < 0 || (!closed.length && hours <= 0))
+        return res.status(400).json({ error: 'Employee hours taught must be a positive number.' });
+      if (Math.abs(hours - remaining) > 0.01)
+        return res.status(400).json({
+          error: closed.length
+            ? `${singleCi.instructor.name}'s hours (${hours}) must equal the hours left after closed hours (${remaining}).`
+            : `Employee hours (${hours}) must equal total course hours (${total}).`
+        });
+      finalInstructorHours = [{ courseInstructorId: singleCi.id, hoursTaught: hours }];
     } else {
-      // Multiple instructors: must provide a complete, valid distribution
-      if (!instructorHours || !Array.isArray(instructorHours) || instructorHours.length === 0) {
+      if (!supplied.length)
         return res.status(400).json({ error: 'Please specify the hours taught for each instructor.' });
-      }
-
-      // Check ownership & non-negative numbers
-      for (const ih of instructorHours) {
-        if (!assignedIds.has(ih.courseInstructorId)) {
-          return res
-            .status(400)
-            .json({ error: `Employee assignment ID '${ih.courseInstructorId}' does not belong to this course.` });
-        }
+      for (const ih of supplied) {
         const h = numberValue(ih.hoursTaught);
-        if (isNaN(h) || !isFinite(h) || h < 0) {
+        if (isNaN(h) || !isFinite(h) || h < 0)
           return res.status(400).json({ error: 'Employee hours taught must be finite non-negative numbers.' });
-        }
       }
-
-      // Ensure every assigned instructor has an allocation
-      const suppliedIds = new Set(instructorHours.map(ih => ih.courseInstructorId));
-      for (const ci of course.instructors) {
-        if (!suppliedIds.has(ci.id)) {
+      for (const ci of open)
+        if (!supplied.some(ih => ih.courseInstructorId === ci.id))
           return res
             .status(400)
             .json({ error: `Missing hour allocation for assigned instructor '${ci.instructor.name}'.` });
-        }
-      }
-
-      // Sum of distributed hours must match total
-      const sum = instructorHours.reduce((acc, curr) => acc + numberValue(curr.hoursTaught), 0);
-      if (Math.abs(sum - total) > 0.01) {
+      const sum = supplied.reduce((acc, curr) => acc + numberValue(curr.hoursTaught), 0);
+      if (Math.abs(sum - remaining) > 0.01)
         return res.status(400).json({
-          error: `Sum of distributed instructor hours (${sum.toFixed(1)} h) must exactly match total course hours (${total.toFixed(1)} h).`
+          error: closed.length
+            ? `Hours for the employees still open (${sum.toFixed(1)} h) must match the hours left after closed hours (${remaining.toFixed(1)} h).`
+            : `Sum of distributed instructor hours (${sum.toFixed(1)} h) must exactly match total course hours (${total.toFixed(1)} h).`
         });
-      }
-
-      finalInstructorHours = instructorHours.map(ih => ({
+      finalInstructorHours = supplied.map(ih => ({
         courseInstructorId: ih.courseInstructorId,
         hoursTaught: numberValue(ih.hoursTaught)
       }));
@@ -796,18 +817,98 @@ export const markFinished = atomic(async (req, res) => {
   }
 });
 
+// Admins and the main mod reopen a completed cycle. Its unpaid completion earnings are removed (hours closed
+// early stay); refused while any of them is processing or paid.
 export const revertFinish = atomic(async (req, res, next) => {
   try {
     const course = await prisma.cycle.findUnique({ where: { id: req.params.id } });
     if (!course) return res.status(404).json({ error: 'Course not found.' });
     if (course.archivedAt) return res.status(409).json({ error: 'Restore the archived course before reopening it.' });
+    if (!course.isFinished) return res.status(409).json({ error: 'This cycle is not completed.' });
+    const removed = await reverseCompletionEarnings(course.id);
     await prisma.cycle.update({ where: { id: course.id }, data: { isFinished: false } });
     await logAction(
       'REOPEN_COURSE',
-      `Reopened ${course.name}; recorded teaching hours, instructor earnings, payment batches, and student payments retained.`,
+      `Reopened ${course.name}; removed ${removed} unpaid employee earning(s) from its completion. Student payments retained.`,
       req.user.username
     );
-    res.json({ message: 'Course reopened. All existing financial records have been preserved.' });
+    res.json({ message: 'Cycle reopened. Its unpaid employee earnings were removed.' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const managersToNotify = () =>
+  prisma.user.findMany({
+    where: { OR: [{ role: 'admin' }, { role: 'mod', branchScope: null }], isActive: true, isBanned: false }
+  });
+
+// Closes one employee's hours before the cycle ends (e.g. 15 of 20), straight into unpaid payroll.
+// Admins and the main mod close directly; everyone else sends a request for approval.
+export const closeInstructorHours = atomic(async (req, res, next) => {
+  try {
+    const { id, courseInstructorId } = req.params;
+    if (!canSeePayroll(req.user)) {
+      const { cycle, assignment, hours } = await closePlan(id, courseInstructorId, req.body.hours);
+      if (
+        await prisma.pendingAssignment.findFirst({
+          where: { courseId: id, instructorId: assignment.instructorId, type: 'CLOSE_HOURS', status: 'PENDING' }
+        })
+      )
+        return res
+          .status(400)
+          .json({ error: `A request to close ${assignment.instructor.name}'s hours is already waiting.` });
+      const pending = await prisma.pendingAssignment.create({
+        data: {
+          courseId: id,
+          instructorId: assignment.instructorId,
+          type: 'CLOSE_HOURS',
+          hours,
+          submittedById: req.user.id
+        }
+      });
+      const notifications = (await managersToNotify()).map(m => ({
+        userId: m.id,
+        title: 'Close hours request',
+        message: `<span class="font-bold text-blue-600">@${req.user.username}</span> requested to close <span class="font-bold text-emerald-600">${assignment.instructor.name}</span>'s hours at ${hours} h in <span class="font-bold text-emerald-600">${cycle.name}</span>.`,
+        type: 'ASSIGNMENT_REQUEST',
+        relatedId: pending.id
+      }));
+      if (notifications.length) await prisma.notification.createMany({ data: notifications });
+      await logAction(
+        'CLOSE_HOURS_PENDING',
+        `Requested to close ${assignment.instructor.name}'s hours at ${hours} h in ${cycle.name}`,
+        req.user.username
+      );
+      return res.json({ message: 'Request sent for approval.', pending: { id: pending.id } });
+    }
+    const { cycle, assignment, hours } = await closeEmployeeHours(
+      id,
+      courseInstructorId,
+      req.body.hours,
+      req.user.username
+    );
+    await logAction(
+      'CLOSE_HOURS',
+      `Closed ${assignment.instructor.name}'s hours at ${hours} h in ${cycle.name}; unpaid earnings recorded.`,
+      req.user.username
+    );
+    res.json({ message: `${assignment.instructor.name}'s hours closed at ${hours} h.` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Admins and the main mod undo an early close while its earning is still unpaid.
+export const reopenInstructorHours = atomic(async (req, res, next) => {
+  try {
+    const { cycle, assignment } = await reopenEmployeeHours(req.params.id, req.params.courseInstructorId);
+    await logAction(
+      'REOPEN_HOURS',
+      `Reopened ${assignment.instructor.name}'s closed hours (${assignment.hoursTaught} h) in ${cycle.name}; unpaid earnings removed.`,
+      req.user.username
+    );
+    res.json({ message: `${assignment.instructor.name}'s hours reopened.` });
   } catch (error) {
     next(error);
   }
@@ -868,6 +969,17 @@ export const enrollStudentHandler = async (req, res, next) => {
     // Nobody adds students to a completed cycle: reopen it first.
     if (course.isFinished)
       return res.status(409).json({ error: 'This cycle is completed. Reopen it before adding students.' });
+    // A student is enrolled once per cycle: say so before checking anything about payment.
+    if (studentId) {
+      const already = await prisma.enrollment.findUnique({
+        where: { courseId_studentId: { courseId: id, studentId: String(studentId) } },
+        include: { student: { select: { name: true } } }
+      });
+      if (already)
+        return res.status(409).json({
+          error: `${already.student.name} is already enrolled in this cycle${already.deletedAt ? ' (removed earlier; restore them instead)' : ''}.`
+        });
+    }
     await assertPrivateSeat(course);
     const terms = enrollmentTerms(req.body, course.courseFee);
     const metadata = paymentFields(req.body);
@@ -921,7 +1033,7 @@ export const enrollStudentHandler = async (req, res, next) => {
     });
 
     if (existing) {
-      return res.status(400).json({ error: `Student '${student.name}' is already enrolled in this course.` });
+      return res.status(409).json({ error: `${student.name} is already enrolled in this cycle.` });
     }
 
     const parsedCustomFee = terms.customFee,
@@ -1078,11 +1190,10 @@ export const restoreCourse = atomic(async (req, res, next) => {
   try {
     const existing = await prisma.cycle.findUnique({
       where: { id: req.params.id },
-      include: { parentCourse: true, subCourse: true }
+      include: { parentCourse: true }
     });
     if (!existing) return res.status(404).json({ error: 'Cycle not found.' });
     if (existing.parentCourse.archivedAt) return res.status(409).json({ error: 'Restore the parent course first.' });
-    if (existing.subCourse?.archivedAt) return res.status(409).json({ error: 'Restore the sub-umbrella first.' });
     const course = await prisma.cycle.update({
       where: { id: req.params.id },
       data: { archivedAt: null, archivedBy: null }
@@ -1110,6 +1221,10 @@ export const replaceInstructor = atomic(async (req, res, next) => {
       return res.status(404).json({ error: 'Course, current assignment, or replacement instructor not found.' });
     if (course.archivedAt || course.isFinished)
       return res.status(409).json({ error: 'Reopen an unarchived course before changing its teaching team.' });
+    if (old.closedAt)
+      return res
+        .status(409)
+        .json({ error: `${old.instructor.name}'s hours are closed. Add another employee for the hours left.` });
     if (
       await prisma.courseInstructor.findUnique({
         where: { courseId_instructorId: { courseId: id, instructorId: replacement.id } }
@@ -1209,7 +1324,6 @@ export const getCyclesOverview = async (req, res, next) => {
           isFinished: true,
           updatedAt: true,
           parentCourseId: true,
-          subCourseId: true,
           parentCourse: { select: { isPrivate: true } },
           instructors: { select: { instructor: { select: { name: true } } } }
         }

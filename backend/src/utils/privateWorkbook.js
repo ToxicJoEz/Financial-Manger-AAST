@@ -74,7 +74,7 @@ export function durationRate(value) {
   return m ? m[1] : '';
 }
 
-// "PET 2" -> { subCourseName: 'PET', cycleNumber: 2 }; "IELTS" -> number null.
+// "PET 2" -> { umbrellaName: 'PET', cycleNumber: 2 }; "IELTS" -> number null.
 // A trailing "/ ..." suffix ("PET 2 / S") is not used for naming and is reported back for review.
 export function courseParts(value) {
   let text = digits(value).replace(/\s+/g, ' ').trim(),
@@ -83,8 +83,8 @@ export function courseParts(value) {
   if (slash) [, text, suffix] = slash;
   const m = text.trim().match(/^(.*?[^\s#-])[\s#-]*(\d{1,9})$/);
   const parts = m
-    ? { subCourseName: m[1].toUpperCase(), cycleNumber: Number(m[2]) }
-    : { subCourseName: text.trim().toUpperCase(), cycleNumber: null };
+    ? { umbrellaName: m[1].toUpperCase(), cycleNumber: Number(m[2]) }
+    : { umbrellaName: text.trim().toUpperCase(), cycleNumber: null };
   return suffix ? { ...parts, courseSuffix: suffix.trim() } : parts;
 }
 

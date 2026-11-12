@@ -97,11 +97,9 @@ try {
   token = ok(await req('/auth/login', 'POST', { username: 'main-admin', password: 'IsolatedDemoTest!123' })).token;
   const junior = ok(await req('/auth/login', 'POST', { username: 'Joe', password: 'IsolatedDemoTest!123' })).token;
   const existing = await prisma.student.create({ data: { name: 'الطالب الموجود', mobile: '01000000000' } });
-  const parent = ok(
-    await req('/courses', 'POST', { name: 'Private import academy', code: 'PRIVATE-BULK', isPrivate: true })
-  );
-  const ket = ok(await req('/courses/' + parent.id + '/sub-courses', 'POST', { name: 'KET', bookPrice: 50 }));
-  const path = '/imports/' + parent.id + '/private';
+  // Private workbooks import into the Private section; missing private umbrellas are created.
+  const ket = ok(await req('/courses', 'POST', { name: 'KET', isPrivate: true, bookPrice: 50 }));
+  const path = '/imports/private';
   const bytes = await workbook();
   const forbidden = await fetch(base + path + '/preview', {
     method: 'POST',
@@ -125,19 +123,19 @@ try {
   assert.equal(first.matches[0].id, existing.id);
   assert.deepEqual([first.amount, second.amount], [3500, 3500]);
   assert.deepEqual(pair.sharedAmount, { total: 7000, students: 2 });
-  assert.equal(pair.subCourseName, 'KET');
+  assert.equal(pair.umbrellaName, 'KET');
   assert.equal(pair.cycleNumber, 2);
   assert.equal(pair.numberSource, 'file');
-  assert.equal(pair.newSubCourse, false);
+  assert.equal(pair.newUmbrella, false);
   // Levels come from the file ("KET 2"); a repeat in the same branch and month is named "(2)" on import.
   assert.equal(third.cycleNumber, 2);
   assert(!third.errors.some(e => e.includes('already exists')));
   assert(preview.rows.find(r => r.id === third.rowIds[0]).notes.some(n => n.includes('/ S')));
-  assert.equal(free.subCourseName, 'IELTS');
+  assert.equal(free.umbrellaName, 'IELTS');
   assert.equal(free.cycleNumber, null);
   assert.equal(free.numberSource, 'missing');
   assert(free.errors.some(e => e.includes('Enter the level')));
-  assert.deepEqual(preview.newSubCourses, ['IELTS']);
+  assert.deepEqual(preview.newUmbrellas, ['IELTS']);
 
   const edits = Object.fromEntries(preview.rows.map(r => [r.id, { ...r, branch: 'MIAMI' }]));
   preview = ok(
@@ -161,7 +159,7 @@ try {
     previewToken: preview.previewToken,
     rowIds: preview.rows.map(r => r.id),
     numbers: numbersOf(preview),
-    newSubCourses: { IELTS: { bookPrice: 75 } },
+    newUmbrellas: { IELTS: { bookPrice: 75 } },
     employees,
     students: {}
   };
@@ -185,24 +183,24 @@ try {
   );
   assert.equal(await prisma.cycle.count(), before);
   assert.equal(await prisma.instructor.count({ where: { employeeId: 'NEW-PRIVATE-EMP' } }), 0);
-  assert.equal(await prisma.subCourse.count({ where: { parentCourseId: parent.id, name: 'IELTS' } }), 0);
+  assert.equal(await prisma.course.count({ where: { isPrivate: true, name: 'IELTS' } }), 0);
 
   const result = ok(await req(path + '/commit', 'POST', payload));
   assert.equal(result.cycles.length, 3);
   assert.equal(result.enrolled, 4);
   assert.equal(result.created, 3);
   assert.equal(result.reused, 1);
-  assert.deepEqual(result.createdSubCourses, ['IELTS']);
+  assert.deepEqual(result.createdUmbrellas, ['IELTS']);
   const cycles = await prisma.cycle.findMany({
-    where: { parentCourseId: parent.id },
+    where: { parentCourse: { isPrivate: true } },
     include: {
-      subCourse: true,
+      parentCourse: true,
       instructors: true,
       enrollments: { include: { student: true, bookPayments: true, payments: true }, orderBy: { amountPaid: 'desc' } },
       payrollEarnings: true
     }
   });
-  // Names are "<sub-umbrella> <level> - <start month year>"; keyed here by "<sub-umbrella> <level>".
+  // Names are "<umbrella> <level> - <start month year>"; keyed here by "<umbrella> <level>".
   assert(
     cycles.every(c => / - [A-Z][a-z]+ \d{4}$/.test(c.name)),
     JSON.stringify(cycles.map(c => c.name))
@@ -210,7 +208,8 @@ try {
   const byName = Object.fromEntries(cycles.map(c => [c.name.split(' - ')[0], c]));
   assert.deepEqual(Object.keys(byName).sort(), ['IELTS 1', 'KET 2', 'KET 3']);
   const grouped = byName['KET 2'];
-  assert.equal(grouped.subCourseId, ket.id);
+  assert.equal(grouped.parentCourseId, ket.id);
+  assert.equal(grouped.numberingKey, ket.id);
   assert.equal(grouped.courseFee, 3500);
   assert.equal(grouped.enrollments.length, 2);
   assert(grouped.enrollments.every(e => e.amountPaid === 3500 && e.customFee === null));
@@ -224,7 +223,9 @@ try {
   assert(grouped.isFinished);
   assert.equal(byName['KET 3'].instructors[0].hourlyRate, 150);
   const ielts = byName['IELTS 1'];
-  assert.equal(ielts.subCourse.bookPrice, 75);
+  assert.equal(ielts.parentCourse.bookPrice, 75);
+  assert.equal(ielts.parentCourse.code, null);
+  assert.equal(ielts.parentCourse.branches, 'MIAMI');
   assert(!ielts.isFinished);
   assert.equal(ielts.enrollments[0].customFee, 0);
   assert.equal(ielts.enrollments[0].amountPaid, 0);
@@ -236,10 +237,9 @@ try {
 
   // Multiple phone matches are never silently merged.
   const extra = await prisma.student.create({ data: { name: 'نفس الهاتف', mobile: existing.mobile } });
-  const freshParent = ok(
-    await req('/courses', 'POST', { name: 'Another private umbrella', code: 'PRIVATE-BULK-2', isPrivate: true })
-  );
-  const other = '/imports/' + freshParent.id + '/private';
+  // Import the same file again as if new (its earlier import records cleared).
+  await prisma.importBatch.deleteMany({});
+  const other = path;
   let conflict = ok(await upload(other + '/preview', bytes));
   conflict = ok(await req(other + '/review', 'POST', { previewToken: conflict.previewToken, edits }));
   const conflictPair = conflict.groups.find(g => g.rowIds.length === 2);
@@ -248,14 +248,13 @@ try {
     previewToken: conflict.previewToken,
     rowIds: conflictPair.rowIds,
     numbers: numbersOf(conflict),
-    newSubCourses: { KET: { bookPrice: 60 } }
+    newUmbrellas: {}
   };
   assert.equal((await req(other + '/commit', 'POST', choicePayload)).status, 400);
   ok(await req(other + '/commit', 'POST', { ...choicePayload, students: { [conflictPair.rowIds[0]]: extra.id } }));
-  assert.equal(
-    (await prisma.subCourse.findFirst({ where: { parentCourseId: freshParent.id, name: 'KET' } })).bookPrice,
-    60
-  );
+  // An existing private umbrella is reused as it is.
+  assert.equal(await prisma.course.count({ where: { isPrivate: true, name: 'KET' } }), 1);
+  assert.equal((await prisma.course.findUnique({ where: { id: ket.id } })).bookPrice, 50);
   // A changed phone creates a fresh profile, even when the name is identical.
   const editRow = conflict.rows.find(r => r.id === conflict.groups.find(g => g.sheetId === '1').rowIds[0]);
   const changed = ok(
@@ -271,15 +270,14 @@ try {
       previewToken: changed.previewToken,
       rowIds: [editRow.id],
       numbers: numbersOf(changed),
-      newSubCourses: { IELTS: { bookPrice: 0 } },
+      newUmbrellas: { IELTS: { bookPrice: 0 } },
       employees: { 1: { mode: 'existing', employeeId: 'demo-instructor-2' } }
     })
   );
   const newCycle = await prisma.cycle.findUnique({ where: { id: next.cycles[0].id }, include: { enrollments: true } });
   assert.notEqual(newCycle.enrollments[0].studentId, existing.id);
-  assert.equal((await req('/imports/course-ket/private/preview', 'POST', {})).status, 404);
   console.log(
-    'PASS: private workbook groups from merged cells, split shared tuition, single payroll per group, sub-umbrella mapping and creation, cycle number conflicts, rate pre-fill, phone identity and atomic replay guards'
+    'PASS: private workbook groups from merged cells, split shared tuition, single payroll per group, private umbrella mapping and creation, cycle number conflicts, rate pre-fill, phone identity and atomic replay guards'
   );
 } finally {
   await new Promise(resolve => server.close(resolve));

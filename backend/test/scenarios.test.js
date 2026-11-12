@@ -1,0 +1,61 @@
+import dotenv from 'dotenv';
+dotenv.config({ path: new URL('../.env', import.meta.url), quiet: true });
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { PrismaClient } from '../generated/client/index.js';
+import { seedFixture } from './fixtures/seed.js';
+
+async function fixture(filename) {
+  const address = process.env.TEST_DATABASE_URL;
+  if (!address)
+    throw new Error(
+      'Set TEST_DATABASE_URL to a dedicated PostgreSQL database ending in _test. Tests never use DATABASE_URL.'
+    );
+  const url = new URL(address);
+  if (!decodeURIComponent(url.pathname).endsWith('_test'))
+    throw new Error('Refusing integration tests: test database name must end in _test.');
+  const schema = 'test_' + randomUUID().replaceAll('-', '');
+  url.searchParams.set('schema', schema);
+  const connection = url.toString();
+  const client = new PrismaClient({ datasources: { db: { url: connection } } });
+  const passwordHash = await bcrypt.hash('IsolatedDemoTest!123', 10);
+  const env = {
+    ...process.env,
+    DATABASE_URL: connection,
+    DIRECT_URL: connection,
+    VERCEL: '1',
+    JWT_SECRET: 'isolated-postgres-jwt-'.repeat(4),
+    SSO_JWT_SECRET: 'isolated-postgres-sso-'.repeat(4),
+    MAIN_ADMIN_PASSWORD_HASH: passwordHash,
+    NODE_ENV: 'production'
+  };
+  try {
+    execFileSync(
+      process.execPath,
+      [fileURLToPath(new URL('../node_modules/prisma/build/index.js', import.meta.url)), 'migrate', 'deploy'],
+      { cwd: fileURLToPath(new URL('../', import.meta.url)), env, stdio: 'pipe', timeout: 45000 }
+    );
+    await seedFixture(client, passwordHash);
+    const phases = filename === 'vercelSmoke.js' ? ['write', 'read'] : ['workflow'];
+    for (const phase of phases) {
+      const output = execFileSync(
+        process.execPath,
+        [fileURLToPath(new URL('./fixtures/' + filename, import.meta.url))],
+        { env: { ...env, PERSISTENCE_PHASE: phase }, encoding: 'utf8', timeout: 60000 }
+      );
+      assert.match(output, /PASS:/);
+      // Scenario runs print what they found for review.
+      const found = output.split('SCENARIO_FINDINGS ')[1];
+      if (found) console.log(found.split('PASS:')[0]);
+    }
+  } finally {
+    await client.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+    await client.$disconnect();
+  }
+}
+// End-to-end scenarios: umbrellas to paid payroll, private early closing, a branch mod's day, and the log.
+test('End-to-end scenarios from umbrellas to paid payroll', () => fixture('scenarioWorkflow.js'));

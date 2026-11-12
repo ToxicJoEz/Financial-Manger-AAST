@@ -4,6 +4,7 @@ import { initials } from '../WorkspaceUI';
 import { getBranchColor } from '../../utils/branchColors';
 import CycleDetailsModal from './CycleDetailsModal';
 
+import StudentHit from './StudentHit';
 export default function CourseRows(props) {
  const {
   course,
@@ -25,6 +26,7 @@ export default function CourseRows(props) {
       <td>
         <button className="table-title course-name" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course}/></button>
         <small>{course.startDate ? date(course.startDate) : 'Dates not set'}{course.endDate ? ' — ' + date(course.endDate) : ''}</small>
+        <StudentHit course={course} query={props.studentQuery} />
         {(course.isPrivate || course.parentCourse?.isPrivate) && (
           <div className="course-private-students">
             <Users size={12} className="shrink-0" />

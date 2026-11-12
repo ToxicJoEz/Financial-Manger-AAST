@@ -5,7 +5,8 @@ import { parsePrivateWorkbook, phoneNumbers, privateDate } from '../utils/privat
 import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
-import { LEVEL_MAX, subCourseName, namedCycle, umbrellaBranches } from '../utils/privateCourses.js';
+import { LEVEL_MAX, namedCycle, umbrellaBranches } from '../utils/privateCourses.js';
+import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { importedCycleFinished } from '../utils/academyDate.js';
@@ -14,13 +15,27 @@ import { savePayrollRecord } from '../utils/payrollRecord.js';
 import { auditContext } from '../utils/auditContext.js';
 
 // One private workbook entry is one student. Students whose rows share merged cells form one group,
-// and each group becomes one private cycle inside a sub-umbrella (e.g. "PET 2" -> sub-umbrella PET, cycle 2).
+// and each group becomes one cycle in a Private umbrella (e.g. "PET 2" -> Private umbrella PET, level 2).
+// Missing Private umbrellas are created on import.
 const key = () => createHmac('sha256', process.env.JWT_SECRET).update('private-course-import-v2').digest('hex');
 const hash = value => createHash('sha256').update(value).digest('hex');
-async function parentFor(id) {
-  const parent = await prisma.course.findUnique({ where: { id } });
-  if (!parent?.isPrivate || parent.archivedAt) throw importError('Choose an available private umbrella.', 404);
-  return parent;
+// Every private import goes into the Private section as a whole.
+const SECTION = 'PRIVATE';
+// Private umbrella names: trimmed, upper-case, 1-120 characters.
+export function umbrellaName(value) {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120)
+    throw importError('Umbrella name must contain 1 to 120 characters.');
+  return value.trim().replace(/\s+/g, ' ').toUpperCase();
+}
+// Private umbrellas by name; an active one wins over an archived one with the same name.
+async function privateUmbrellas() {
+  const list = await prisma.course.findMany({
+    where: { isPrivate: true },
+    orderBy: { archivedAt: { sort: 'asc', nulls: 'first' } }
+  });
+  const byName = new Map();
+  for (const course of list) if (!byName.has(course.name)) byName.set(course.name, course);
+  return byName;
 }
 function claimFor(req) {
   try {
@@ -28,7 +43,7 @@ function claimFor(req) {
       algorithms: ['HS256'],
       audience: 'private-course-import'
     });
-    if (claim.userId !== req.user.id || claim.parentId !== req.params.parentId) throw new Error();
+    if (claim.userId !== req.user.id || claim.parentId !== SECTION) throw new Error();
     return claim;
   } catch {
     throw importError('This preview expired or belongs to another user or umbrella. Upload again.', 403);
@@ -71,9 +86,9 @@ function studentErrors(row) {
 function cycleErrors(lead) {
   const errors = [];
   try {
-    subCourseName(lead.subCourseName);
+    umbrellaName(lead.umbrellaName);
   } catch {
-    errors.push('Enter the sub-umbrella name (e.g. KET).');
+    errors.push('Enter the umbrella name (e.g. KET).');
   }
   if (lead.dateIssues?.endDate && !lead.endDate && !lead.clearEndDate)
     errors.push('Correct the invalid source end date, or confirm it is unknown.');
@@ -109,16 +124,13 @@ const groupFingerprint = (parentId, members) =>
   );
 const validLevel = value => Number.isInteger(value) && value >= 1 && value <= LEVEL_MAX;
 
-// Builds the cycle plan: groups, their sub-umbrella and level, and every problem to fix first.
+// Builds the cycle plan: groups, their Private umbrella and level, and every problem to fix first.
 // `numbers` holds levels the reviewer typed; otherwise the level comes from the file ("PET 2" -> level 2).
-// Names follow "<sub-umbrella> <level> - <start month>", with "(n)" added on import for repeats.
+// Names follow "<umbrella> <level> - <start month>", with "(n)" added on import for repeats.
 async function planGroups(parentId, rows, numbers = {}) {
   const byGroup = new Map();
   for (const row of rows) byGroup.set(row.groupId, [...(byGroup.get(row.groupId) || []), row]);
-  const subs = await prisma.subCourse.findMany({ where: { parentCourseId: parentId } });
-  const subByName = new Map(subs.map(sub => [sub.name, sub]));
-  const parent = await prisma.course.findUnique({ where: { id: parentId }, select: { name: true, branches: true } });
-  const allowed = umbrellaBranches(parent);
+  const subByName = await privateUmbrellas();
   const imported = new Set(
     (
       await prisma.importBatch.findMany({
@@ -132,7 +144,7 @@ async function planGroups(parentId, rows, numbers = {}) {
     const lead = members[0];
     let name = '';
     try {
-      name = subCourseName(lead.subCourseName);
+      name = umbrellaName(lead.umbrellaName);
     } catch {}
     const amounts = members.map(r => Number(r.amount)).filter(Number.isFinite);
     return {
@@ -141,16 +153,19 @@ async function planGroups(parentId, rows, numbers = {}) {
       sheetId: lead.sheetId,
       sheet: lead.sheet,
       sourceRows: members.map(r => r.sourceRow),
-      subCourseName: name,
-      newSubCourse: Boolean(name) && !subByName.has(name),
+      umbrellaName: name,
+      newUmbrella: Boolean(name) && !subByName.has(name),
       fee: amounts.length ? Math.max(...amounts) : '',
       sharedAmount: lead.sharedAmount || null,
       alreadyImported: imported.has(groupFingerprint(parentId, members)),
       errors: [
         ...cycleErrors(lead),
-        ...(lead.branch && !allowed.includes(String(lead.branch).toUpperCase())
-          ? [`${parent.name} is not open for ${lead.branch}. The main mod can open it on the umbrella card.`]
+        ...(lead.branch &&
+        subByName.has(name) &&
+        !umbrellaBranches(subByName.get(name)).includes(String(lead.branch).toUpperCase())
+          ? [`${name} is not open for ${lead.branch}. Open it for that branch on its umbrella card first.`]
           : []),
+        ...(subByName.get(name)?.archivedAt ? [`Restore the ${name} umbrella before importing into it.`] : []),
         ...(members.length > PRIVATE_SEAT_LIMIT
           ? [`A private cycle holds at most ${PRIVATE_SEAT_LIMIT} students; this group has ${members.length}.`]
           : [])
@@ -160,7 +175,7 @@ async function planGroups(parentId, rows, numbers = {}) {
     };
   });
   for (const group of groups) {
-    if (!group.subCourseName || group.alreadyImported) continue;
+    if (!group.umbrellaName || group.alreadyImported) continue;
     group.numberSource = Object.hasOwn(numbers, group.id) ? 'reviewed' : 'file';
     group.cycleNumber = group.requested;
     if (group.requested == null) {
@@ -170,7 +185,12 @@ async function planGroups(parentId, rows, numbers = {}) {
   }
   return {
     groups,
-    subCourses: subs.map(s => ({ id: s.id, name: s.name, bookPrice: s.bookPrice, archivedAt: s.archivedAt }))
+    umbrellas: [...subByName.values()].map(s => ({
+      id: s.id,
+      name: s.name,
+      bookPrice: s.bookPrice,
+      archivedAt: s.archivedAt
+    }))
   };
 }
 
@@ -178,7 +198,7 @@ const publicGroup = ({ members, requested, ...group }) => group;
 
 async function preview(req, res, claim) {
   const students = await prisma.student.findMany({ select: studentFields });
-  const { groups, subCourses } = await planGroups(claim.parentId, claim.parsed.rows, claim.numbers || {});
+  const { groups, umbrellas } = await planGroups(claim.parentId, claim.parsed.rows, claim.numbers || {});
   const groupOf = new Map(groups.flatMap(g => g.rowIds.map(id => [id, g.id])));
   const rows = claim.parsed.rows.map(row => ({
     ...row,
@@ -196,8 +216,8 @@ async function preview(req, res, claim) {
     sheets: claim.parsed.sheets,
     rows,
     groups: groups.map(publicGroup),
-    subCourses,
-    newSubCourses: [...new Set(groups.filter(g => g.newSubCourse && !g.alreadyImported).map(g => g.subCourseName))],
+    umbrellas,
+    newUmbrellas: [...new Set(groups.filter(g => g.newUmbrella && !g.alreadyImported).map(g => g.umbrellaName))],
     warnings: claim.parsed.warnings,
     previewToken
   });
@@ -205,15 +225,14 @@ async function preview(req, res, claim) {
 
 export const previewPrivateImport = async (req, res, next) => {
   try {
-    const parent = await parentFor(req.params.parentId),
-      parsed = await parsePrivateWorkbook(req.body);
+    const parsed = await parsePrivateWorkbook(req.body);
     let fileName = 'Private courses.xlsx';
     try {
       fileName = decodeURIComponent(req.headers['x-file-name'] || fileName).slice(0, 200);
     } catch {}
     await preview(req, res, {
       userId: req.user.id,
-      parentId: parent.id,
+      parentId: SECTION,
       parsed,
       fileName,
       aud: 'private-course-import'
@@ -224,12 +243,11 @@ export const previewPrivateImport = async (req, res, next) => {
 };
 
 const studentFieldsEditable = ['name', 'mobile', 'amount'];
-const cycleFieldsEditable = ['startDate', 'endDate', 'hours', 'branch', 'hourlyRate', 'clearEndDate', 'subCourseName'];
+const cycleFieldsEditable = ['startDate', 'endDate', 'hours', 'branch', 'hourlyRate', 'clearEndDate', 'umbrellaName'];
 
 export const reviewPrivateImport = async (req, res, next) => {
   try {
     const claim = claimFor(req);
-    await parentFor(claim.parentId);
     const { edits = {}, numbers = {} } = req.body;
     if (
       !edits ||
@@ -258,8 +276,7 @@ export const reviewPrivateImport = async (req, res, next) => {
 export const commitPrivateImport = atomic(
   async (req, res, next) => {
     try {
-      const claim = claimFor(req),
-        parent = await parentFor(claim.parentId);
+      const claim = claimFor(req);
       req.auditFileName = claim.fileName;
       const ids = req.body.rowIds;
       if (
@@ -272,7 +289,7 @@ export const commitPrivateImport = atomic(
         throw importError('Select valid private course entries.');
       const numbers = req.body.numbers && typeof req.body.numbers === 'object' ? req.body.numbers : {};
       const selectedRows = claim.parsed.rows.filter(r => ids.includes(r.id));
-      const { groups } = await planGroups(parent.id, selectedRows, numbers);
+      const { groups } = await planGroups(SECTION, selectedRows, numbers);
       for (const group of groups) {
         const whole = claim.parsed.rows.filter(r => r.groupId === group.id);
         if (whole.length !== group.members.length)
@@ -293,7 +310,7 @@ export const commitPrivateImport = atomic(
       const students = await prisma.student.findMany({ select: studentFields }),
         choices = req.body.students || {},
         sheetChoices = req.body.employees || {},
-        newSubCourses = req.body.newSubCourses || {},
+        newUmbrellas = req.body.newUmbrellas || {},
         assigned = new Map();
       for (const row of selectedRows)
         if (JSON.stringify(snapshot(match(row, students))) !== JSON.stringify(claim.studentVersions[row.id]))
@@ -319,27 +336,31 @@ export const commitPrivateImport = atomic(
         }
         assigned.set(sheet.id, { employee });
       }
-      // Sub-umbrellas: reuse existing ones; create missing ones with the reviewer's book price.
-      const subByName = new Map(
-        (await prisma.subCourse.findMany({ where: { parentCourseId: parent.id } })).map(s => [s.name, s])
-      );
-      const createdSubCourses = [];
-      for (const name of [...new Set(groups.map(g => g.subCourseName))]) {
+      // Private umbrellas: reuse existing ones; create missing ones with the reviewer's book price,
+      // open for the branches their imported cycles run in.
+      const subByName = await privateUmbrellas();
+      const createdUmbrellas = [];
+      for (const name of [...new Set(groups.map(g => g.umbrellaName))]) {
         const existing = subByName.get(name);
         if (existing) {
-          if (existing.archivedAt) throw importError(`Restore the ${name} sub-umbrella before importing into it.`, 409);
+          if (existing.archivedAt) throw importError(`Restore the ${name} umbrella before importing into it.`, 409);
           continue;
         }
-        const settings = newSubCourses[name] || {};
-        const sub = await prisma.subCourse.create({
+        const settings = newUmbrellas[name] || {};
+        const used = new Set(
+          groups.filter(g => g.umbrellaName === name).map(g => String(g.members[0].branch).toUpperCase())
+        );
+        const sub = await prisma.course.create({
           data: {
-            parentCourseId: parent.id,
+            isPrivate: true,
+            code: null,
+            branches: EMPLOYEE_BRANCHES.filter(b => used.has(b)).join(',') || 'MIAMI',
             name,
             bookPrice: Number(moneyMinor(settings.bookPrice ?? 0, `${name} book price`)) / 100
           }
         });
         subByName.set(name, sub);
-        createdSubCourses.push(name);
+        createdUmbrellas.push(name);
       }
       let created = 0,
         reused = 0;
@@ -347,7 +368,7 @@ export const commitPrivateImport = atomic(
         selectedByPhone = new Map();
       for (const group of groups) {
         const lead = group.members[0],
-          sub = subByName.get(group.subCourseName);
+          sub = subByName.get(group.umbrellaName);
         const enrolled = [];
         for (const row of group.members) {
           const candidates = match(row, students);
@@ -393,8 +414,8 @@ export const commitPrivateImport = atomic(
             id: cycleId,
             chainId: cycleId,
             chainStart: new Date(lead.startDate + 'T00:00:00Z'),
-            parentCourseId: parent.id,
-            subCourseId: sub.id,
+            parentCourseId: sub.id,
+            createdById: req.user.id,
             numberingKey: sub.id,
             cycleNumber: group.cycleNumber,
             ...(await namedCycle({
@@ -414,9 +435,9 @@ export const commitPrivateImport = atomic(
         });
         const batch = await prisma.importBatch.create({
           data: {
-            fingerprint: groupFingerprint(parent.id, group.members),
+            fingerprint: groupFingerprint(SECTION, group.members),
             fileName: claim.fileName,
-            parentCourseId: parent.id,
+            parentCourseId: sub.id,
             cycleId: cycle.id,
             recordedBy: req.user.username,
             studentCount: enrolled.length
@@ -467,7 +488,7 @@ export const commitPrivateImport = atomic(
         created,
         reused,
         enrolled: selectedRows.length,
-        createdSubCourses,
+        createdUmbrellas,
         message: `Imported ${cycles.length} private cycles for ${selectedRows.length} students.`
       });
     } catch (error) {

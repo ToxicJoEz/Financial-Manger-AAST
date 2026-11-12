@@ -1,3 +1,4 @@
+import { recordCause } from '../utils/auditContext.js';
 import { createHash } from 'node:crypto';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
 import { hidePayroll } from '../utils/courseView.js';
@@ -299,7 +300,8 @@ export const getEmployeeDetails = async (req, res) => {
       courseAssignments,
       paidPayments: payments.map(({ amountMinor, ...row }) => ({ ...row, amount: Number(amountMinor) / 100 }))
     });
-  } catch {
+  } catch (error) {
+    recordCause(error);
     res.status(500).json({ error: 'Employee details could not be loaded.' });
   }
 };

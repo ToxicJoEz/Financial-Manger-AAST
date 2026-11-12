@@ -1,6 +1,7 @@
 import { numberValue } from '../utils/numbers.js';
 import prisma, { atomic } from '../db/prisma.js';
 import { logAction } from '../utils/logger.js';
+import { closeEmployeeHours } from '../utils/closeHours.js';
 
 export const approveAssignment = atomic(async (req, res) => {
   try {
@@ -17,6 +18,42 @@ export const approveAssignment = atomic(async (req, res) => {
     }
     if (pending.status !== 'PENDING') {
       return res.status(400).json({ error: 'Assignment has already been processed' });
+    }
+
+    // A request to close an employee's hours early: approving closes them into unpaid payroll.
+    if (pending.type === 'CLOSE_HOURS') {
+      const assignment = await prisma.courseInstructor.findFirst({
+        where: { courseId: pending.courseId, instructorId: pending.instructorId || '' }
+      });
+      if (!assignment)
+        return res.status(409).json({ error: 'This employee is no longer on the cycle. Reject this request.' });
+      const claimed = await prisma.pendingAssignment.updateMany({
+        where: { id, status: 'PENDING' },
+        data: { status: 'APPROVED', resolvedById: req.user.id }
+      });
+      if (!claimed.count)
+        return res.status(409).json({ error: 'Assignment has already been processed by another reviewer.' });
+      const { hours } = await closeEmployeeHours(pending.courseId, assignment.id, pending.hours, req.user.username);
+      await prisma.notification.updateMany({
+        where: { relatedId: id, type: 'ASSIGNMENT_REQUEST' },
+        data: { isResolved: true, resolvedBy: req.user.username, isRead: true }
+      });
+      await prisma.notification.create({
+        data: {
+          userId: pending.submittedById,
+          title: 'Close hours approved',
+          message: `Your request to close <span class="font-bold text-emerald-600">${pending.instructor?.name || 'the employee'}</span>'s hours at ${hours} h in <span class="font-bold text-emerald-600">${pending.course.name}</span> was approved by <span class="font-bold text-blue-600">@${req.user.username}</span>.`,
+          type: 'ASSIGNMENT_APPROVED',
+          relatedId: id
+        }
+      });
+      await logAction(
+        'ASSIGNMENT_APPROVED',
+        `Approved closing ${pending.instructor?.name || 'employee'}'s hours at ${hours} h in ${pending.course.name}; unpaid earnings recorded.`,
+        req.user.username,
+        pending.submittedBy.username
+      );
+      return res.json({ message: 'Hours closed.' });
     }
 
     const isRemoval = pending.type === 'REMOVE';
@@ -71,6 +108,12 @@ export const approveAssignment = atomic(async (req, res) => {
       }
       // 2. Apply changes to the Course
       if (isRemoval) {
+        if (
+          await tx.courseInstructor.findFirst({
+            where: { courseId: pending.courseId, instructorId: pending.instructorId, closedAt: { not: null } }
+          })
+        )
+          throw Object.assign(new Error("This employee's hours are closed. Reject this request."), { status: 409 });
         // Removal: delete instructor from course
         await tx.courseInstructor.deleteMany({
           where: {
@@ -179,7 +222,8 @@ export const rejectAssignment = atomic(async (req, res) => {
 
       // Notify the submitter
       const isRemoval = pending.type === 'REMOVE';
-      const actionLabel = isRemoval ? 'removal of' : 'assignment for';
+      const actionLabel =
+        pending.type === 'CLOSE_HOURS' ? `closing ${pending.hours} h for` : isRemoval ? 'removal of' : 'assignment for';
       const instructorName = pending.instructor ? pending.instructor.name : 'instructor';
 
       await tx.notification.create({
@@ -263,6 +307,7 @@ export const getAssignmentReview = async (req, res, next) => {
         id: true,
         type: true,
         status: true,
+        hours: true,
         courseId: true,
         instructor: { select: { id: true, name: true } },
         course: { select: { id: true, name: true, branch: true, parentCourse: { select: { isPrivate: true } } } },

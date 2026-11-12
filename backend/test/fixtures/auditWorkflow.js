@@ -53,6 +53,10 @@ try {
   });
   assert(denied);
   assert.equal(denied.actorRole, 'user');
+  // Failures keep what kind they were and the exact reason.
+  assert.equal(denied.errorKind, 'NOT_ALLOWED');
+  assert(denied.errorMessage);
+  assert(denied.description.includes(denied.errorMessage.slice(0, 40)));
   assert.equal(
     (await req('/auth/login', 'POST', { username: 'Joe', password: 'NEVER_STORE_THIS_PASSWORD' })).status,
     401
@@ -64,32 +68,36 @@ try {
   const failedLogins = await prisma.systemLog.findMany({ where: { action: 'LOGIN_LOCAL', outcome: 'FAILURE' } });
   assert.equal(failedLogins.length, 2);
   assert(!JSON.stringify(failedLogins).includes('NEVER_STORE_THIS_PASSWORD'));
+  assert(failedLogins.every(row => row.errorKind === 'NOT_SIGNED_IN' && row.errorMessage));
+  // Admins and the main mod see the full log, including each other's actions.
   const visible = ok(await req('/logs', 'GET', undefined, mod));
   assert(visible.total > 0);
-  assert(visible.items.every(row => row.actorRole === 'user'));
-  assert(!visible.items.some(row => row.actorUsername === 'Youssef Wael'));
+  assert(visible.items.some(row => row.actorUsername === 'Youssef Wael'));
   const adminEntry = await prisma.systemLog.findFirst({
     where: { actorUsername: 'main-admin' },
     orderBy: { createdAt: 'desc' }
   });
-  assert.equal((await req('/logs/' + adminEntry.id, 'GET', undefined, mod)).status, 404);
-  assert.equal((await req('/logs?actorUsername=main-admin', 'GET', undefined, mod)).data.total, 0);
+  assert.equal((await req('/logs/' + adminEntry.id, 'GET', undefined, mod)).status, 200);
+  assert((await req('/logs?actorUsername=main-admin', 'GET', undefined, mod)).data.total > 0);
   const options = ok(await req('/logs/options', 'GET', undefined, mod));
-  assert(!options.users.includes('main-admin'));
-  assert(!options.users.includes('Unknown account'));
+  assert(options.users.includes('main-admin'));
+  assert(options.errorKinds.includes('NOT_ALLOWED'));
+  const byKind = ok(await req('/logs?errorKind=NOT_SIGNED_IN', 'GET', undefined, admin));
+  assert(byKind.total >= 2 && byKind.items.every(r => r.errorKind === 'NOT_SIGNED_IN'));
   const usersBefore = await prisma.user.findMany({ orderBy: { id: 'asc' } });
   const changed = ok(await req('/users/profile', 'PUT', { firstName: 'Audit profile' }, user));
   const profileLog = await prisma.systemLog.findFirst({
-    where: { actorUsername: 'Joe', action: 'PROFILE_UPDATED' },
+    where: { actorUsername: 'Joe', action: 'UPDATE_PROFILE' },
     orderBy: { createdAt: 'desc' }
   });
   assert(profileLog);
   const profileDetails = ok(await req('/logs/' + profileLog.id, 'GET', undefined, mod));
   assert(profileDetails.entries.some(e => e.fields.some(f => f.field === 'firstName' && f.after === 'Audit profile')));
-  await prisma.user.update({ where: { id: normal.id }, data: { role: 'mod' } });
-  assert.equal((await req('/logs/' + profileLog.id, 'GET', undefined, mod)).status, 200);
-  assert.equal((await req('/logs/' + profileLog.id, 'GET', undefined, user)).status, 404);
-  await prisma.user.update({ where: { id: normal.id }, data: { role: 'user' } });
+  // A branch mod sees no logs at all.
+  await prisma.user.update({ where: { id: normal.id }, data: { role: 'mod', branchScope: 'FOUAD' } });
+  assert.equal((await req('/logs/' + profileLog.id, 'GET', undefined, user)).status, 403);
+  assert.equal((await req('/logs', 'GET', undefined, user)).status, 403);
+  await prisma.user.update({ where: { id: normal.id }, data: { role: 'user', branchScope: null } });
   assert.equal((await req('/audit-test/fail', 'POST', { password: 'NEVER_STORE_THIS_PASSWORD' }, user)).status, 500);
   assert.equal(await prisma.instructor.count({ where: { employeeId: 'AUDIT-ROLLBACK' } }), 0);
   const rolled = await prisma.systemLog.findFirst({
@@ -98,6 +106,9 @@ try {
   });
   assert(rolled);
   assert.equal(rolled.details.committed, false);
+  // An unexpected error is labelled as such and keeps its technical cause.
+  assert.equal(rolled.errorKind, 'UNEXPECTED');
+  assert(rolled.errorMessage);
   assert(rolled.details.changes.length > 0);
   assert(!JSON.stringify(rolled).includes('NEVER_STORE_THIS_PASSWORD'));
   ok(await req('/auth/logout', 'POST', {}, user));
@@ -119,7 +130,9 @@ try {
   );
   await assert.rejects(prisma.systemLog.delete({ where: { id: profileLog.id } }), /append-only/);
   assert.equal((await req('/logs/' + profileLog.id, 'DELETE', {}, admin)).status, 404);
-  const doomed = ok(await req('/courses', 'POST', { name: 'Audit deletion example', code: 'AUDIT-DELETE' }, admin));
+  const doomed = ok(
+    await req('/courses', 'POST', { name: 'Audit deletion example', code: 'AUDIT-DELETE', isPrivate: false }, admin)
+  );
   const deletion = ok(await req('/courses/' + doomed.id + '/deletion-preview', 'GET', undefined, admin));
   ok(
     await req(
@@ -176,7 +189,7 @@ try {
   const historical = ok(await req('/logs/' + legacy.id, 'GET', undefined, admin));
   assert.equal(historical.entries[0].fields[0].after, 'New course');
   assert(!historical.description.startsWith('{'));
-  assert.equal((await req('/logs/' + legacy.id, 'GET', undefined, mod)).status, 404);
+  assert.equal((await req('/logs/' + legacy.id, 'GET', undefined, mod)).status, 200);
   const all = ok(await req('/logs?outcome=FAILURE', 'GET', undefined, admin));
   assert(all.items.every(r => r.outcome === 'FAILURE'));
   assert(all.total > 0);

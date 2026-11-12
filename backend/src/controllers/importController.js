@@ -1,4 +1,4 @@
-import { cycleScope, namedCycle, parseLevel, assertUmbrellaBranch, levelLink } from '../utils/privateCourses.js';
+import { namedCycle, parseLevel, assertUmbrellaBranch, levelLink } from '../utils/privateCourses.js';
 import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
@@ -156,7 +156,8 @@ export const previewImport = async (req, res, next) => {
       ...parsed,
       rows,
       previewToken,
-      courseMismatch: parsed.courseCode !== parent.code,
+      // Private umbrellas have no code to match.
+      courseMismatch: !parent.isPrivate && parsed.courseCode !== parent.code,
       parent: {
         id: parent.id,
         name: parent.name,
@@ -187,7 +188,7 @@ export const commitImport = atomic(
         throw importError('This preview belongs to another user or course.', 403);
       const parent = await parentFor(claim.parentId),
         parsed = claim.parsed;
-      if (parsed.courseCode !== parent.code)
+      if (!parent.isPrivate && parsed.courseCode !== parent.code)
         throw importError(
           `File code ${parsed.courseCode || '(missing)'} does not match ${parent.code}. Correct the course or source workbook.`
         );
@@ -205,7 +206,7 @@ export const commitImport = atomic(
         throw importError(
           `A private cycle roster can contain at most ${PRIVATE_SEAT_LIMIT} students. No records were imported.`
         );
-      const scope = await cycleScope(parent, req.body.subCourseId);
+      const scope = { numberingKey: parent.id, prefix: parent.name };
       const number = parseLevel(req.body.cycleNumber);
       const branch = req.body.branch;
       if (!EMPLOYEE_BRANCHES.includes(branch)) throw importError('Choose a valid branch.');
@@ -314,7 +315,7 @@ export const commitImport = atomic(
           ...link,
           ...cycleSchedule(req.body),
           parentCourseId: parent.id,
-          subCourseId: scope.subCourse?.id ?? null,
+          createdById: req.user.id,
           numberingKey: scope.numberingKey,
           cycleNumber: number,
           ...(await namedCycle({

@@ -25,11 +25,12 @@ import { BRANCHES, BRANCH_OPTIONS } from '../Constants';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
 import CourseRows from '../components/courses/CourseRows';
 import CourseTile from '../components/courses/CourseTile';
+import { SECTIONS, SectionHero } from '../components/courses/CourseSection';
 const Courses = () => {
   const {
     user
   } = useContext(AuthContext);
-  const { courseId: parentId, subCourseId } = useParams();
+  const { courseId: parentId } = useParams();
   // Hourly rates are payroll: users and branch mods request teaching-team changes instead.
   const payrollAccess = canSeePayroll(user);
   // Branch mods work in their own branch only.
@@ -40,12 +41,14 @@ const Courses = () => {
   const [importOpen, setImportOpen] = useState(false);
   const [parentCourse, setParentCourse] = useState(null);
   // New cycles can only go to branches the umbrella is open for.
-  const umbrellaOpen = parentCourse ? (parentCourse.umbrella ? String(parentCourse.umbrella.branches || '').split(',') : parentCourse.allowedBranches || []) : [];
+  const umbrellaOpen = parentCourse ? parentCourse.allowedBranches || [] : [];
   const createBranchOptions = branchOptions.filter(o => umbrellaOpen.includes(o.value));
   // Cycle names: "<umbrella> <level> - <start month year>".
   const namePreview = (level, start) => parentCourse && level && start ? `${parentCourse.name} ${level} - ${new Date(start + 'T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '';
   const openCreate = () => { resetForm(); setName(''); setBranch(createBranchOptions[0]?.value || ''); setIsAddModalOpen(true); };
   const location = useLocation();
+  // "All group cycles" / "All private cycles" from a section page.
+  const [section] = useState(() => (['group', 'private'].includes(location.state?.section) ? location.state.section : ''));
   const navigate = useNavigate();
   const [expandedCourse, setExpandedCourse] = useState(null);
   // List view by default; each person's choice is remembered on their browser.
@@ -138,14 +141,21 @@ const Courses = () => {
   const [finishingCourse, setFinishingCourse] = useState(null);
   const [finishTotalHours, setFinishTotalHours] = useState('');
   const [instructorHours, setInstructorHours] = useState({});
+  // Completing a cycle: closed employees keep their hours; one open employee gets the hours left.
+  const startHours = (course, ih) => {
+    const open = course.instructors.filter(ci => !ci.closedAt);
+    const closedSum = course.instructors.filter(ci => ci.closedAt).reduce((n, ci) => n + Number(ci.hoursTaught || 0), 0);
+    course.instructors.forEach(ci => {
+      ih[ci.id] = ci.closedAt ? String(ci.hoursTaught) : open.length === 1 && course.totalHours ? String(Math.round((course.totalHours - closedSum) * 100) / 100) : '';
+    });
+  };
   const fetchData = async () => {
     const request = ++dataRequest.current;
     setLoadError(false);
     try {
-      const [coursesRes, instructorsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: listParams.current }), axios.get('/instructors', { params: { picker: 1 } }), subCourseId ? axios.get('/sub-courses/' + subCourseId) : parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
+      const [coursesRes, instructorsRes, parentRes] = await Promise.all([axios.get('/cycles', { params: listParams.current }), axios.get('/instructors', { params: { picker: 1 } }), parentId ? axios.get('/courses/' + parentId) : Promise.resolve({ data: null })]);
       if (request !== dataRequest.current) return;
-      // A sub-umbrella page scopes everything to that sub-umbrella, using its umbrella's code.
-      setParentCourse(subCourseId && parentRes.data ? { ...parentRes.data, code: parentRes.data.parentCourse.code, umbrella: parentRes.data.parentCourse } : parentRes.data);
+      setParentCourse(parentRes.data);
       if (parentRes.data?.archivedAt) setFilterStatus('archived');
       const pages = Math.max(1, Math.ceil(coursesRes.data.total / PAGE_SIZE));
       if (coursesRes.data.page > pages) { setPage(pages); return; }
@@ -161,16 +171,16 @@ const Courses = () => {
       if (request === dataRequest.current) setLoading(false);
     }
   };
-  listParams.current = { parentCourseId: parentId, subCourseId: subCourseId || undefined, page, pageSize: PAGE_SIZE, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined };
+  listParams.current = { parentCourseId: parentId, section: !parentId && section ? section : undefined, page, pageSize: PAGE_SIZE, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined };
   useEffect(() => {
     const t = setTimeout(() => setQuery(filterName.trim()), 300);
     return () => clearTimeout(t);
   }, [filterName]);
-  useEffect(() => { setPage(1); setSelectedCycleIds([]); }, [query, filterBranch, filterStatus, parentId, subCourseId]);
+  useEffect(() => { setPage(1); setSelectedCycleIds([]); }, [query, filterBranch, filterStatus, parentId, section]);
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parentId, subCourseId, page, query, filterBranch, filterStatus]);
+  }, [parentId, section, page, query, filterBranch, filterStatus]);
   useEffect(() => {
     const refreshAssignments = () => fetchData();
     window.addEventListener('assignments-updated', refreshAssignments);
@@ -181,7 +191,7 @@ const Courses = () => {
   const handleNextLevel = course => {
     resetForm();
     const students = (course.enrollments || []).filter(e => !e.deletedAt && !e.student?.deletedAt && !e.financialArchivedAt).map(e => ({ id: e.student.id, name: e.student.name }));
-    setNextFrom({ id: course.id, name: course.name, parentCourseId: course.parentCourseId, subCourseId: course.subCourseId, students, chosen: students.map(st => st.id) });
+    setNextFrom({ id: course.id, name: course.name, parentCourseId: course.parentCourseId, students, chosen: students.map(st => st.id) });
     setName(String((course.cycleNumber || 0) + 1));
     setBranch(course.branch);
     setDetails(course.details || '');
@@ -199,7 +209,6 @@ const Courses = () => {
       await axios.post('/cycles', {
         ...schedule,
         parentCourseId: nextFrom ? nextFrom.parentCourseId : parentId,
-        subCourseId: (nextFrom ? nextFrom.subCourseId : subCourseId) || undefined,
         previousCycleId: nextFrom?.id,
         studentIds: nextFrom ? nextFrom.chosen : undefined,
         cycleNumber: name,instructorId:newInstructorId||undefined,hourlyRate:newInstructorId?newInstructorRate:undefined,
@@ -277,18 +286,18 @@ const Courses = () => {
   };
   const handleRevertFinish = courseId => {
     setConfirmAction({
-      title: 'Revert Course',
-      message: 'Reopen this course? Its existing payroll, recorded hours, payment status, and student payments will be retained.',
-      confirmText: 'Revert',
+      title: 'Reopen cycle',
+      message: 'Reopen this cycle? The unpaid employee earnings from completing it are removed (hours closed early stay). Student payments are kept. If any of those earnings is already processing or paid, the cycle stays completed.',
+      confirmText: 'Reopen',
       confirmColor: "appearance-bg-amber-600 appearance-text-white appearance-hover-bg-amber-700",
       titleColor: "appearance-text-amber-700",
       action: async () => {
         try {
           await axios.post(`/cycles/${courseId}/revert`);
-          toast.success('Course reverted to active');
+          toast.success('Cycle reopened');
           fetchData();
         } catch (error) {
-          toast.error('Failed to revert course');
+          toast.error(error.response?.data?.error || 'The cycle could not be reopened.', { duration: 8000 });
         }
       }
     });
@@ -601,7 +610,7 @@ const Courses = () => {
     return groups;
   }, []).map(linkOrder);
   const chainTitle = group => group.map(c => c.name).join(' → ');
-  const renderTile = course => <CourseTile key={course.id} course={course} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
+  const renderTile = course => <CourseTile key={course.id} course={course} studentQuery={query} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
             setReplacementAssignmentId(assignmentId);
             setAssignCourseId(course.id);
             setSelectedInstructorId('');
@@ -621,12 +630,10 @@ const Courses = () => {
             setFinishingCourse(course);
             setFinishTotalHours(course.totalHours || '');
             const ih = {};
-            course.instructors.forEach(ci => {
-              ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
-            });
+            startHours(course, ih);
             setInstructorHours(ih);
           }} onNextLevel={() => handleNextLevel(course)} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />;
-  const renderRow = course => <CourseRows key={course.id} course={course} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
+  const renderRow = course => <CourseRows key={course.id} course={course} studentQuery={query} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
                 setReplacementAssignmentId(assignmentId);
                 setAssignCourseId(course.id);
                 setSelectedInstructorId('');
@@ -646,21 +653,24 @@ const Courses = () => {
                 setFinishingCourse(course);
                 setFinishTotalHours(course.totalHours || '');
                     const ih = {};
-                course.instructors.forEach(ci => {
-                  ih[ci.id] = course.instructors.length === 1 ? course.totalHours || '' : '';
-                });
+                startHours(course, ih);
                 setInstructorHours(ih);
               }} onNextLevel={() => handleNextLevel(course)} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />;
-  return <div className="courses-page cycles-page">
-
-      <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} />{parentCourse?.umbrella && <><Link to={'/courses/' + parentCourse.umbrella.id}>{parentCourse.umbrella.name}</Link><ChevronRight size={14} /></>}<span>{parentCourse?.name || 'All cycles'}</span></nav>
-      <PageHeading eyebrow={parentCourse?.code || 'Across the academy'} title={parentCourse ? `${parentCourse.name} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
+  // Inside Group or Private, the top of the page carries that section's colour and name.
+  const heroSection = parentCourse ? (parentCourse.isPrivate ? 'private' : 'group') : section || null;
+  const heading = <>
+      <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} />{heroSection && <><Link to={SECTIONS[heroSection].path}>{SECTIONS[heroSection].label}</Link><ChevronRight size={14} /></>}<span>{parentCourse?.name || 'All cycles'}</span></nav>
+      <PageHeading eyebrow={parentCourse?.code || (heroSection ? SECTIONS[heroSection].short : 'Across the academy')} title={parentCourse ? `${parentCourse.name} cycles` : heroSection ? `All ${SECTIONS[heroSection].short.toLowerCase()} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
 
         {user.role !== 'user' && <ExcelExportButton parentCourseId={parentId} />}
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-secondary export-format-excel" onClick={() => setImportOpen(true)}><FileSpreadsheet size={16} />Import cycle from Excel</button>}
 
         {user.role !== 'user' && parentCourse && !parentCourse.archivedAt && <button className="btn-primary" disabled={!createBranchOptions.length} title={createBranchOptions.length ? undefined : branchScope ? 'This umbrella is not open for your branch yet.' : 'Open this umbrella for a branch first.'} onClick={openCreate}><Plus size={16} />New cycle</button>}
       </PageHeading>
+    </>;
+  return <div className="courses-page cycles-page">
+
+      {heroSection ? <SectionHero section={heroSection}>{heading}</SectionHero> : heading}
 
       <div className="section-tabs" aria-label="Course status">
 
@@ -674,7 +684,7 @@ const Courses = () => {
 
         <div className="filter-toolbar">
 
-          <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, employees, or branches…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
+          <div className="search-field"><Search size={17} /><input aria-label="Search cycles" placeholder="Search cycles, employees, branches, students or phone…" value={filterName} onChange={e => setFilterName(e.target.value)} /></div>
 
           <div className="filter-select"><CustomFilterDropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} placeholder="All branches" /></div>
           <div className="flex items-center gap-2 text-xs text-slate-600 bg-white border border-slate-200 rounded-md px-3 py-2">
@@ -737,7 +747,7 @@ const Courses = () => {
 
       {/* Add Course Modal */}
 
-      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse?.umbrella || parentCourse} subCourse={parentCourse?.umbrella ? parentCourse : null} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
+      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
       <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
 
           <div className="modal-content card max-w-lg w-full relative">
@@ -945,9 +955,9 @@ const Courses = () => {
 
                   {finishingCourse.instructors.map(ci => <div key={ci.id} className="flex justify-between items-center appearance-mb-2">
 
-                      <span className="appearance-text-sm appearance-font-semibold">{ci.instructor.name}</span>
+                      <span className="appearance-text-sm appearance-font-semibold">{ci.instructor.name}{ci.closedAt && <small className="finish-closed-note"> · hours closed</small>}</span>
 
-                      <input type="number" step="0.5" min="0" className="input-field w-24 appearance-py-1 appearance-border-gray-200 appearance-focus-border-emerald-500" value={instructorHours[ci.id] || ''} onChange={e => setInstructorHours({
+                      <input type="number" step="0.5" min="0" readOnly={Boolean(ci.closedAt)} title={ci.closedAt ? 'These hours were closed early and stay as they are.' : undefined} className="input-field w-24 appearance-py-1 appearance-border-gray-200 appearance-focus-border-emerald-500" value={instructorHours[ci.id] || ''} onChange={e => ci.closedAt ? null : setInstructorHours({
                   ...instructorHours,
                   [ci.id]: e.target.value
                 })} required />

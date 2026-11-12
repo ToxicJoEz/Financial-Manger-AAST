@@ -37,6 +37,8 @@ try {
   );
   ok(await req('/users/' + created.user.id + '/branch-scope', 'PUT', { branchScope: 'FOUAD' }));
   const fouad = await login('fouad-mod', 'FouadModTest!123');
+  // The sample Fouad cycles count as created by this branch mod (branch mods only change cycles they created).
+  await prisma.cycle.updateMany({ where: { branch: 'FOUAD' }, data: { createdById: created.user.id } });
   const main = await login('main-mod', 'MainModTest!123');
   assert.equal(
     (await req('/users/' + mainMod.user.id + '/branch-scope', 'PUT', { branchScope: 'FOUAD' }, main)).status,
@@ -116,7 +118,7 @@ try {
   assert(!JSON.stringify(options).includes('Hourly rate'));
   assert.equal(ok(await req('/employees/demo-instructor-3/details', 'GET', undefined, fouad)).paidPayments.length, 0);
   assert(ok(await req('/employees/demo-instructor-3/details', 'GET', undefined, main)).paidPayments.length > 0);
-  assert.equal((await req('/imports/course-ket/private/review', 'POST', {}, fouad)).status, 403);
+  assert.equal((await req('/imports/private/review', 'POST', {}, fouad)).status, 403);
   // Teaching-team changes need a rate, so the Fouad mod requests them; only payroll managers review.
   const request = ok(
     await req('/cycles/cycle-pet-1/instructors', 'POST', { instructorId: 'demo-instructor-1', hourlyRate: 999 }, fouad)
@@ -210,10 +212,30 @@ try {
   );
   ok(await req('/finances/checks/uncheck', 'POST', { branch: 'FOUAD', items: [{ kind: 'BOOK', id: book.id }] }, main));
   assert.equal(ok(await req('/finances/checks?branch=FOUAD&status=CHANGED')).items.length, 0);
-  // Unconfirmed money can still be undone by the branch mod who works there.
+  // One checked record locks the whole cycle for the branch mod, even money that wasn't checked.
+  assert.equal(
+    (
+      await req(
+        '/cycles/' + cycle.id + '/enrollments',
+        'POST',
+        { studentId: 'demo-student-7', tuitionType: 'EXEMPT' },
+        fouad
+      )
+    ).status,
+    403
+  );
+  // In a cycle with nothing checked, the branch mod who created it can still undo money.
+  const fresh = ok(
+    await req(
+      '/cycles',
+      'POST',
+      { parentCourseId: 'course-ket', cycleNumber: 2, branch: 'FOUAD', courseFee: 1000, startDate: '2026-11-02' },
+      fouad
+    )
+  );
   const second = ok(
     await req(
-      '/cycles/' + cycle.id + '/enrollments',
+      '/cycles/' + fresh.id + '/enrollments',
       'POST',
       {
         studentId: 'demo-student-7',
@@ -228,7 +250,7 @@ try {
   const secondEntry = await prisma.paymentEntry.findFirst({ where: { enrollmentId: second.id } });
   ok(
     await req(
-      '/cycles/' + cycle.id + '/enrollments/' + second.id + '/payments/' + secondEntry.id + '/reverse',
+      '/cycles/' + fresh.id + '/enrollments/' + second.id + '/payments/' + secondEntry.id + '/reverse',
       'POST',
       { note: 'Wrong receipt' },
       fouad

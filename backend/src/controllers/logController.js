@@ -1,12 +1,7 @@
 import prisma from '../db/prisma.js';
 import { safeAudit } from '../utils/auditEvent.js';
-const visibility = user =>
-  user.role === 'mod'
-    ? {
-        actorRole: 'user',
-        AND: [{ OR: [{ actorId: null }, { actorId: { not: user.id } }] }, { actorUsername: { not: user.username } }]
-      }
-    : {};
+// Only admins and the main mod reach these routes, and they see the full log.
+const visibility = () => ({});
 const summary = {
   id: true,
   action: true,
@@ -18,7 +13,9 @@ const summary = {
   createdAt: true,
   authMethod: true,
   statusCode: true,
-  recordCount: true
+  recordCount: true,
+  errorKind: true,
+  errorMessage: true
 };
 function readable(row) {
   if (row.requestId) return row;
@@ -80,7 +77,7 @@ function filters(req) {
     if (!['SUCCESS', 'FAILURE'].includes(q.outcome)) fail('Invalid result filter.');
     where.outcome = q.outcome;
   }
-  for (const key of ['actorUsername', 'action', 'category'])
+  for (const key of ['actorUsername', 'action', 'category', 'errorKind'])
     if (q[key]) {
       if (typeof q[key] !== 'string' || q[key].length > 160) fail('Invalid activity filter.');
       where[key] = q[key];
@@ -90,7 +87,8 @@ function filters(req) {
     where.OR = [
       { description: { contains, mode: 'insensitive' } },
       { actorUsername: { contains, mode: 'insensitive' } },
-      { action: { contains, mode: 'insensitive' } }
+      { action: { contains, mode: 'insensitive' } },
+      { errorMessage: { contains, mode: 'insensitive' } }
     ];
   }
   if (q.from || q.to) {
@@ -140,7 +138,9 @@ export const logOptions = async (req, res, next) => {
       by: ['actorUsername', 'action', 'category'],
       where: visibility(req.user)
     });
+    const kinds = await prisma.systemLog.groupBy({ by: ['errorKind'], where: { errorKind: { not: null } } });
     res.json({
+      errorKinds: kinds.map(k => k.errorKind).sort(),
       users: [...new Set(rows.map(r => r.actorUsername))].sort(),
       actions: [...new Set(rows.map(r => r.action))].sort(),
       categories: [...new Set(rows.map(r => r.category))].sort()
@@ -149,16 +149,6 @@ export const logOptions = async (req, res, next) => {
     next(e);
   }
 };
-function modSafe(value) {
-  if (Array.isArray(value)) return value.map(modSafe);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(
-      Object.entries(value)
-        .filter(([key]) => !/^hourlyRate$|^rate$|salary|payroll|password|token|secret/i.test(key))
-        .map(([key, v]) => [key, modSafe(v)])
-    );
-  return value;
-}
 export const logDetails = async (req, res, next) => {
   try {
     const page = Number(req.query.page || 1);
@@ -197,7 +187,6 @@ export const logDetails = async (req, res, next) => {
       };
     }
     details = safeAudit(details);
-    if (req.user.role === 'mod') details = modSafe(details);
     const { changes = [], ...metadata } = details,
       entries = [];
     for (const change of changes) {

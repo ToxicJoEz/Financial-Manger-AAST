@@ -104,7 +104,10 @@ try {
   );
   assert.equal(report.sheets[0].rows.filter(r => r.actualPaymentDate === today).length, 3);
   const paidCycle = chosen[0].courseId;
-  ok(await req('/cycles/' + paidCycle + '/revert', 'POST', {}));
+  // A cycle whose earnings are paid cannot be reopened; the refusal says where the earnings are.
+  const refused = await req('/cycles/' + paidCycle + '/revert', 'POST', {});
+  assert.equal(refused.status, 409);
+  assert.match(refused.data.error, /Payment batch \d+ · .+ \(paid\)/);
   assert(ok(await req('/finances')).earnings.some(e => e.courseId === paidCycle && e.status === 'PAID'));
   assert.equal((await req('/cycles/' + paidCycle + '/finish', 'POST', { totalHours: 11 })).status, 409);
   const plan = ok(await req('/cycles/' + paidCycle + '/deletion-preview'));

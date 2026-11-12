@@ -8,16 +8,15 @@ import {
   editCourse,
   archiveCourse,
   restoreCourse,
-  setCourseBranches
+  setCourseBranches,
+  studentMatches
 } from '../controllers/catalogController.js';
-import { listSubCourses, createSubCourse } from '../controllers/subCourseController.js';
 const router = express.Router();
 router.use(protect);
-// Umbrellas and sub-umbrellas are managed by admins and the main mod; everyone else uses them.
+// Umbrellas are managed by admins and the main mod; everyone else uses them.
 router.get('/:id/deletion-preview', mainManager, deletionPreview('course'));
 router.delete('/:id/permanent', mainManager, permanentlyDelete('course'));
-router.get('/:id/sub-courses', listSubCourses);
-router.post('/:id/sub-courses', mainManager, createSubCourse);
+router.get('/student-matches', studentMatches);
 router.get('/', listCourses);
 router.get('/:id', getCourse);
 router.post('/', mainManager, createCourse);

@@ -19,16 +19,7 @@ const actor = root.username;
 try {
   await prisma.$transaction(
     async tx => {
-      for (const model of [
-        'course',
-        'subCourse',
-        'cycle',
-        'student',
-        'instructor',
-        'enrollment',
-        'payrollEarning',
-        'bookPayment'
-      ])
+      for (const model of ['course', 'cycle', 'student', 'instructor', 'enrollment', 'payrollEarning', 'bookPayment'])
         if (await tx[model].count())
           throw new Error(
             'Sample data already exists or business records were added. Nothing was deleted or replaced.'
@@ -44,9 +35,6 @@ try {
           ...(await tx.course.create({ data: { name, code, bookPrice, branches: open.join(',') } })),
           fee
         });
-      const privateUmbrella = await tx.course.create({
-        data: { name: 'CAMBRIDGE PRIVATE COURSES', code: '1T1047', isPrivate: true, branches: branches.join(',') }
-      });
       const teachers = [];
       for (const [index, name] of [
         'أحمد حسن إبراهيم',
@@ -148,12 +136,11 @@ try {
       const activeCycles = [];
       let receipt = 620000;
       // Creates one cycle with its teaching team, payroll state, enrollments, tuition ledger and books.
-      // `roster` lists { student, fee, paid, books } per enrollment; `bookPrice` is the umbrella or sub-umbrella price.
+      // `roster` lists { student, fee, paid, books } per enrollment; `bookPrice` is the umbrella's price.
       // Names: "<umbrella> <level> - <start month year>", "(n)" for a repeat in the same branch and month.
       const sequences = new Map();
       async function addCycle({
         umbrella,
-        sub,
         number,
         spec,
         chosen,
@@ -165,7 +152,7 @@ try {
         previous
       }) {
         const cycleBranch = branch || branches[index % branches.length];
-        const key = [sub?.id ?? umbrella.id, cycleBranch, number, spec.start.slice(0, 7)].join('|');
+        const key = [umbrella.id, cycleBranch, number, spec.start.slice(0, 7)].join('|');
         const sequence = (sequences.get(key) || 0) + 1;
         sequences.set(key, sequence);
         const cycleId = randomUUID();
@@ -177,11 +164,10 @@ try {
             chainId: previous?.chainId ?? cycleId,
             chainStart: previous?.chainStart ?? date(spec.start),
             parentCourseId: umbrella.id,
-            subCourseId: sub?.id ?? null,
-            numberingKey: sub?.id ?? umbrella.id,
+            numberingKey: umbrella.id,
             cycleNumber: number,
             sequence,
-            name: cycleName(sub?.name ?? umbrella.name, number, date(spec.start), sequence),
+            name: cycleName(umbrella.name, number, date(spec.start), sequence),
             branch: cycleBranch,
             details: 'بيانات تجريبية لاختبار التسجيل والمصروفات والكتب ورواتب المحاضرين.',
             startDate: date(spec.start),
@@ -233,7 +219,7 @@ try {
             });
           }
         }
-        if (!spec.finished && !sub) activeCycles.push(cycle);
+        if (!spec.finished && !umbrella.isPrivate) activeCycles.push(cycle);
         for (const [n, { student, paid, fee, books }] of roster.entries()) {
           const customFee = fee === courseFee ? null : fee;
           const enrollment = await tx.enrollment.create({
@@ -332,15 +318,17 @@ try {
           if (index === 0) firstLevel = created;
         }
       }
-      // Private umbrella: sub-umbrellas with their own book prices; cycles of 1-3 students.
+      // Private umbrellas (no course code), each with its own book price; cycles of 1-3 students.
       const subs = {};
-      for (const [name, bookPrice] of [
-        ['KET', 900],
-        ['PET', 1000],
-        ['IELTS', 1200],
-        ['CEPT', 0]
+      for (const [name, bookPrice, open] of [
+        ['KET', 900, ['MIAMI', 'FOUAD', 'SMART']],
+        ['PET', 1000, branches],
+        ['IELTS', 1200, branches],
+        ['CEPT', 0, ['MIAMI', 'ONLINE']]
       ])
-        subs[name] = await tx.subCourse.create({ data: { parentCourseId: privateUmbrella.id, name, bookPrice } });
+        subs[name] = await tx.course.create({
+          data: { name, code: null, isPrivate: true, bookPrice, branches: open.join(',') }
+        });
       const privateStudent = n => students[(40 + n) % students.length];
       const solo = (n, fee, books = 'UNPAID') => ({ student: privateStudent(n), fee, paid: fee, books });
       // Students sharing one fee (e.g. 7000 for 2 students = 3500 each), as merged workbook rows import.
@@ -365,8 +353,8 @@ try {
       ];
       for (const [index, [subName, number, spec, roster, courseFee]] of privatePlan.entries())
         await addCycle({
-          umbrella: privateUmbrella,
-          sub: subs[subName],
+          umbrella: subs[subName],
+          branch: subs[subName].branches.split(',')[index % subs[subName].branches.split(',').length],
           number,
           spec,
           chosen: [teachers[(index + 2) % 8]],
@@ -375,11 +363,33 @@ try {
           bookPrice: subs[subName].bookPrice,
           index
         });
+      // Hours closed early: a second employee on an active cycle, closed at 8 of its 12 hours (unpaid in payroll).
+      {
+        const cycle = activeCycles.at(-1);
+        const first = await tx.courseInstructor.findFirst({ where: { courseId: cycle.id } });
+        const other = teachers.find(t => t.id !== first.instructorId);
+        const closed = await tx.courseInstructor.create({
+          data: {
+            courseId: cycle.id,
+            instructorId: other.id,
+            hourlyRate: 150,
+            hoursTaught: 8,
+            closedAt: cycle.startDate,
+            closedBy: actor
+          }
+        });
+        await tx.payrollEarning.create({
+          data: earningData(
+            { ...cycle, parentCourse: courses.find(c => c.id === cycle.parentCourseId) },
+            { ...closed, instructor: other }
+          )
+        });
+      }
       const requester = usersBefore.find(user => user.role === 'user' && user.isActive && !user.isBanned);
       if (requester) {
         for (const [index, type] of ['ASSIGN', 'REMOVE', 'REPLACE'].entries()) {
           const cycle = activeCycles[index],
-            assignment = await tx.courseInstructor.findFirst({ where: { courseId: cycle.id } });
+            assignment = await tx.courseInstructor.findFirst({ where: { courseId: cycle.id, closedAt: null } });
           const replacement = teachers.find(t => t.id !== assignment.instructorId);
           const request = await tx.pendingAssignment.create({
             data: {
@@ -409,7 +419,7 @@ try {
           action: 'ADD_LOCAL_TEST_DATA',
           actorUsername: actor,
           description:
-            'Added 3 group umbrellas (21 cycles), a private umbrella with 4 sub-umbrellas (8 cycles of 1-3 students), 64 Arabic students, 8 Arabic instructors, tuition/book records and salary batches. Existing users untouched.'
+            'Added 3 group umbrellas (21 cycles), 4 private umbrellas (8 cycles of 1-3 students), 64 Arabic students, 8 Arabic instructors, tuition/book records and salary batches. Existing users untouched.'
         }
       });
       // A partly paid batch: one payment from the October 20 batch was paid on 2 November.
@@ -450,7 +460,6 @@ try {
   const result = {};
   for (const model of [
     'course',
-    'subCourse',
     'cycle',
     'student',
     'instructor',

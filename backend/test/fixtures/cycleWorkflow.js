@@ -62,7 +62,8 @@ try {
     (
       await req('/courses', 'POST', {
         name: 'Duplicate',
-        code: '1T1036'
+        code: '1T1036',
+        isPrivate: false
       })
     ).status,
     409
@@ -230,9 +231,12 @@ try {
       ]
     })
   );
-  const original = await prisma.payrollEarning.findFirst({ where: { courseId: cycle.id } });
+  // Reopening a completed cycle removes its unpaid completion earnings; completing it again records them again.
   ok(await req('/cycles/' + cycle.id + '/revert', 'POST', {}));
-  assert(ok(await req('/finances')).earnings.some(e => e.courseId === cycle.id && e.status === 'UNPAID'));
+  assert(!ok(await req('/finances')).earnings.some(e => e.courseId === cycle.id));
+  ok(await req('/cycles/' + cycle.id + '/finish', 'POST', { totalHours: 10 }));
+  const original = await prisma.payrollEarning.findFirst({ where: { courseId: cycle.id } });
+  assert.equal(original.batchId, null);
   ok(
     await req('/courses/course-ket', 'PUT', {
       name: 'KET UPDATED',
@@ -265,7 +269,8 @@ try {
   const empty = ok(
     await req('/courses', 'POST', {
       name: 'Archive checks',
-      code: 'ARC-001'
+      code: 'ARC-001',
+      isPrivate: false
     })
   );
   const child = ok(

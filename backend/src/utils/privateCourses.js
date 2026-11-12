@@ -61,26 +61,6 @@ export function assertUmbrellaBranch(course, branch) {
     );
 }
 
-// Sub-umbrella names behave like umbrella names: trimmed, upper-case, 1–120 characters.
-export function subCourseName(value) {
-  if (typeof value !== 'string' || !value.trim() || value.trim().length > 120)
-    fail('Sub-umbrella name must contain 1 to 120 characters.');
-  return value.trim().replace(/\s+/g, ' ').toUpperCase();
-}
-
-// Where a cycle's number and name come from: the umbrella for group courses, the sub-umbrella for private ones.
-export async function cycleScope(parent, subCourseId) {
-  if (!parent.isPrivate) {
-    if (subCourseId) fail('Group courses have no sub-umbrellas.');
-    return { numberingKey: parent.id, subCourse: null, prefix: parent.name };
-  }
-  if (typeof subCourseId !== 'string' || !subCourseId) fail('Choose a sub-umbrella for this private cycle.');
-  const subCourse = await prisma.subCourse.findFirst({ where: { id: subCourseId, parentCourseId: parent.id } });
-  if (!subCourse) fail('Choose a sub-umbrella of this private course.');
-  if (subCourse.archivedAt) fail('Restore this sub-umbrella before adding cycles to it.', 409);
-  return { numberingKey: subCourse.id, subCourse, prefix: subCourse.name };
-}
-
 export async function assertPrivateSeat(course) {
   if (
     course.parentCourse?.isPrivate &&
@@ -91,13 +71,12 @@ export async function assertPrivateSeat(course) {
     });
 }
 
-// Book prices come from the umbrella for group cycles and from the sub-umbrella for private cycles.
-export const cycleBookPrice = cycle =>
-  (cycle.parentCourse?.isPrivate ? cycle.subCourse?.bookPrice : cycle.parentCourse?.bookPrice) || 0;
+// Book prices come from the cycle's umbrella.
+export const cycleBookPrice = cycle => cycle.parentCourse?.bookPrice || 0;
 
 export const privateLabel = (name, isPrivate) => (isPrivate ? `${name} (Private)` : name);
 
-// Linking a new cycle as the next level of an earlier one: same umbrella (or sub-umbrella) and same branch.
+// Linking a new cycle as the next level of an earlier one: same umbrella and same branch.
 // Returns the link fields to save; a cycle without a previous level starts its own chain.
 export async function levelLink({ previousCycleId, numberingKey, branch, id, startDate }) {
   if (!previousCycleId) return { previousCycleId: null, chainId: id, chainStart: startDate };
