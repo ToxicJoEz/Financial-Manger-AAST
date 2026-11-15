@@ -7,6 +7,7 @@ import Notifications from './pages/Notifications';
 import CourseCatalog from './pages/CourseCatalog';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
+import { BranchProvider } from './context/BranchContext';
 import { useContext } from 'react';
 import CourseSections from './pages/CourseSections';
 import Login from './pages/Login';
@@ -79,7 +80,7 @@ const ChecksRoute = () => {
   return canCheckBranchMoney(user) ? <MoneyChecks /> : <Navigate to="/finances/income" replace />;
 };
 const App = () => {
-  return <WorkspaceMotion><AuthProvider>
+  return <WorkspaceMotion><AuthProvider><BranchProvider>
       <Toaster position="top-right" toastOptions={{
         style: {
           borderRadius: '6px',
@@ -128,6 +129,6 @@ const App = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider></WorkspaceMotion>;
+    </BranchProvider></AuthProvider></WorkspaceMotion>;
 };
 export default App;

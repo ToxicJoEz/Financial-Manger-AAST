@@ -1,6 +1,9 @@
+import { moneyStorage } from '../../src/db/moneyStorage.js';
 import { readFileSync } from 'node:fs';
 const date = value => new Date(value + 'T12:00:00Z');
-export async function seedFixture(client, passwordHash) {
+// The sample amounts below are in EGP; the money layer stores them as whole piasters, like the app does.
+export async function seedFixture(rawClient, passwordHash) {
+  const client = rawClient.$extends(moneyStorage);
   await client.$transaction(async tx => {
     const accounts = JSON.parse(readFileSync(new URL('../../demo/accounts.json', import.meta.url), 'utf8'));
     for (const account of accounts)

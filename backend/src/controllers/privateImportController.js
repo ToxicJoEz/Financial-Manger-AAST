@@ -5,7 +5,7 @@ import { parsePrivateWorkbook, phoneNumbers, privateDate } from '../utils/privat
 import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
-import { LEVEL_MAX, namedCycle, umbrellaBranches } from '../utils/privateCourses.js';
+import { LEVEL_MAX, namedCycle, umbrellaBranches, levelLink } from '../utils/privateCourses.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
@@ -174,6 +174,32 @@ async function planGroups(parentId, rows, numbers = {}) {
       requested: Object.hasOwn(numbers, id) ? Number(numbers[id]) : lead.cycleNumber
     };
   });
+  // A group can be the next level of an existing cycle in the same private umbrella and branch.
+  const umbrellaIds = [...new Set(groups.map(g => subByName.get(g.umbrellaName)?.id).filter(Boolean))];
+  const earlier = umbrellaIds.length
+    ? await prisma.cycle.findMany({
+        where: { parentCourseId: { in: umbrellaIds }, archivedAt: null },
+        select: { id: true, name: true, cycleNumber: true, branch: true, startDate: true, parentCourseId: true },
+        orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
+        take: 500
+      })
+    : [];
+  for (const group of groups) {
+    const lead = group.members[0],
+      umbrella = subByName.get(group.umbrellaName),
+      start = privateDate(lead.startDate).value;
+    group.followable = umbrella
+      ? earlier
+          .filter(
+            c =>
+              c.parentCourseId === umbrella.id &&
+              c.branch === String(lead.branch || '').toUpperCase() &&
+              (!start || !c.startDate || c.startDate <= new Date(start + 'T00:00:00Z'))
+          )
+          .slice(0, 50)
+          .map(c => ({ id: c.id, name: c.name, cycleNumber: c.cycleNumber }))
+      : [];
+  }
   for (const group of groups) {
     if (!group.umbrellaName || group.alreadyImported) continue;
     group.numberSource = Object.hasOwn(numbers, group.id) ? 'reviewed' : 'file';
@@ -288,6 +314,9 @@ export const commitPrivateImport = atomic(
       )
         throw importError('Select valid private course entries.');
       const numbers = req.body.numbers && typeof req.body.numbers === 'object' ? req.body.numbers : {};
+      // Groups imported as the next level of an existing cycle: { groupId: previousCycleId }.
+      const links =
+        req.body.links && typeof req.body.links === 'object' && !Array.isArray(req.body.links) ? req.body.links : {};
       const selectedRows = claim.parsed.rows.filter(r => ids.includes(r.id));
       const { groups } = await planGroups(SECTION, selectedRows, numbers);
       for (const group of groups) {
@@ -409,11 +438,19 @@ export const commitPrivateImport = atomic(
         // The standard fee is the highest amount in the group; lower amounts are fully paid discounts.
         const fee = Number(moneyMinor(group.fee)) / 100;
         const cycleId = randomUUID();
+        const startDate = new Date(lead.startDate + 'T00:00:00Z');
+        // Same rules as creating a next level by hand: same umbrella and branch, not starting earlier.
+        const link = await levelLink({
+          previousCycleId: links[group.id] || null,
+          numberingKey: sub.id,
+          branch: lead.branch,
+          id: cycleId,
+          startDate
+        });
         const cycle = await prisma.cycle.create({
           data: {
             id: cycleId,
-            chainId: cycleId,
-            chainStart: new Date(lead.startDate + 'T00:00:00Z'),
+            ...link,
             parentCourseId: sub.id,
             createdById: req.user.id,
             numberingKey: sub.id,

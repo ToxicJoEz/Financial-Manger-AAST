@@ -160,3 +160,71 @@
 
 // A cycle a branch mod can view but not change (not theirs, or its money was checked).
 .cycle-lock-note { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 13px; border: 1px solid #f1dcb0; border-radius: var(--radius-md); background: var(--warning-soft); color: var(--warning); font-size: 12px; font-weight: 600; svg { flex-shrink: 0; } }
+
+// Team & access: full backup and restore (admins and the main mod).
+.backup-panel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 22px; padding: 20px 22px; }
+.backup-panel-copy { display: flex; gap: 14px; max-width: 760px;
+  h2 { font-size: 15px; font-weight: 800; color: var(--ink-strong); }
+  p { margin-top: 5px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+}
+.backup-panel-icon { display: grid; place-items: center; flex-shrink: 0; width: 42px; height: 42px; border-radius: var(--radius-md); background: var(--accent-soft); color: var(--accent); }
+.backup-panel-warning { display: flex; align-items: center; gap: 6px; color: var(--warning) !important; font-weight: 600; }
+.backup-panel-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.backup-progress { display: flex; flex-direction: column; gap: 6px; min-width: 220px; font-size: 12px; font-weight: 600; color: var(--ink); progress { width: 100%; accent-color: var(--accent); } }
+.backup-restore-dialog { max-width: 520px;
+  h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 800; color: var(--danger); }
+  .alert-error { margin: 14px 0 10px; }
+  .policy-check { margin: 12px 0 4px; }
+}
+.backup-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin-top: 14px;
+  dt { font-size: 11px; color: var(--muted); } dd { font-size: 13px; font-weight: 700; color: var(--ink-strong); overflow-wrap: anywhere; }
+  > div:nth-child(-n + 2) { grid-column: 1 / -1; }
+}
+.btn-danger-solid { background: var(--danger) !important; border-color: var(--danger) !important; }
+
+// Team & access: branches managed by admins and the main mod.
+.team-admin-panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-bottom: 22px; align-items: start;
+  > .card { margin-bottom: 0; }
+}
+@media (max-width: 1100px) { .team-admin-panels { grid-template-columns: 1fr; } }
+.backup-panel { flex-direction: column; align-items: stretch; }
+.branch-manager { padding: 20px 22px; }
+.branch-manager-head { display: flex; gap: 14px; align-items: flex-start;
+  h2 { font-size: 15px; font-weight: 800; color: var(--ink-strong); }
+  p { margin-top: 5px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+  > div { flex: 1; }
+  > .btn-secondary { flex-shrink: 0; }
+}
+.branch-list { display: grid; gap: 6px; margin-top: 16px;
+  li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-md); }
+  li.is-deleted { background: var(--paper); opacity: 0.8; }
+}
+.branch-swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+.branch-list-name { display: flex; flex-direction: column; margin-right: auto; min-width: 0;
+  strong { font-size: 13px; color: var(--ink-strong); } small { font-size: 11px; color: var(--muted); }
+}
+.branch-editor { max-width: 440px; display: flex; flex-direction: column; gap: 8px;
+  h3 { font-size: 17px; font-weight: 800; margin-bottom: 6px; } label, .branch-editor-label { font-size: 12px; font-weight: 700; color: var(--ink); margin-top: 6px; }
+}
+.branch-palette { display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  button { width: 26px; height: 26px; border-radius: 7px; border: 2px solid transparent; cursor: pointer; }
+  button.active { border-color: var(--ink-strong); box-shadow: 0 0 0 2px #fff inset; }
+  input[type='color'] { width: 34px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 7px; background: none; cursor: pointer; }
+}
+.branch-delete-dialog { max-width: 540px;
+  h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 800; color: var(--danger); margin-bottom: 8px; }
+  > p { font-size: 13px; line-height: 1.6; }
+}
+.branch-delete-choices { display: grid; gap: 8px; margin: 14px 0 6px;
+  button { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; text-align: left; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface); cursor: pointer;
+    strong { font-size: 13px; color: var(--ink-strong); } span { font-size: 12px; color: var(--muted); line-height: 1.5; } }
+  button.active { border-color: var(--accent); background: var(--accent-soft); }
+  button.danger.active { border-color: var(--danger); background: var(--danger-soft); }
+  button:disabled { cursor: not-allowed; opacity: 0.6; }
+}
+
+// Branches and Backup & restore open in a window from Team & access.
+.team-panel-modal { width: min(640px, calc(100vw - 32px)); max-width: 640px; }
+.team-modal-view { padding: 0 !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
+.team-modal-view.backup-panel { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
+.team-modal-view.branch-delete-dialog, .team-modal-view.backup-restore-dialog, .team-modal-view.branch-editor { max-width: none; }

@@ -21,7 +21,7 @@ import { PageHeading, EmptyState } from '../components/WorkspaceUI';
 import { Plus, Edit2, Trash2, Archive, BookOpen, X, CheckCircle, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { AuthContext } from '../context/AuthContext';
-import { BRANCHES, BRANCH_OPTIONS } from '../Constants';
+import { BRANCHES, BRANCH_OPTIONS, ALL_BRANCH_OPTIONS } from '../Constants';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
 import CourseRows from '../components/courses/CourseRows';
 import CourseTile from '../components/courses/CourseTile';
@@ -36,7 +36,7 @@ const Courses = () => {
   // Branch mods work in their own branch only.
   const branchScope = branchScopeOf(user);
   // Branch mods: their branch; users: their own branches; everyone else: all branches.
-  const branchOptions = branchScope ? BRANCH_OPTIONS.filter(o => o.value === branchScope) : user.role === 'user' ? BRANCH_OPTIONS.filter(o => String(user.branches || '').split(',').includes(o.value)) : BRANCH_OPTIONS;
+  const branchOptions = branchScope ? BRANCH_OPTIONS.filter(o => o.value === branchScope) : user.role === 'user' ? BRANCH_OPTIONS.filter(o => String(user.branches || '').split(',').includes(o.value)) : ALL_BRANCH_OPTIONS;
   const dataRequest = useRef(0);
   const [importOpen, setImportOpen] = useState(false);
   const [parentCourse, setParentCourse] = useState(null);

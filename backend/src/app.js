@@ -18,6 +18,8 @@ import assignmentRoutes from './routes/assignmentRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import financeRoutes from './routes/financeRoutes.js';
 import studentRoutes from './routes/studentRoutes.js';
+import backupRoutes from './routes/backupRoutes.js';
+import { branchesReady } from './controllers/branchController.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 
 const app = express();
@@ -34,6 +36,8 @@ app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
+// Every request sees the current list of branches (they are managed as data).
+app.use('/api', branchesReady);
 app.get('/api/health', (req, res) => res.json({ status: 'ok', database: 'postgresql' }));
 
 app.post('/api/activity-events', protect, clientActivity);
@@ -54,6 +58,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/finances', financeRoutes);
 app.use('/api/exports', exportRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/backups', backupRoutes);
 
 // Global Error Handlers (Must be placed AFTER all routes)
 app.use(notFound);

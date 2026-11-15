@@ -4,7 +4,7 @@ import { logAction } from '../utils/logger.js';
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
-async function deletionPlan(kind, id) {
+export async function deletionPlan(kind, id) {
   const record = await prisma[kind].findUnique({ where: { id } });
   if (!record) fail(kind === 'course' ? 'Course not found.' : 'Cycle not found.', 404);
   const cycles = await prisma.cycle.findMany({
@@ -105,7 +105,7 @@ export const deletionPreview = kind => async (req, res, next) => {
   }
 };
 // Removes everything a deletion plan covers. Callers must validate confirmation and version first.
-async function executePlan(kind, plan, actor) {
+export async function executePlan(kind, plan, actor) {
   if (plan.earnings.some(e => e.batchId))
     fail(
       `${plan.record.name} contains processing or paid instructor earnings. Archive it to preserve its payment history.`,

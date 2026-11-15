@@ -119,7 +119,16 @@ const ROUTE_ACTIONS = [
   ['PUT', 'notifications/read-all', 'READ_ALL_NOTIFICATIONS', 'Mark all notifications read'],
   ['PUT', 'notifications/:id/read', 'READ_NOTIFICATION', 'Mark notification read'],
   ['POST', 'branches/colors', 'CHANGE_BRANCH_COLOR', 'Change branch colour'],
-  ['POST', 'activity-events', 'BROWSER_REPORT', 'Browser-reported problem']
+  ['POST', 'branches/?', 'CREATE_BRANCH', 'Add branch'],
+  ['PUT', 'branches/:id', 'UPDATE_BRANCH', 'Update branch'],
+  ['DELETE', 'branches/:id', 'DELETE_BRANCH', 'Delete branch'],
+  ['POST', 'activity-events', 'BROWSER_REPORT', 'Browser-reported problem'],
+  ['POST', 'backups/?', 'DOWNLOAD_BACKUP', 'Create full backup'],
+  ['DELETE', 'backups/:id', 'FINISH_BACKUP_TRANSFER', 'Finish backup transfer'],
+  ['POST', 'backups/uploads', 'UPLOAD_BACKUP', 'Start uploading a backup'],
+  ['PUT', 'backups/uploads/:id/chunks/:id', 'UPLOAD_BACKUP_PART', 'Upload backup part'],
+  ['GET', 'backups/uploads/:id/check', 'CHECK_BACKUP', 'Check backup file'],
+  ['POST', 'backups/uploads/:id/restore', 'RESTORE_BACKUP', 'Restore full backup']
 ];
 export const summarizeAction = req => {
   const path = req.originalUrl.split('?')[0].replace(/^\/api\/?/, '');
@@ -147,7 +156,9 @@ export const summarizeAction = req => {
                         ? 'notifications'
                         : path.startsWith('branches')
                           ? 'settings'
-                          : 'system';
+                          : path.startsWith('backups')
+                            ? 'backups'
+                            : 'system';
   // Each kind of request gets its own action name, so the log says exactly what was done (also when it failed).
   const id = '[^/]+';
   const rule = ROUTE_ACTIONS.find(

@@ -88,7 +88,7 @@ model Course {
   id String @id @default(uuid())
   name String
   code String? @unique
-  bookPrice Float @default(0)
+  bookPrice Int @default(0) // piasters
   // Branches allowed to run cycles under this umbrella (comma-separated). New umbrellas open for Miami only.
   branches String @default("MIAMI")
   archivedAt DateTime?
@@ -128,7 +128,7 @@ model Cycle {
   endDate      DateTime?
   isFinished   Boolean  @default(false)
   totalHours   Float?   // Set when course is created or finished
-  courseFee    Float    @default(0) // Standard tuition fee in EGP
+  courseFee    Int      @default(0) // Standard tuition fee, in piasters
   payrollMonth String?  // Legacy migration-only; current earnings have no payroll month.
   isPaid       Boolean  @default(false) // Legacy migration-only; use earning batches. 
   archivedAt   DateTime?
@@ -153,7 +153,7 @@ model CourseInstructor {
   id           String     @id @default(uuid())
   courseId     String
   instructorId String
-  hourlyRate   Float      // The specific rate for this instructor in this course
+  hourlyRate   Int        // The rate for this instructor in this course, in piasters
   hoursTaught  Float?     // Filled when the course is finished, or when this employee's hours are closed early
   // Hours closed before the course ends (e.g. 15 of 20, with another employee finishing the rest). Closed hours
   // are fixed and already in payroll as unpaid earnings.
@@ -229,8 +229,8 @@ model Enrollment {
   id         String   @id @default(uuid())
   courseId   String
   studentId  String
-  amountPaid Float    @default(0)
-  customFee  Float?   // If set, overrides course courseFee for this student (0 = exempt / scholarship)
+  amountPaid Int      @default(0) // piasters
+  customFee  Int?     // piasters; if set, overrides the cycle fee for this student (0 = exempt)
   enrolledAt DateTime @default(now())
   updatedAt  DateTime @updatedAt
   bookPayments BookPayment[]
@@ -318,7 +318,7 @@ model PayrollEarning {
   instructorName String
   employeeId String?
   hours Float
-  rate Float
+  rate Int // piasters per hour
   amountMinor BigInt
   batchId String?
   batch InstructorPaymentBatch? @relation(fields: [batchId], references: [id], onDelete: Restrict)
@@ -407,4 +407,40 @@ model MoneyCheck {
 
   @@unique([kind, recordId])
   @@index([branch])
+}
+
+// Temporary storage while a backup file is downloaded or uploaded in parts (hosting limits each request's
+// size). Never part of a backup; parts older than a few hours are cleared automatically.
+model BackupTransfer {
+  id          String        @id @default(uuid())
+  kind        String        // DOWNLOAD or UPLOAD
+  userId      String
+  fileName    String
+  size        Int
+  totalChunks Int
+  sha256      String?
+  createdAt   DateTime      @default(now())
+  chunks      BackupChunk[]
+}
+
+model BackupChunk {
+  transferId String
+  transfer   BackupTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  index      Int
+  data       Bytes
+
+  @@id([transferId, index])
+}
+
+// The academy's branches, managed by admins and the main mod. Data refers to a branch by its code (e.g. DOKKI),
+// which never changes; the name and colour can. A deleted branch whose data was kept is renamed to
+// <CODE>-DELETED and stays only as history (no new cycles, umbrellas or staff).
+model Branch {
+  code      String    @id
+  name      String
+  color     String
+  sortOrder Int       @default(0)
+  deletedAt DateTime?
+  deletedBy String?
+  createdAt DateTime  @default(now())
 }

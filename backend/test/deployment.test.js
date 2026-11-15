@@ -78,3 +78,14 @@ test('Private workbooks group merged rows into shared cycles inside private umbr
 test('Bulk cycle and employee deletion keeps single-delete safeguards', () => fixture('bulkDeletionWorkflow.js'));
 test('Branch mods have no payroll; Fouad money is checked by admins and the main mod', () =>
   fixture('branchModWorkflow.js'));
+test('Full backups download in parts and restore everything, refusing damaged files', async () => {
+  process.env.BACKUP_CHUNK_BYTES = '4096'; // many small parts, as a large real backup would use
+  try {
+    await fixture('backupWorkflow.js');
+  } finally {
+    delete process.env.BACKUP_CHUNK_BYTES;
+  }
+});
+
+test('Branches are managed as data: add, rename, delete keeping or removing their data', () =>
+  fixture('branchManagementWorkflow.js'));

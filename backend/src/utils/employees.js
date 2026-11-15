@@ -1,4 +1,5 @@
-// The academy's branches: the single backend list. frontend/src/Constants.js must match (checked by test/branches.test.js).
+// The academy's active branches. Starts with the original seven and is kept in step with the Branch table
+// (utils/branches.js refreshes it in place), so every check of a branch uses the current list.
 export const EMPLOYEE_BRANCHES = ['MIAMI', 'FOUAD', 'PORT-SAID', 'ASWAN', 'SMART', 'ONLINE', 'DOKKI'];
 export const employeeName = value =>
   String(value ?? '')

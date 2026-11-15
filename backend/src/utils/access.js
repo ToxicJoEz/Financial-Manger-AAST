@@ -5,7 +5,8 @@
 import { EMPLOYEE_BRANCHES } from './employees.js';
 
 // Every branch, Miami included, can have branch mods and has its money checked by the main mod.
-export const CHECKED_BRANCHES = [...EMPLOYEE_BRANCHES];
+// The same live list as EMPLOYEE_BRANCHES (filled from the Branch table, see utils/branches.js).
+export const CHECKED_BRANCHES = EMPLOYEE_BRANCHES;
 export const MOD_BRANCH_SCOPES = CHECKED_BRANCHES;
 
 export const isManager = user => ['admin', 'mod'].includes(user?.role);

@@ -1,6 +1,13 @@
 import express from 'express';
 import prisma, { atomic } from '../db/prisma.js';
-import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, managersOnly } from '../middlewares/authMiddleware.js';
+import {
+  listBranches,
+  createBranch,
+  updateBranch,
+  branchImpact,
+  deleteBranch
+} from '../controllers/branchController.js';
 
 const router = express.Router();
 
@@ -77,4 +84,10 @@ router.post(
   })
 );
 
+// Branches as data: everyone signed in reads them; admins and the main mod add, rename, recolour and delete.
+router.get('/', protect, listBranches);
+router.post('/', protect, managersOnly('add branches'), createBranch);
+router.get('/:code/impact', protect, managersOnly('delete branches'), branchImpact);
+router.put('/:code', protect, managersOnly('change branches'), updateBranch);
+router.delete('/:code', protect, managersOnly('delete branches'), deleteBranch);
 export default router;

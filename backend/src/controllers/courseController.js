@@ -108,7 +108,7 @@ async function tuitionDueIds(parentCourseId) {
   const rows = await prisma.$queryRaw(Prisma.sql`SELECT DISTINCT e."courseId" AS id FROM "Enrollment" e
     JOIN "Cycle" c ON c.id = e."courseId"
     WHERE e."financialArchivedAt" IS NULL AND c."archivedAt" IS NULL
-      AND COALESCE(e."customFee", c."courseFee") - e."amountPaid" >= 0.005
+      AND COALESCE(e."customFee", c."courseFee") - e."amountPaid" > 0
       ${parentCourseId ? Prisma.sql`AND c."parentCourseId" = ${parentCourseId}` : Prisma.empty}`);
   return rows.map(r => r.id);
 }

@@ -251,7 +251,31 @@ try {
     newUmbrellas: {}
   };
   assert.equal((await req(other + '/commit', 'POST', choicePayload)).status, 400);
-  ok(await req(other + '/commit', 'POST', { ...choicePayload, students: { [conflictPair.rowIds[0]]: extra.id } }));
+  // A group can be imported as the next level of an existing cycle (same umbrella and branch).
+  assert(
+    conflictPair.followable.some(c => c.id === grouped.id),
+    JSON.stringify(conflictPair.followable)
+  );
+  assert.equal(
+    (
+      await req(other + '/commit', 'POST', {
+        ...choicePayload,
+        students: { [conflictPair.rowIds[0]]: extra.id },
+        links: { [conflictPair.id]: byName['IELTS 1'].id }
+      })
+    ).status,
+    409
+  );
+  const linked = ok(
+    await req(other + '/commit', 'POST', {
+      ...choicePayload,
+      students: { [conflictPair.rowIds[0]]: extra.id },
+      links: { [conflictPair.id]: grouped.id }
+    })
+  );
+  const nextLevel = await prisma.cycle.findUnique({ where: { id: linked.cycles[0].id } });
+  assert.equal(nextLevel.previousCycleId, grouped.id);
+  assert.equal(nextLevel.chainId, grouped.chainId || grouped.id);
   // An existing private umbrella is reused as it is.
   assert.equal(await prisma.course.count({ where: { isPrivate: true, name: 'KET' } }), 1);
   assert.equal((await prisma.course.findUnique({ where: { id: ket.id } })).bookPrice, 50);

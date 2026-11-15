@@ -20,6 +20,7 @@ export default function PrivateCycleImportDialog({ instructors, onClose, onImpor
     [rows, setRows] = useState([]),
     [selected, setSelected] = useState([]),
     [typedNumbers, setTypedNumbers] = useState({}),
+    [links, setLinks] = useState({}),
     [bookPrices, setBookPrices] = useState({}),
     [employees, setEmployees] = useState({}),
     [students, setStudents] = useState({});
@@ -90,6 +91,7 @@ export default function PrivateCycleImportDialog({ instructors, onClose, onImpor
         previewToken: preview.previewToken,
         rowIds: chosen.flatMap(g => g.rowIds),
         numbers: Object.fromEntries(chosen.map(g => [g.id, g.cycleNumber])),
+        links: Object.fromEntries(chosen.filter(g => links[g.id]).map(g => [g.id, links[g.id]])),
         newUmbrellas: Object.fromEntries(Object.entries(bookPrices).map(([name, bookPrice]) => [name, { bookPrice }])),
         employees,
         students
@@ -157,7 +159,7 @@ export default function PrivateCycleImportDialog({ instructors, onClose, onImpor
               {members.length > 1 && <p className="private-import-group"><Users size={14} />{members.length} students share this cycle{group.sharedAmount ? ` · ${money(group.sharedAmount.total)} EGP split equally (${members.map(m => money(m.amount)).join(' + ')})` : ''}</p>}
               <fieldset className="private-import-grid" disabled={!on}>
                 <Field label="Umbrella *"><input className="input-field" maxLength={120} value={lead.umbrellaName ?? ''} onChange={e => updateCycle(group, 'umbrellaName', e.target.value)} /></Field>
-                <Field label={`Level (1–4) *${group.numberSource === 'file' ? ' · from file' : ''}`}><input className="input-field" type="number" min="1" max="4" step="1" required value={typedNumbers[group.id] ?? group.cycleNumber ?? ''} onChange={e => { setTypedNumbers(old => ({ ...old, [group.id]: e.target.value })); setDirty(true); }} /></Field>
+                <Field label="Follows"><select className="input-field" value={links[group.id] || ''} disabled={!group.followable?.length} onChange={e => { const id = e.target.value; setLinks(old => ({ ...old, [group.id]: id })); const prev = group.followable.find(c => c.id === id); if (prev) { setTypedNumbers(old => ({ ...old, [group.id]: String(prev.cycleNumber + 1) })); setDirty(true); } }}><option value="">{group.followable?.length ? 'New cycle (no earlier level)' : 'No earlier cycle in this umbrella and branch'}</option>{(group.followable || []).map(c => <option key={c.id} value={c.id}>Next level of {c.name}</option>)}</select></Field><Field label={`Level *${group.numberSource === 'file' ? ' · from file' : ''}`}><input className="input-field" type="number" min="1" step="1" required value={typedNumbers[group.id] ?? group.cycleNumber ?? ''} onChange={e => { setTypedNumbers(old => ({ ...old, [group.id]: e.target.value })); setDirty(true); }} /></Field>
                 <Field label="Branch *"><CustomFilterDropdown value={lead.branch} options={BRANCH_OPTIONS} onChange={v => updateCycle(group, 'branch', v)} placeholder="Choose branch" /></Field>
                 <Field label="Start date *"><DateInput className="input-field" value={lead.startDate} onChange={e => updateCycle(group, 'startDate', e.target.value)} /></Field>
                 <Field label="End date · optional"><DateInput className="input-field" min={lead.startDate || undefined} value={lead.endDate} onChange={e => updateCycle(group, 'endDate', e.target.value)} /></Field>

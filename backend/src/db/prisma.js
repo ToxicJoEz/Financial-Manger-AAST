@@ -3,10 +3,15 @@ import { auditData, snapshotChange } from '../utils/auditEvent.js';
 import 'dotenv/config';
 import { prepareRuntimeDatabase } from '../utils/runtimeDatabase.js';
 import pkg from './prismaClient.js';
+import { moneyStorage } from './moneyStorage.js';
 export const Prisma = pkg.Prisma;
 import { mutationContext, auditSnapshot } from '../utils/mutationContext.js';
 prepareRuntimeDatabase();
-const base = new pkg.PrismaClient();
+const raw = new pkg.PrismaClient();
+// Money is stored as whole piasters; the app reads and writes EGP through this layer (see moneyStorage.js).
+const base = raw.$extends(moneyStorage);
+// The plain client (stored values as they are, no activity snapshots): used by backup and restore.
+export const rawPrisma = raw;
 const mutations = new Set(['create', 'createMany', 'update', 'updateMany', 'delete', 'deleteMany', 'upsert']);
 const auditedModels = new Set([
   'user',

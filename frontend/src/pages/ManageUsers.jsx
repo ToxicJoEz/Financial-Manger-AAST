@@ -1,14 +1,16 @@
 import { AnimatePresence } from 'framer-motion';
 import { PageHeading } from '../components/WorkspaceUI';
 import Dialog from '../components/Dialog';
+import BackupPanel from '../components/BackupPanel';
+import BranchManager from '../components/BranchManager';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { UserPlus, ListOrdered, ShieldCheck, Pencil } from 'lucide-react';
+import { UserPlus, ListOrdered, ShieldCheck, Pencil, Building2, DatabaseBackup } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
-import { MOD_TITLE_OPTIONS, modTitle, branchName, canSeePayroll } from '../utils/access';
+import { modTitleOptions, modTitle, branchName, canSeePayroll } from '../utils/access';
 import { BRANCHES } from '../Constants';
 import { getBranchColor } from '../utils/branchColors';
 
@@ -38,7 +40,7 @@ const lastActive = value =>
 // Admins pick any role; the main mod picks user or branch mod; branch mods add users only.
 function AccessFields({ form, setForm, adminView, canPickBranches }) {
   const roles = adminView ? ROLES : canPickBranches ? ROLES.filter(r => r.value !== 'admin') : ROLES.filter(r => r.value === 'user');
-  const modOptions = adminView ? MOD_TITLE_OPTIONS : MOD_TITLE_OPTIONS.filter(o => o.value !== 'MAIN');
+  const modOptions = adminView ? modTitleOptions() : modTitleOptions().filter(o => o.value !== 'MAIN');
   return <>
     <label>Role</label>
     <div className="access-role-picker" role="radiogroup" aria-label="Role">{roles.map(r => <button key={r.value} type="button" role="radio" aria-checked={form.role === r.value} className={form.role === r.value ? 'active' : ''} onClick={() => setForm(f => ({ ...f, role: r.value }))}><strong>{r.label}</strong><span>{r.help}</span></button>)}</div>
@@ -54,6 +56,8 @@ const ManageUsers = () => {
   const isAdmin = currentUser?.role === 'admin';
   // Admins and the main mod choose which branches a user can view.
   const mainManager = canSeePayroll(currentUser);
+  // Branches and Backup & restore open in their own window (admins and the main mod).
+  const [teamPanel, setTeamPanel] = useState(null);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState(null); // { title, message, onConfirm }
@@ -164,9 +168,12 @@ const ManageUsers = () => {
 
   return <div className="manage-users-container">
     <PageHeading eyebrow="The people you work with" title="Team & access" description="Everyone in the workspace, and what they can do.">
+      {mainManager && <button type="button" className="btn-secondary" onClick={() => setTeamPanel('branches')}><Building2 size={16} />Branches</button>}
+      {mainManager && <button type="button" className="btn-secondary" onClick={() => setTeamPanel('backup')}><DatabaseBackup size={16} />Backup &amp; restore</button>}
       {mainManager && <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>}
       <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] })}><UserPlus size={16} />Add person</button>
     </PageHeading>
+    {teamPanel && <Dialog title={teamPanel === 'branches' ? 'Branches' : 'Backup & restore'} onClose={() => setTeamPanel(null)}><div className="modal-content card team-panel-modal">{teamPanel === 'branches' ? <BranchManager /> : <BackupPanel />}</div></Dialog>}
     <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => !u.isBanned).length} active accounts</span></div>
     <div className="card overflow-x-auto">
       {loading ? <p className="text-muted">Loading the team…</p> : <table className="mu-table team-table w-full">
