@@ -5,11 +5,12 @@ import {
   markAsRead,
   markAllAsRead
 } from '../controllers/notificationController.js';
-import { protect, notBranchMod } from '../middlewares/authMiddleware.js';
+import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-router.use(protect, notBranchMod);
+// Everyone sees their own notifications; branch mods learn whether their cycles and requests were approved.
+router.use(protect);
 
 router.get('/', getNotifications);
 router.get('/history', getNotificationHistory);

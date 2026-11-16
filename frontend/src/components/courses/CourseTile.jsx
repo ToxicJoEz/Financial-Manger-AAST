@@ -1,4 +1,5 @@
 import PrivateBadge from '../PrivateBadge';
+import ApprovalBadge from '../ApprovalBadge';
 import { classTimeLabel } from '../CycleScheduleFields';
 import { BookOpen, Clock3, CalendarDays, Users, ChevronRight, GraduationCap, MapPin } from 'lucide-react';
 import { Status, initials } from '../WorkspaceUI';
@@ -24,7 +25,7 @@ export default function CourseTile(props) {
   const percent = expectedTotal > 0 ? Math.min(100, Math.round((collectedTotal / expectedTotal) * 100)) : 0;
   const lead = course.instructors[0]?.instructor;
   const schedule = classTimeLabel(course);
-  return <article className={'course-tile cycle-card ' + (expanded ? 'is-expanded' : '')} style={{ '--course-color': color }}>
+  return <article className={'course-tile cycle-card ' + (expanded ? 'is-expanded' : '') + (course.approvalStatus === 'PENDING' ? ' is-awaiting-approval' : '')} style={{ '--course-color': color }}>
     <div className="course-tile-top">
       {onToggleSelect && <input type="checkbox" className="cycle-select-checkbox" aria-label={`Select ${course.name}`} checked={Boolean(isSelected)} onChange={e => { e.stopPropagation(); onToggleSelect(); }} />}
       <span className="course-tile-icon"><BookOpen size={22} strokeWidth={1.7} /></span>
@@ -33,7 +34,7 @@ export default function CourseTile(props) {
     </div>
 
     <div className="cycle-card-heading">
-      <button className="course-tile-title" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course} /></button>
+      <button className="course-tile-title" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course} /><ApprovalBadge record={course} /></button>
       <div className="course-tile-date"><CalendarDays size={14} />{date(course.startDate)}{course.endDate ? ' — ' + date(course.endDate) : ''}</div>
       <StudentHit course={course} query={props.studentQuery} />
     </div>

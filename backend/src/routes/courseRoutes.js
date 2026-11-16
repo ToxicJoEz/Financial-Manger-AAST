@@ -26,7 +26,9 @@ import {
   bulkArchiveCourses,
   getCyclesOverview,
   closeInstructorHours,
-  reopenInstructorHours
+  reopenInstructorHours,
+  approveCycle,
+  rejectCycle
 } from '../controllers/courseController.js';
 import {
   protect,
@@ -59,6 +61,8 @@ router.post('/:id/instructors', assignInstructor);
 router.delete('/:id/instructors/:courseInstructorId', removeInstructor);
 router.post('/:id/instructors/:courseInstructorId/replace', replaceInstructor);
 router.post('/:id/restore', modOrAbove, restoreCourse);
+router.post('/:id/approve', managersOnly('approve cycles'), approveCycle);
+router.post('/:id/reject', managersOnly('reject cycles'), rejectCycle);
 router.post('/:id/finish', modOrAbove, markFinished);
 // Reopening a completed cycle, and undoing an early close, is for admins and the main mod.
 // Admins and the main mod reopen any cycle; a branch mod reopens a cycle they created until its money is checked.

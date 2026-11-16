@@ -1,4 +1,4 @@
-import { canSeePayroll, branchScopeOf } from '../utils/access';
+import { canSeePayroll } from '../utils/access';
 import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
 import { RequestReviewContext } from '../context/RequestReviewContext';
 import { useContext, useState, useEffect, useRef } from 'react';
@@ -37,8 +37,7 @@ export default function DashboardLayout() {
   useEffect(() => {
     let alive = true;
     const fetchNotifications = () => {
-      // Branch mods get no notifications; the main mod handles them.
-      if (!branchScopeOf(user)) axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
+      axios.get('/notifications/history').then(({ data }) => { if (alive) { setNotifications(data.items); setUnreadTotal(data.unread); } }).catch(() => {});
       axios.get('/attention').then(({ data }) => { if (alive) setAttention(data); }).catch(() => {});
     };
     fetchNotifications();
@@ -96,7 +95,7 @@ export default function DashboardLayout() {
       try { await axios.put(`/notifications/${n.id}/read`); setUnreadTotal(value => Math.max(0, value - 1)); setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item)); }
       catch { toast.error('Could not mark notification as read'); }
     }
-    if (canSeePayroll(user) && n.status === 'PENDING') await openRequestReview(n.relatedId);
+    if (canSeePayroll(user) && n.status === 'PENDING' && n.request?.kind !== 'CYCLE') await openRequestReview(n.relatedId);
     else navigate('/courses/cycles', { state: { search: n.request?.course?.name || '' } });
     setShowNotifications(false);
   };
@@ -125,7 +124,7 @@ export default function DashboardLayout() {
         <div className="breadcrumb"><button ref={menuRef} className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(!mobileOpen)}><Menu size={21} /></button><span>Workspace</span><ChevronRight size={14} /><strong>{pageNames[location.pathname] || (location.pathname.startsWith('/courses/') ? 'Cycles' : 'Finance')}</strong></div>
         <form className="global-search" onSubmit={searchCourses}><Search size={17} /><input ref={searchRef} aria-label="Search workspace courses" placeholder="Find a cycle…" value={search} onChange={e => setSearch(e.target.value)} /><kbd>Ctrl K</kbd></form>
         <div className="topbar-right"><div className="notification-anchor" ref={notificationRef}>
-          {!branchScopeOf(user) && <button className={`icon-button notification-trigger ${showNotifications ? 'selected' : ''}`} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={showNotifications} onClick={() => setShowNotifications(!showNotifications)}><Bell size={20} strokeWidth={1.8} />{unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}</button>}
+          {<button className={`icon-button notification-trigger ${showNotifications ? 'selected' : ''}`} aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`} aria-expanded={showNotifications} onClick={() => setShowNotifications(!showNotifications)}><Bell size={20} strokeWidth={1.8} />{unread > 0 && <span className="notification-count" aria-hidden="true">{unread > 99 ? '99+' : unread}</span>}</button>}
           <AnimatePresence>{showNotifications && <MotionSurface key="notifications" exit={{ opacity: 0, y: -3 }} className="notification-panel" aria-label="Notifications"><div className="panel-heading"><h3>Your updates {unread > 0 && <span className="count-chip">{unread}</span>}</h3><button className="icon-button" aria-label="Close notifications" onClick={() => setShowNotifications(false)}><X size={17} /></button></div>{unread > 0 && <button className="text-button mark-read" onClick={async () => { try { await axios.put('/notifications/read-all'); setUnreadTotal(0); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))); } catch { toast.error('Could not update notifications'); } }}><Check size={15} />Mark all as read</button>}<div className="notification-list">{notifications.length ? notifications.slice(0, 5).map(n => <button key={n.id} className={`notification-item ${!n.isRead ? 'unread' : ''}`} onClick={() => openNotification(n)}><strong>{n.title}</strong><p>{plainText(n.message)}</p><small>{n.isResolved ? `Resolved by ${n.resolvedBy}` : new Date(n.createdAt).toLocaleDateString('en-GB', { year:'2-digit', day: '2-digit', month: '2-digit' })}</small></button>) : <div className="empty-state"><span className="empty-icon"><Bell size={28} /></span><h3>You're all caught up</h3><p>New assignment updates will land here.</p></div>}</div><Link className="notification-view-all" to="/notifications" onClick={() => setShowNotifications(false)}>View all notifications<ChevronRight size={16} /></Link></MotionSurface>}</AnimatePresence>
         </div><Link className="top-avatar" to="/profile" aria-label="My profile">{initials(user.firstName || user.username)}</Link></div>
       </header>

@@ -37,8 +37,12 @@ try {
   );
   ok(await req('/users/' + created.user.id + '/branch-scope', 'PUT', { branchScope: 'FOUAD' }));
   const fouad = await login('fouad-mod', 'FouadModTest!123');
-  // The sample Fouad cycles count as created by this branch mod (branch mods only change cycles they created).
-  await prisma.cycle.updateMany({ where: { branch: 'FOUAD' }, data: { createdById: created.user.id } });
+  // The sample Fouad cycles count as created by this branch mod and not yet approved (branch mods only change
+  // cycles they created, until the main mod approves them or checks their money).
+  await prisma.cycle.updateMany({
+    where: { branch: 'FOUAD' },
+    data: { createdById: created.user.id, approvalStatus: 'PENDING' }
+  });
   const main = await login('main-mod', 'MainModTest!123');
   assert.equal(
     (await req('/users/' + mainMod.user.id + '/branch-scope', 'PUT', { branchScope: 'FOUAD' }, main)).status,
@@ -383,9 +387,9 @@ try {
   assert.equal((await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'mod' }, main)).status, 403);
   ok(await req('/users/' + helper.user.id + '/role', 'PUT', { role: 'mod', branchScope: 'DOKKI' }, main));
   assert.equal((await prisma.user.findUnique({ where: { id: helper.user.id } })).branchScope, 'DOKKI');
-  // Branch mods: no activity log and no notifications.
+  // Branch mods: no activity log; they do get their own notifications (decisions on their requests and cycles).
   assert.equal((await req('/logs', 'GET', undefined, fouad)).status, 403);
-  assert.equal((await req('/notifications/history', 'GET', undefined, fouad)).status, 403);
+  ok(await req('/notifications/history', 'GET', undefined, fouad));
   ok(await req('/logs', 'GET', undefined, main));
   // Changing the role away from mod clears the branch title.
   ok(await req('/users/' + created.user.id + '/role', 'PUT', { role: 'user' }));

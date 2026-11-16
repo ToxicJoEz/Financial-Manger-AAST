@@ -105,8 +105,15 @@ model Cycle {
   numberingKey String
   // The level the mod enters (1 and up). Name: "<umbrella> <level> - <start month> <year>", plus " (n)" when the
   // same branch already runs that level in that month (sequence n).
-  cycleNumber Int
+  // Empty for exam umbrellas (IELTS, CEPT, TOEFL, PTE) when the cycle has no level: "IELTS - November 2026".
+  cycleNumber Int?
   sequence    Int @default(1)
+  // Cycles created by branch mods wait for the main mod: PENDING, then APPROVED (locked for branch mods) or
+  // REJECTED (archived). Cycles made by admins and the main mod are approved at once.
+  approvalStatus  String    @default("APPROVED")
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
   // Levels taken one after another (KET 1 -> KET 2): same umbrella and same branch.
   // chainId is the first cycle of the chain and chainStart its start date, so a chain lists together.
   previousCycleId String?
@@ -144,6 +151,7 @@ model Cycle {
   enrollments  Enrollment[]
 
   @@unique([numberingKey, branch, name])
+  @@index([approvalStatus])
   @@index([parentCourseId, archivedAt])
   @@index([chainId])
   @@index([createdById])

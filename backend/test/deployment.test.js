@@ -91,3 +91,6 @@ test('Branches are managed as data: add, rename, delete keeping or removing thei
   fixture('branchManagementWorkflow.js'));
 
 test('Wiping all but accounts keeps users and branches and empties everything else', () => fixture('wipeWorkflow.js'));
+
+test('Branch mod cycles wait for approval, lock when approved; exam umbrellas allow numberless cycles', () =>
+  fixture('cycleApprovalWorkflow.js'));

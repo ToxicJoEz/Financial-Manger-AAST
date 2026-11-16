@@ -1,7 +1,8 @@
 import { cycleLocks } from '../utils/cycleLock.js';
 import { assertMoneyUnlocked } from '../utils/moneyLock.js';
 import { randomUUID } from 'node:crypto';
-import { assertPrivateSeat, assertUmbrellaBranch, levelLink, namedCycle, parseLevel } from '../utils/privateCourses.js';
+import { assertPrivateSeat, assertUmbrellaBranch, levelFor, levelLink, namedCycle } from '../utils/privateCourses.js';
+import { announceCycleDecision, approvalFields, requestCycleApproval } from '../utils/cycleApproval.js';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { enrollmentTerms } from '../utils/enrollmentTerms.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
@@ -96,11 +97,15 @@ async function withConfirmations(cycles) {
 // For branch mods: why a cycle is read-only for them (not theirs, or its money was checked), so screens lock it.
 async function withLocks(user, cycles) {
   const list = Array.isArray(cycles) ? cycles : [cycles];
-  const locks = await cycleLocks(
-    user,
-    list.map(c => c.id)
-  );
-  const out = list.map(c => ({ ...c, lockedReason: locks.get(c.id) || null, mine: c.createdById === user.id }));
+  const ids = list.map(c => c.id);
+  const [locks, studentLocks] = await Promise.all([cycleLocks(user, ids), cycleLocks(user, ids, 'students')]);
+  // lockedReason: the cycle's details are locked; studentsLockedReason: its students are locked too.
+  const out = list.map(c => ({
+    ...c,
+    lockedReason: locks.get(c.id) || null,
+    studentsLockedReason: studentLocks.get(c.id) || null,
+    mine: c.createdById === user.id
+  }));
   return Array.isArray(cycles) ? out : out[0];
 }
 // Cycles where at least one counted student still owes tuition (the same rule as the cycle cards).
@@ -185,7 +190,11 @@ export const getCourses = async (req, res) => {
       finished: { archivedAt: null, isFinished: true },
       'tuition-due': { archivedAt: null, id: { in: tuitionIds } },
       'payroll-due': payrollDueWhere,
-      pending: { archivedAt: null, pendingAssignments: { some: { status: 'PENDING' } } },
+      // Waiting for the main mod: employee requests, or a new cycle a branch mod created.
+      pending: {
+        archivedAt: null,
+        OR: [{ pendingAssignments: { some: { status: 'PENDING' } } }, { approvalStatus: 'PENDING' }]
+      },
       unassigned: { archivedAt: null, isFinished: false, instructors: { none: {} } },
       archived: { archivedAt: { not: null } }
     };
@@ -280,7 +289,7 @@ export const createCourse = atomic(async (req, res, next) => {
     const parent = await prisma.course.findUnique({ where: { id: parentCourseId || '' } });
     if (!parent || parent.archivedAt) return res.status(400).json({ error: 'Choose an available parent course.' });
     const scope = { numberingKey: parent.id, prefix: parent.name };
-    const number = parseLevel(cycleNumber);
+    const number = levelFor(parent, cycleNumber);
     if (typeof branch !== 'string' || !branch.trim()) return res.status(400).json({ error: 'Branch is required.' });
     assertUmbrellaBranch(parent, branch.trim().toUpperCase());
     if (branchScopeOf(req.user) && branch.trim().toUpperCase() !== branchScopeOf(req.user))
@@ -342,7 +351,8 @@ export const createCourse = atomic(async (req, res, next) => {
             ? null
             : numberValue(totalHours, 'Cycle hours'),
         courseFee: Number(moneyMinor(courseFee || 0, 'Tuition fee')) / 100,
-        createdById: req.user.id
+        createdById: req.user.id,
+        ...approvalFields(req.user)
       },
       include: { parentCourse: true }
     });
@@ -359,9 +369,10 @@ export const createCourse = atomic(async (req, res, next) => {
       await prisma.enrollment.create({ data: { courseId: cycle.id, studentId, amountPaid: 0 } });
     await logAction(
       'CREATE_CYCLE',
-      `Created ${cycle.name} (${cycle.branch}) under ${parent.code || parent.name}${link.previousCycleId ? ' as a next level' : ''}${carried.length ? `; ${carried.length} students carried over unpaid` : ''}`,
+      `Created ${cycle.name} (${cycle.branch}) under ${parent.code || parent.name}${link.previousCycleId ? ' as a next level' : ''}${carried.length ? `; ${carried.length} students carried over unpaid` : ''}${cycle.approvalStatus === 'PENDING' ? '; waiting for approval' : ''}`,
       req.user.username
     );
+    await requestCycleApproval(cycle, req.user);
     res.status(201).json(hidePayroll(cycle, req.user));
   } catch (error) {
     if (error.status) return res.status(error.status).json({ error: error.message });
@@ -388,7 +399,7 @@ export const updateCourse = atomic(async (req, res, next) => {
         .status(400)
         .json({ error: 'Use the dedicated completion or payment action to change accounting state.' });
     const data = cycleSchedule(body, cycle);
-    if (body.cycleNumber !== undefined) data.cycleNumber = parseLevel(body.cycleNumber);
+    if (body.cycleNumber !== undefined) data.cycleNumber = levelFor(cycle.parentCourse, body.cycleNumber);
     if (body.branch !== undefined) {
       if (typeof body.branch !== 'string' || !body.branch.trim())
         return res.status(400).json({ error: 'Branch is required.' });
@@ -409,7 +420,7 @@ export const updateCourse = atomic(async (req, res, next) => {
     if (!start) return res.status(400).json({ error: 'A cycle needs a start date. It gives the cycle its name.' });
     if (start && end && end < start) return res.status(400).json({ error: 'End date cannot precede start date.' });
     // Level, branch or start month changes rename the cycle (and may change its "(n)").
-    const level = data.cycleNumber ?? cycle.cycleNumber,
+    const level = data.cycleNumber !== undefined ? data.cycleNumber : cycle.cycleNumber,
       branchNow = data.branch ?? cycle.branch;
     if (
       level !== cycle.cycleNumber ||
@@ -1194,15 +1205,72 @@ export const restoreCourse = atomic(async (req, res, next) => {
     });
     if (!existing) return res.status(404).json({ error: 'Cycle not found.' });
     if (existing.parentCourse.archivedAt) return res.status(409).json({ error: 'Restore the parent course first.' });
+    // A rejected cycle comes back only through admins and the main mod, and restoring it approves it.
+    const rejected = existing.approvalStatus === 'REJECTED';
+    if (rejected && !canSeePayroll(req.user))
+      return res.status(403).json({ error: 'This cycle was rejected. Only the main mod or an admin can bring it back.' });
     const course = await prisma.cycle.update({
       where: { id: req.params.id },
-      data: { archivedAt: null, archivedBy: null }
+      data: {
+        archivedAt: null,
+        archivedBy: null,
+        ...(rejected ? { ...approvalFields(req.user), rejectionReason: null } : {})
+      }
     });
-    await logAction('RESTORE_COURSE', `Restored archived course ${course.name}.`, req.user.username);
+    if (rejected) await announceCycleDecision(course, req.user, true);
+    await logAction(
+      rejected ? 'APPROVE_CYCLE' : 'RESTORE_COURSE',
+      rejected ? `Restored and approved ${course.name}, which had been rejected.` : `Restored archived course ${course.name}.`,
+      req.user.username
+    );
     res.json(course);
   } catch (error) {
     next(error);
   }
+});
+
+// The main mod (or an admin) approves a cycle a branch mod created; from then on it is locked for branch mods.
+export const approveCycle = atomic(async (req, res) => {
+  const cycle = await prisma.cycle.findUnique({ where: { id: req.params.id } });
+  if (!cycle) return res.status(404).json({ error: 'Cycle not found.' });
+  if (cycle.approvalStatus !== 'PENDING')
+    return res.status(409).json({ error: `This cycle was already ${cycle.approvalStatus.toLowerCase()}. Refresh the page.` });
+  const claimed = await prisma.cycle.updateMany({
+    where: { id: cycle.id, approvalStatus: 'PENDING' },
+    data: approvalFields(req.user)
+  });
+  if (!claimed.count) return res.status(409).json({ error: 'Someone else already decided on this cycle. Refresh the page.' });
+  await announceCycleDecision(cycle, req.user, true);
+  await logAction('APPROVE_CYCLE', `Approved ${cycle.name} (${cycle.branch}); it is now locked for branch mods.`, req.user.username);
+  res.json({ message: `${cycle.name} approved.` });
+});
+
+// Rejecting archives the cycle (its students and payments stay on record) and tells the branch mod why.
+export const rejectCycle = atomic(async (req, res) => {
+  const cycle = await prisma.cycle.findUnique({ where: { id: req.params.id } });
+  if (!cycle) return res.status(404).json({ error: 'Cycle not found.' });
+  if (cycle.approvalStatus !== 'PENDING')
+    return res.status(409).json({ error: `This cycle was already ${cycle.approvalStatus.toLowerCase()}. Refresh the page.` });
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+  const claimed = await prisma.cycle.updateMany({
+    where: { id: cycle.id, approvalStatus: 'PENDING' },
+    data: {
+      approvalStatus: 'REJECTED',
+      approvedById: req.user.id,
+      approvedAt: new Date(),
+      rejectionReason: reason || null,
+      archivedAt: cycle.archivedAt || new Date(),
+      archivedBy: cycle.archivedBy || req.user.username
+    }
+  });
+  if (!claimed.count) return res.status(409).json({ error: 'Someone else already decided on this cycle. Refresh the page.' });
+  await announceCycleDecision(cycle, req.user, false, reason);
+  await logAction(
+    'REJECT_CYCLE',
+    `Rejected ${cycle.name} (${cycle.branch}) and archived it${reason ? `: ${reason}` : ''}.`,
+    req.user.username
+  );
+  res.json({ message: `${cycle.name} rejected and archived.` });
 });
 
 export const replaceInstructor = atomic(async (req, res, next) => {

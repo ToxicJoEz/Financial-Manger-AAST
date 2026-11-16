@@ -1,4 +1,5 @@
 import PrivateBadge from '../PrivateBadge';
+import ApprovalBadge from '../ApprovalBadge';
 import { ChevronDown, Users, GraduationCap } from 'lucide-react';
 import { initials } from '../WorkspaceUI';
 import { getBranchColor } from '../../utils/branchColors';
@@ -21,10 +22,10 @@ export default function CourseRows(props) {
   const studentCount = course.totalEnrolled ?? course.enrollments?.length ?? 0;
   return <>
 
-    <tr className={expanded ? 'expanded-row' : ''}>
+    <tr className={(expanded ? 'expanded-row' : '') + (course.approvalStatus === 'PENDING' ? ' is-awaiting-approval' : '')}>
       <td className="select-column">{onToggleSelect && <input type="checkbox" aria-label={`Select ${course.name}`} checked={Boolean(isSelected)} onChange={onToggleSelect} />}</td>
       <td>
-        <button className="table-title course-name" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course}/></button>
+        <button className="table-title course-name" onClick={onExpand} aria-expanded={expanded}>{course.name}<PrivateBadge record={course}/><ApprovalBadge record={course} /></button>
         <small>{course.startDate ? date(course.startDate) : 'Dates not set'}{course.endDate ? ' — ' + date(course.endDate) : ''}</small>
         <StudentHit course={course} query={props.studentQuery} />
         {(course.isPrivate || course.parentCourse?.isPrivate) && (

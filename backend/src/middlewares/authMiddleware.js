@@ -84,14 +84,18 @@ export const managersOnly = reason => (req, res, next) => {
   }
 };
 
+// Routes about a cycle's students (enrollments, their payments and books, removed students).
+const studentRoute = path => /^\/[^/]+\/(enrollments|removed-enrollments)(\/|$)/.test(path);
 // Branch mods and users only reach cycles in their branches: any route with a cycle :id checks it first.
 export const cycleInBranch = async (req, res, next, id) => {
   try {
     if (!visibleBranchesOf(req.user)) return next();
     const cycle = await prisma.cycle.findUnique({ where: { id: String(id) }, select: { branch: true } });
     if (cycle && !canSeeBranch(req.user, cycle.branch)) return res.status(404).json({ error: 'Cycle not found.' });
-    // Branch mods change only cycles they created, and only until the main mod checks the cycle's money.
-    if (cycle && req.method !== 'GET') await assertCyclesChangeable(req.user, [String(id)]);
+    // Branch mods change only cycles they created: students until the main mod checks the cycle's money, the
+    // cycle's details until the main mod approves it.
+    if (cycle && req.method !== 'GET')
+      await assertCyclesChangeable(req.user, [String(id)], studentRoute(req.path) ? 'students' : 'details');
     next();
   } catch (error) {
     next(error);
@@ -135,7 +139,8 @@ export const studentsInBranch = async (req, res, next) => {
     const cycles = await prisma.enrollment.findMany({ where: { studentId: { in: ids } }, select: { courseId: true } });
     await assertCyclesChangeable(
       req.user,
-      cycles.map(c => c.courseId)
+      cycles.map(c => c.courseId),
+      'students'
     );
     next();
   } catch (error) {

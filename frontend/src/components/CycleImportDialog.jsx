@@ -11,6 +11,7 @@ import CustomFilterDropdown from './CustomFilterDropdown';
 import { BRANCH_OPTIONS, PRIVATE_SEAT_LIMIT } from '../Constants';
 import { AuthContext } from '../context/AuthContext';
 import { branchScopeOf } from '../utils/access';
+import { allowsNoLevel } from '../utils/levels';
 const money = value => Number(value || 0).toLocaleString('en-EG', {
   maximumFractionDigits: 2
 });
@@ -153,7 +154,7 @@ export default function CycleImportDialog({
     }));
   }
   const missingFields = [];
-  if(parent.isPrivate&&rows.length>PRIVATE_SEAT_LIMIT)missingFields.push(`At most ${PRIVATE_SEAT_LIMIT} students for a private cycle`);if (!form.cycleNumber) missingFields.push('Level');
+  if(parent.isPrivate&&rows.length>PRIVATE_SEAT_LIMIT)missingFields.push(`At most ${PRIVATE_SEAT_LIMIT} students for a private cycle`);if (!form.cycleNumber && !allowsNoLevel(parent.name)) missingFields.push('Level');
   if (!form.branch) missingFields.push('Branch');
   if (!form.startDate) missingFields.push('Start date');
   if (!form.endDate) missingFields.push('End date');
@@ -180,7 +181,7 @@ export default function CycleImportDialog({
    {parent.isPrivate && rows.length>PRIVATE_SEAT_LIMIT && <p className="alert-error" role="alert">A private cycle can contain at most {PRIVATE_SEAT_LIMIT} students. Upload a smaller roster or create an empty cycle manually.</p>}<h4>Cycle details {parent.isPrivate?'· Private':''}</h4><div className="import-form-grid">
     <div className="import-link-choice" role="radiogroup" aria-label="How to import this cycle"><button type="button" role="radio" aria-checked={linkMode === 'new'} className={linkMode === 'new' ? 'active' : ''} onClick={() => { setLinkMode('new'); setPreviousId(''); }}><strong>New cycle</strong><span>Not linked to another level</span></button><button type="button" role="radio" aria-checked={linkMode === 'next'} className={linkMode === 'next' ? 'active' : ''} onClick={() => setLinkMode('next')}><strong>Next level of…</strong><span>Follows an existing cycle in this umbrella and branch</span></button></div>
     {linkMode === 'next' && <Field label="Follows cycle" id="import-previous"><CustomFilterDropdown id="import-previous" searchable required value={previousId} onChange={value => { setPreviousId(value); const prev = candidates.find(c => c.id === value); if (prev) set('cycleNumber', String((prev.cycleNumber || 0) + 1)); }} placeholder={form.branch ? (candidates.length ? 'Choose the previous level' : `No ${form.branch} cycles here yet`) : 'Choose the branch first'} options={candidates.map(c => ({ value: c.id, label: `${c.name} · starts ${c.startDate ? new Date(c.startDate).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'UTC' }) : 'no date'}` }))} /></Field>}
-    <Field label="Level" id="import-number"><input id="import-number" className="input-field" required type="number" min="1" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
+    <Field label="Level" id="import-number"><input id="import-number" className="input-field" required={!allowsNoLevel(parent.name)} placeholder={allowsNoLevel(parent.name) ? 'Optional' : undefined} type="number" min="1" step="1" value={form.cycleNumber} onChange={e => set('cycleNumber', e.target.value)} /></Field>
     <Field label="Branch" id="import-branch"><CustomFilterDropdown id="import-branch" required options={BRANCH_OPTIONS.filter(o => (!branchScope || o.value === branchScope) && openBranches.includes(o.value))} value={form.branch} onChange={value => set('branch', value)} placeholder="Choose branch" allowClear={true} /></Field>
     <Field label="Start date · from Excel" id="import-start"><DateInput id="import-start" className="input-field" required  value={form.startDate} onChange={e => set('startDate', e.target.value)} /></Field>
     <Field label="End date · from Excel" id="import-end"><DateInput id="import-end" className="input-field" required  min={form.startDate} value={form.endDate} onChange={e => set('endDate', e.target.value)} /></Field>

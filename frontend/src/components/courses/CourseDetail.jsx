@@ -1,13 +1,14 @@
 import { canSeePayroll } from '../../utils/access';
 import '../../styles/_cycleDetails.scss';
 import PrivateBadge from '../PrivateBadge';
+import ApprovalBadge from '../ApprovalBadge';
 import RemovedEnrollments from '../RemovedEnrollments';
 import { classTimeLabel } from '../CycleScheduleFields';
 import StudentTuitionRow from '../StudentTuitionRow';
 import { useState } from 'react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
-import { Clock3, MapPin, CalendarDays, GraduationCap, DollarSign } from 'lucide-react';
+import { Clock3, MapPin, CalendarDays, GraduationCap, DollarSign, Hourglass, ThumbsUp, XCircle } from 'lucide-react';
 import { Status } from '../WorkspaceUI';
 import { Plus, Edit2, RotateCcw, Trash2, Archive, BookOpen, X, CheckCircle, Search, ArrowRight, Link2, Lock } from 'lucide-react';
 
@@ -33,8 +34,10 @@ export function CourseDetail({
 }) {
 
   const manager = user.role !== 'user';
-  // Branch mods: cycles they didn't create, or whose money the main mod checked, are view-only.
+  // Branch mods, two lock levels: the cycle's details lock once the main mod approves it; its students stay open
+  // until the main mod checks the cycle's money (and cycles they didn't create are view-only).
   const readOnly = readOnlyProp || Boolean(course.lockedReason);
+  const studentsReadOnly = readOnlyProp || Boolean(course.studentsLockedReason);
   // Rates, replacements and approvals are payroll decisions: admins and the main mod only.
   const payroll = canSeePayroll(user);
   const [activeTab, setActiveTab] = useState("employees");
@@ -45,6 +48,24 @@ export function CourseDetail({
     [closeHoursValue, setCloseHoursValue] = useState(''),
     [busyClose, setBusyClose] = useState(false),
     [reopenFor, setReopenFor] = useState(null);
+  // A cycle a branch mod created waits for the main mod: approve, edit, or reject (with a reason).
+  const [rejecting, setRejecting] = useState(false),
+    [rejectReason, setRejectReason] = useState(''),
+    [deciding, setDeciding] = useState(false);
+  async function decide(approve) {
+    setDeciding(true);
+    try {
+      const { data } = await axios.post(`/cycles/${course.id}/${approve ? 'approve' : 'reject'}`, approve ? {} : { reason: rejectReason });
+      toast.success(data.message);
+      setRejecting(false);
+      window.dispatchEvent(new Event('notifications-updated'));
+      onPaymentsChanged?.();
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'That could not be saved.');
+    } finally {
+      setDeciding(false);
+    }
+  }
   const totalHours = Number(course.totalHours) || 0;
   const hoursLeft = Math.round((totalHours - (course.instructors || []).filter(ci => ci.closedAt).reduce((n, ci) => n + Number(ci.hoursTaught || 0), 0)) * 100) / 100;
   const startClose = ci => { setCloseFor(ci.id); setCloseHoursValue(String(hoursLeft)); };
@@ -100,9 +121,15 @@ export function CourseDetail({
   return <div className="course-detail cycle-detail-layout">
 
       <section className="cycle-overview">
-        <div className="cycle-overview-heading"><div className="cycle-heading-identity"><span className="eyebrow">{course.parentCourse?.code || course.branch}</span><h3>{course.name}<PrivateBadge record={course}/></h3><Status complete={course.isFinished}>{course.archivedAt ? 'Archived' : course.isFinished ? 'Completed' : 'In progress'}</Status>{course.details && <p>{course.details}</p>}</div><div className="cycle-date-range"><CalendarDays size={19}/><div><span>Start date</span><strong>{date(course.startDate)}</strong></div><span className="cycle-date-separator" aria-hidden="true">→</span><div><span>End date</span><strong>{date(course.endDate)}</strong></div></div></div>
+        <div className="cycle-overview-heading"><div className="cycle-heading-identity"><span className="eyebrow">{course.parentCourse?.code || course.branch}</span><h3>{course.name}<PrivateBadge record={course}/><ApprovalBadge record={course}/></h3><Status complete={course.isFinished}>{course.archivedAt ? 'Archived' : course.isFinished ? 'Completed' : 'In progress'}</Status>{course.details && <p>{course.details}</p>}</div><div className="cycle-date-range"><CalendarDays size={19}/><div><span>Start date</span><strong>{date(course.startDate)}</strong></div><span className="cycle-date-separator" aria-hidden="true">→</span><div><span>End date</span><strong>{date(course.endDate)}</strong></div></div></div>
         <div className="cycle-facts"><div className="cycle-fact-venue"><MapPin size={19}/><div><span>Venue / room</span><strong>{course.venue || 'Not set'}</strong></div></div><div className="cycle-fact-time"><Clock3 size={19}/><div><span>Class time</span><strong>{classTimeLabel(course) || 'Not set'}</strong></div></div><div className="cycle-fact-tuition"><DollarSign size={19}/><div><span>Standard tuition</span><strong>{Number(course.courseFee || 0).toLocaleString()} <small>EGP</small></strong>{course.isPrivate && <small className="cycle-private-books">Books · {Number(course.bookPrice||0).toLocaleString()} EGP</small>}</div></div><div className="cycle-fact-hours"><BookOpen size={19}/><div><span>Teaching hours</span><strong>{course.totalHours ?? 'Not set'}{course.totalHours != null && <small> hours</small>}</strong></div></div></div>
         {(course.previousCycle || course.nextCycles?.length > 0) && <p className="level-links"><Link2 size={14} />{course.previousCycle && <span>Follows <strong>{course.previousCycle.name}</strong></span>}{course.nextCycles?.length > 0 && <span>Continued in <strong>{course.nextCycles.map(n => n.name).join(', ')}</strong></span>}</p>}
+        {course.approvalStatus === 'PENDING' && !course.archivedAt && <div className="cycle-approval" role="note">
+          <p><Hourglass size={16} aria-hidden="true" />{payroll ? `A branch mod created this cycle in ${course.branch}. Check its details, edit anything that is wrong, then approve or reject it.` : 'Waiting for the main mod to approve this cycle. You can keep editing it until then. Once approved, its details are locked, but you can still add and manage students.'}</p>
+          {payroll && !rejecting && <div className="cycle-approval-actions"><button type="button" className="btn-primary" disabled={deciding} onClick={() => decide(true)}><ThumbsUp size={15} />Approve</button>{!readOnlyProp && <button type="button" className="btn-secondary" disabled={deciding} onClick={onEdit}><Edit2 size={15} />Edit details</button>}<button type="button" className="btn-secondary" disabled={deciding} onClick={() => setRejecting(true)}><XCircle size={15} />Reject</button></div>}
+          {payroll && rejecting && <div className="cycle-approval-reason"><textarea className="input-field" maxLength={500} autoFocus placeholder="Reason (optional) — the branch mod sees it" value={rejectReason} onChange={e => setRejectReason(e.target.value)} /><div className="cycle-approval-actions"><button type="button" className="btn-secondary" disabled={deciding} onClick={() => setRejecting(false)}>Back</button><button type="button" className="btn-primary btn-danger-solid" disabled={deciding} onClick={() => decide(false)}>{deciding ? 'Rejecting…' : 'Reject and archive'}</button></div></div>}
+        </div>}
+        {course.approvalStatus === 'REJECTED' && <div className="cycle-approval is-rejected" role="note"><p><XCircle size={16} aria-hidden="true" />Rejected by the main mod and archived.{course.rejectionReason ? ` Reason: ${course.rejectionReason}` : ''}{payroll ? ' Restoring it approves it.' : ''}</p></div>}
         {manager && course.lockedReason && !readOnlyProp && <p className="cycle-lock-note" role="note"><Lock size={15} aria-hidden="true" />{course.lockedReason}</p>}
         {manager && !readOnly && <div className="cycle-action-bar"><div className="cycle-primary-actions">{course.archivedAt ? <button className="btn-secondary" onClick={onRestore}><RotateCcw size={15}/>Restore cycle</button> : <><button className="btn-secondary" onClick={onEdit}><Edit2 size={15}/>Edit details</button>{onNextLevel && <button className="btn-secondary" onClick={onNextLevel} title="New cycle for the next level, with these students and details"><ArrowRight size={15}/>Create next level</button>}{payroll && course.isFinished && !course.payrollEarnings?.length && course.instructors.length > 0 && <button className="btn-primary" onClick={onFinish} title="This completed cycle has no employee hours recorded yet">Confirm teaching hours</button>}{course.isFinished ? <button className="btn-secondary" onClick={onRevert}><RotateCcw size={15}/>Reopen cycle</button> : <button className="btn-primary" disabled={!course.instructors.length} onClick={onFinish}><CheckCircle size={15}/>Complete cycle</button>}</>}</div><div className="cycle-danger-actions">{!course.archivedAt && <button className="btn-secondary" onClick={onDelete}><Archive size={15}/>Archive</button>}<button className="btn-secondary cycle-delete-action" onClick={onPermanentDelete}><Trash2 size={15}/>Permanently delete</button></div></div>}
       </section>
@@ -192,7 +219,7 @@ export function CourseDetail({
 
               </div>
 
-              {!readOnly && manager && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.isFinished || course.privateSeatOccupied} title={course.isFinished ? 'This cycle is completed. Reopen it to add students.' : course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+              {!studentsReadOnly && manager && <button className="btn-primary courses-presentation-4" disabled={!!course.archivedAt || course.isFinished || course.privateSeatOccupied} title={course.isFinished ? 'This cycle is completed. Reopen it to add students.' : course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                 <Plus size={13} /> {course.privateSeatOccupied ? `Private cycle full (${course.privateSeatCount}/${course.privateSeatLimit})` : course.isPrivate ? `Enroll student (${course.privateSeatCount}/${course.privateSeatLimit})` : "Enroll student"}
 
@@ -260,7 +287,7 @@ export function CourseDetail({
 
                 </p>
 
-                {enrollments.length === 0 && !readOnly && manager ? course.isFinished ? <span className="muted">This cycle is completed. Reopen it to add students.</span> : <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
+                {enrollments.length === 0 && !studentsReadOnly && manager ? course.isFinished ? <span className="muted">This cycle is completed. Reopen it to add students.</span> : <button className="text-button" disabled={!!course.archivedAt || course.privateSeatOccupied} title={course.privateSeatOccupied?`This private cycle is full (${course.privateSeatLimit} students)`:""} onClick={onEnroll}>
 
                     <Plus size={13} /> Enroll first student
 
@@ -275,9 +302,9 @@ export function CourseDetail({
 
               </div> : <div className="enrollment-list">
 
-                {filteredEnrollments.map(enr => <StudentTuitionRow key={enr.id} course={course} enrollment={enr} manager={manager} readOnly={readOnly} onBooksChanged={onPaymentsChanged} onEdit={() => onEditEnrollment(enr)} onRemove={() => onRemoveEnrollment(enr)} />)}
+                {filteredEnrollments.map(enr => <StudentTuitionRow key={enr.id} course={course} enrollment={enr} manager={manager} readOnly={studentsReadOnly} onBooksChanged={onPaymentsChanged} onEdit={() => onEditEnrollment(enr)} onRemove={() => onRemoveEnrollment(enr)} />)}
               </div>}
-              {manager&&!readOnly&&<RemovedEnrollments courseId={course.id} refreshKey={(course.enrollments||[]).map(row=>row.id).join(',')} onSaved={onPaymentsChanged}/>}
+              {manager&&!studentsReadOnly&&<RemovedEnrollments courseId={course.id} refreshKey={(course.enrollments||[]).map(row=>row.id).join(',')} onSaved={onPaymentsChanged}/>}
 
           </div>}
 

@@ -1,4 +1,5 @@
-import { namedCycle, parseLevel, assertUmbrellaBranch, levelLink } from '../utils/privateCourses.js';
+import { namedCycle, levelFor, assertUmbrellaBranch, levelLink } from '../utils/privateCourses.js';
+import { approvalFields, requestCycleApproval } from '../utils/cycleApproval.js';
 import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
@@ -207,7 +208,7 @@ export const commitImport = atomic(
           `A private cycle roster can contain at most ${PRIVATE_SEAT_LIMIT} students. No records were imported.`
         );
       const scope = { numberingKey: parent.id, prefix: parent.name };
-      const number = parseLevel(req.body.cycleNumber);
+      const number = levelFor(parent, req.body.cycleNumber);
       const branch = req.body.branch;
       if (!EMPLOYEE_BRANCHES.includes(branch)) throw importError('Choose a valid branch.');
       assertUmbrellaBranch(parent, branch);
@@ -316,6 +317,7 @@ export const commitImport = atomic(
           ...cycleSchedule(req.body),
           parentCourseId: parent.id,
           createdById: req.user.id,
+          ...approvalFields(req.user),
           numberingKey: scope.numberingKey,
           cycleNumber: number,
           ...(await namedCycle({
@@ -459,6 +461,7 @@ export const commitImport = atomic(
         `Imported ${cycle.name} from ${claim.fileName}: ${rows.length} enrollments, ${created} new students. Import ${batch.id}. Status: ${isFinished ? 'finished automatically from end date' : 'active'}.`,
         req.user.username
       );
+      await requestCycleApproval(cycle, req.user);
       res.status(201).json({
         cycleId: cycle.id,
         cycleName: cycle.name,

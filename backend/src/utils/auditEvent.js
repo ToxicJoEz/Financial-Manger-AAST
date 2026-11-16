@@ -67,6 +67,8 @@ const ROUTE_ACTIONS = [
   ['DELETE', 'cycles/:id', 'ARCHIVE_CYCLE', 'Archive cycle'],
   ['DELETE', 'cycles/:id/permanent', 'PERMANENT_DELETE_CYCLE', 'Permanently delete cycle'],
   ['POST', 'cycles/:id/restore', 'RESTORE_CYCLE', 'Restore cycle'],
+  ['POST', 'cycles/:id/approve', 'APPROVE_CYCLE', 'Approve cycle'],
+  ['POST', 'cycles/:id/reject', 'REJECT_CYCLE', 'Reject cycle'],
   ['POST', 'cycles/:id/finish', 'COMPLETE_CYCLE', 'Complete cycle'],
   ['POST', 'cycles/:id/revert', 'REOPEN_CYCLE', 'Reopen cycle'],
   ['POST', 'cycles/:id/instructors', 'ASSIGN_EMPLOYEE', 'Assign employee to cycle'],

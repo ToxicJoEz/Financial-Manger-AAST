@@ -195,7 +195,7 @@ export const editCourse = atomic(async (req, res, next) => {
           data: {
             name: cycle.startDate
               ? cycleName(name, cycle.cycleNumber, cycle.startDate, cycle.sequence)
-              : `${name} ${cycle.cycleNumber}`
+              : `${name}${cycle.cycleNumber == null ? '' : ` ${cycle.cycleNumber}`}`
           }
         });
     await logAction(

@@ -1,4 +1,5 @@
 import { canSeePayroll, branchScopeOf } from '../utils/access';
+import { allowsNoLevel } from '../utils/levels';
 import { getCourseBranch, setCourseBranch } from '../utils/courseBranch';
 import DateInput from '../components/DateInput';
 import EnrollmentRemovalFields from '../components/EnrollmentRemovalFields';
@@ -44,7 +45,7 @@ const Courses = () => {
   const umbrellaOpen = parentCourse ? parentCourse.allowedBranches || [] : [];
   const createBranchOptions = branchOptions.filter(o => umbrellaOpen.includes(o.value));
   // Cycle names: "<umbrella> <level> - <start month year>".
-  const namePreview = (level, start) => parentCourse && level && start ? `${parentCourse.name} ${level} - ${new Date(start + 'T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '';
+  const namePreview = (level, start) => parentCourse && (level || allowsNoLevel(parentCourse.name)) && start ? `${parentCourse.name}${level ? ' ' + level : ''} - ${new Date(start + 'T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : '';
   const openCreate = () => { resetForm(); setName(''); setBranch(createBranchOptions[0]?.value || ''); setIsAddModalOpen(true); };
   const location = useLocation();
   // "All group cycles" / "All private cycles" from a section page.
@@ -191,8 +192,8 @@ const Courses = () => {
   const handleNextLevel = course => {
     resetForm();
     const students = (course.enrollments || []).filter(e => !e.deletedAt && !e.student?.deletedAt && !e.financialArchivedAt).map(e => ({ id: e.student.id, name: e.student.name }));
-    setNextFrom({ id: course.id, name: course.name, parentCourseId: course.parentCourseId, students, chosen: students.map(st => st.id) });
-    setName(String((course.cycleNumber || 0) + 1));
+    setNextFrom({ id: course.id, name: course.name, parentCourseId: course.parentCourseId, umbrellaName: course.parentCourse?.name, students, chosen: students.map(st => st.id) });
+    setName(course.cycleNumber == null ? '' : String(course.cycleNumber + 1));
     setBranch(course.branch);
     setDetails(course.details || '');
     setSchedule({ venue: course.venue || '', classStartTime: course.classStartTime || '', classEndTime: course.classEndTime || '' });
@@ -495,10 +496,10 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Level</label>
 
-                <input type="number" min="1" max="4" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.cycleNumber} onChange={e => setEditingCourse({
+                <input type="number" min="1" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={editingCourse.cycleNumber ?? ''} placeholder={allowsNoLevel(editingCourse.parentCourse?.name) ? 'No level' : undefined} onChange={e => setEditingCourse({
                 ...editingCourse,
                 cycleNumber: e.target.value
-              })} required />
+              })} required={!allowsNoLevel(editingCourse.parentCourse?.name)} />
 
               </div>
 
@@ -765,7 +766,7 @@ const Courses = () => {
 
                 <label className="input-label appearance-text-emerald-900">Level</label>
 
-                <input type="number" min="1" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required placeholder="e.g. 1" /><small className="muted">{namePreview(name, startDate) ? <>This cycle will be named <strong>{namePreview(name, startDate)}</strong>. A second one in the same branch and month gets “(2)”.</> : 'The name is the umbrella, the level and the start month, e.g. KET 1 - November 2026.'}</small>
+                <input type="number" min="1" step="1" className="input-field appearance-border-gray-200 appearance-focus-border-emerald-500" value={name} onChange={e => setName(e.target.value)} required={!allowsNoLevel(nextFrom ? nextFrom.umbrellaName : parentCourse?.name)} placeholder={allowsNoLevel(nextFrom ? nextFrom.umbrellaName : parentCourse?.name) ? 'Optional for this umbrella' : 'e.g. 1'} /><small className="muted">{namePreview(name, startDate) ? <>This cycle will be named <strong>{namePreview(name, startDate)}</strong>. A second one in the same branch and month gets “(2)”.</> : allowsNoLevel(parentCourse?.name) ? `Leave the level empty for a plain name, e.g. ${parentCourse.name} - November 2026.` : 'The name is the umbrella, the level and the start month, e.g. KET 1 - November 2026.'}</small>
 
               </div>
 

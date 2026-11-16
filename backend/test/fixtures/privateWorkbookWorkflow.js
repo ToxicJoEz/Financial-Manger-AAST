@@ -133,8 +133,9 @@ try {
   assert(preview.rows.find(r => r.id === third.rowIds[0]).notes.some(n => n.includes('/ S')));
   assert.equal(free.umbrellaName, 'IELTS');
   assert.equal(free.cycleNumber, null);
-  assert.equal(free.numberSource, 'missing');
-  assert(free.errors.some(e => e.includes('Enter the level')));
+  // IELTS is an exam umbrella: a cycle without a level is fine ("IELTS - <month>").
+  assert.equal(free.numberless, true);
+  assert(!free.errors.some(e => e.includes('Enter the level')));
   assert.deepEqual(preview.newUmbrellas, ['IELTS']);
 
   const edits = Object.fromEntries(preview.rows.map(r => [r.id, { ...r, branch: 'MIAMI' }]));

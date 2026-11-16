@@ -228,3 +228,16 @@
 .team-modal-view { padding: 0 !important; margin: 0 !important; border: 0 !important; box-shadow: none !important; background: transparent !important; }
 .team-modal-view.backup-panel { display: flex; flex-direction: column; align-items: stretch; gap: 18px; }
 .team-modal-view.branch-delete-dialog, .team-modal-view.backup-restore-dialog, .team-modal-view.branch-editor { max-width: none; }
+
+// Cycles waiting for the main mod's approval: a dashed amber badge and a review strip on the cycle.
+.approval-badge { display: inline-flex; align-items: center; vertical-align: middle; margin-inline: 4px; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; line-height: 1.4; white-space: nowrap;
+  &.is-pending { border: 1px dashed #d99a2b; background: var(--warning-soft); color: var(--warning); }
+  &.is-rejected { border: 1px solid #f3c0c0; background: #fdecec; color: #b42318; }
+}
+.course-tile.is-awaiting-approval, tr.is-awaiting-approval > td:first-child { box-shadow: inset 3px 0 0 #e0a43a; }
+.cycle-approval { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 14px 0 0; padding: 12px 14px; border: 1px dashed #e0b45c; border-radius: var(--radius-md); background: var(--warning-soft);
+  > p { flex: 1 1 260px; margin: 0; color: var(--warning); font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: flex-start; svg { flex-shrink: 0; margin-top: 1px; } }
+  &.is-rejected { border-style: solid; border-color: #f3c0c0; background: #fdecec; > p { color: #b42318; } }
+  .cycle-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .cycle-approval-reason { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; textarea { flex: 1 1 260px; min-height: 60px; } }
+}

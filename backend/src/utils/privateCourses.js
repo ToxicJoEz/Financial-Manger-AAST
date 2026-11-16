@@ -12,11 +12,24 @@ export function parseLevel(value) {
     fail('Level must be a whole number from 1 up.');
   return level;
 }
+// Exam umbrellas, in Group or Private, may run cycles without a level: just "IELTS - November 2026".
+export const NUMBERLESS_UMBRELLAS = ['IELTS', 'CEPT', 'TOEFL', 'TOEFEL', 'PTE'];
+export const allowsNoLevel = umbrella =>
+  NUMBERLESS_UMBRELLAS.includes(
+    String(umbrella?.name ?? umbrella ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z]/g, '')
+  );
+// The level for a cycle of this umbrella: a whole number, or null when the umbrella allows none and none is given.
+export function levelFor(umbrella, value) {
+  if ((value === null || value === undefined || String(value).trim() === '') && allowsNoLevel(umbrella)) return null;
+  return parseLevel(value);
+}
 export const startMonthLabel = date =>
   new Date(date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 // "KET 1 - November 2026", and "KET 1 - November 2026 (2)" for the second one in the same branch and month.
 export const cycleName = (prefix, level, startDate, sequence = 1) =>
-  `${prefix} ${level} - ${startMonthLabel(startDate)}${sequence > 1 ? ` (${sequence})` : ''}`;
+  `${prefix}${level == null ? '' : ` ${level}`} - ${startMonthLabel(startDate)}${sequence > 1 ? ` (${sequence})` : ''}`;
 
 // The lowest free "(n)" for this umbrella, branch, level and start month.
 export async function nextSequence({ numberingKey, branch, level, startDate, exceptId }) {

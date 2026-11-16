@@ -9,12 +9,19 @@ export const getAttention = async (req, res, next) => {
     const user = req.user,
       payroll = canSeePayroll(user);
     const activeCycle = { archivedAt: null, parentCourse: { archivedAt: null }, ...cycleBranchWhere(user) };
-    const [pendingApprovals, myPendingRequests, unassignedCycles] = await Promise.all([
+    const [requests, cyclesToApprove, myRequests, myCycles, unassignedCycles] = await Promise.all([
       payroll ? prisma.pendingAssignment.count({ where: { status: 'PENDING', course: activeCycle } }) : 0,
+      payroll ? prisma.cycle.count({ where: { ...activeCycle, approvalStatus: 'PENDING' } }) : 0,
       prisma.pendingAssignment.count({ where: { status: 'PENDING', submittedById: user.id } }),
+      prisma.cycle.count({ where: { ...activeCycle, approvalStatus: 'PENDING', createdById: user.id } }),
       prisma.cycle.count({ where: { ...activeCycle, isFinished: false, instructors: { none: {} } } })
     ]);
-    const result = { pendingApprovals, myPendingRequests, unassignedCycles };
+    const result = {
+      pendingApprovals: requests + cyclesToApprove,
+      cyclesToApprove,
+      myPendingRequests: myRequests + myCycles,
+      unassignedCycles
+    };
     if (payroll) {
       const [processing, unpaid] = await Promise.all([
         prisma.payrollEarning.aggregate({

@@ -5,7 +5,7 @@ import { parsePrivateWorkbook, phoneNumbers, privateDate } from '../utils/privat
 import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
-import { LEVEL_MAX, namedCycle, umbrellaBranches, levelLink } from '../utils/privateCourses.js';
+import { LEVEL_MAX, allowsNoLevel, namedCycle, umbrellaBranches, levelLink } from '../utils/privateCourses.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { randomUUID } from 'node:crypto';
 import { PRIVATE_SEAT_LIMIT } from '../utils/privateSeat.js';
@@ -123,6 +123,8 @@ const groupFingerprint = (parentId, members) =>
       .join(',')}`
   );
 const validLevel = value => Number.isInteger(value) && value >= 1 && value <= LEVEL_MAX;
+// A reviewed level: a number, or null (left empty) for exam umbrellas such as IELTS.
+const reviewedLevel = value => (value === null || value === undefined || value === '' ? null : Number(value));
 
 // Builds the cycle plan: groups, their Private umbrella and level, and every problem to fix first.
 // `numbers` holds levels the reviewer typed; otherwise the level comes from the file ("PET 2" -> level 2).
@@ -171,7 +173,7 @@ async function planGroups(parentId, rows, numbers = {}) {
           : [])
       ],
       members,
-      requested: Object.hasOwn(numbers, id) ? Number(numbers[id]) : lead.cycleNumber
+      requested: Object.hasOwn(numbers, id) ? reviewedLevel(numbers[id]) : lead.cycleNumber
     };
   });
   // A group can be the next level of an existing cycle in the same private umbrella and branch.
@@ -204,7 +206,8 @@ async function planGroups(parentId, rows, numbers = {}) {
     if (!group.umbrellaName || group.alreadyImported) continue;
     group.numberSource = Object.hasOwn(numbers, group.id) ? 'reviewed' : 'file';
     group.cycleNumber = group.requested;
-    if (group.requested == null) {
+    if (group.requested == null && allowsNoLevel(group.umbrellaName)) group.numberless = true;
+    else if (group.requested == null) {
       group.errors.push('Enter the level for this cycle.');
       group.numberSource = 'missing';
     } else if (!validLevel(group.requested)) group.errors.push('Level must be a whole number from 1 up.');
@@ -333,7 +336,7 @@ export const commitPrivateImport = atomic(
           throw importError(`${group.sheet}, row ${group.sourceRows.join('/')}: ${problems.join(' ')}`);
         if (group.alreadyImported)
           throw importError('One or more selected cycles were already imported. Review the file again.', 409);
-        if (!Object.hasOwn(numbers, group.id) || Number(numbers[group.id]) !== group.cycleNumber)
+        if (!Object.hasOwn(numbers, group.id) || reviewedLevel(numbers[group.id]) !== group.cycleNumber)
           throw importError('Cycle levels changed since the preview. Review the file again.', 409);
       }
       const students = await prisma.student.findMany({ select: studentFields }),
