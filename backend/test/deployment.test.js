@@ -89,3 +89,5 @@ test('Full backups download in parts and restore everything, refusing damaged fi
 
 test('Branches are managed as data: add, rename, delete keeping or removing their data', () =>
   fixture('branchManagementWorkflow.js'));
+
+test('Wiping all but accounts keeps users and branches and empties everything else', () => fixture('wipeWorkflow.js'));

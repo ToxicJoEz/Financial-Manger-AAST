@@ -19,7 +19,8 @@
     "format:check": "prettier --check src test",
     "db:reset-test-data": "node src/scripts/resetLocalTestData.js --confirm",
     "db:backup": "node src/scripts/backupDatabase.js",
-    "db:restore": "node src/scripts/restoreDatabase.js"
+    "db:restore": "node src/scripts/restoreDatabase.js",
+    "db:wipe-all-but-accounts": "node src/scripts/wipeAllButAccounts.js"
   },
   "keywords": [],
   "author": "",
