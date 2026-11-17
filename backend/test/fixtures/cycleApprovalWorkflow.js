@@ -152,6 +152,35 @@ try {
   ok(await req(`/cycles/${wrong.id}/restore`, 'POST', {}, main));
   assert.equal((await prisma.cycle.findUnique({ where: { id: wrong.id } })).approvalStatus, 'APPROVED');
 
+  // 5. The Private sheet: admins and the main mod only, private cycles only, one row per student per employee.
+  const pte = ok(await req('/courses', 'POST', { name: 'PTE', isPrivate: true, branches: ['MIAMI'] }, main));
+  const privateCycle = ok(
+    await req(
+      '/cycles',
+      'POST',
+      { parentCourseId: pte.id, branch: 'MIAMI', startDate: '2026-11-05', courseFee: 5500, totalHours: 20, instructorId: 'demo-instructor-1', hourlyRate: 180 },
+      main
+    )
+  );
+  ok(
+    await req(
+      `/cycles/${privateCycle.id}/enrollments`,
+      'POST',
+      { newStudent: { name: 'Sheet Student', mobile: '01066600066' }, tuitionType: 'FULL', recordPayment: true, amountPaid: 5500, paymentMethod: 'CASH' },
+      main
+    )
+  );
+  assert.equal((await req('/cycles/sheet', 'GET', undefined, miami)).status, 403);
+  assert.equal((await req('/cycles/sheet?parentCourseId=course-ket', 'GET', undefined, main)).status, 400);
+  const sheet = ok(await req('/cycles/sheet?employeeId=demo-instructor-1', 'GET', undefined, main));
+  assert.equal(sheet.employee.id, 'demo-instructor-1');
+  assert.equal(sheet.employee.rate, 180);
+  const line = sheet.rows.find(r => r.cycleId === privateCycle.id);
+  assert(line && line.student === 'Sheet Student' && line.status === 'PAID' && line.due === 0 && line.fee === 5500, JSON.stringify(line));
+  assert(sheet.rows.every(r => r.course !== 'IELTS' || r.cycleId === privateCycle.id), 'group cycles are not on the sheet');
+  // Money the main mod recorded needs no check.
+  const miamiChecks = ok(await req('/finances/checks?branch=MIAMI', 'GET', undefined, main)).items;
+  assert(!miamiChecks.some(i => i.cycleId === privateCycle.id), 'main mod money is not in Checks');
   console.log('PASS: numberless exam cycles; branch mod cycles pending until approved (details lock) or rejected; students lock on money check');
 } finally {
   await new Promise(resolve => server.close(resolve));

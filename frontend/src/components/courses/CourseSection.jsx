@@ -17,7 +17,7 @@ export const SECTIONS = {
   },
   private: {
     key: 'private',
-    label: 'Private tuition',
+    label: 'Private courses',
     short: 'Private',
     icon: UserRound,
     path: '/courses/private',

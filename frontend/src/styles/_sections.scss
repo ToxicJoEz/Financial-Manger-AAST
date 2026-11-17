@@ -241,3 +241,12 @@
   .cycle-approval-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .cycle-approval-reason { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; textarea { flex: 1 1 260px; min-height: 60px; } }
 }
+
+// Status tabs: a small coloured icon per filter so each is recognisable at a glance.
+.section-tabs .motion-tab { display: inline-flex; align-items: center; gap: 6px; }
+.status-tab-icon { flex-shrink: 0; opacity: .85;
+  &.tone-all { color: #6b7fa3; } &.tone-active { color: #3b82f6; } &.tone-done { color: #16a34a; } &.tone-owed { color: #dc2626; }
+  &.tone-pay { color: #d97706; } &.tone-wait { color: #ca8a04; } &.tone-archived { color: #94a3b8; }
+}
+.motion-tab.active .status-tab-icon, .section-tabs button.active .status-tab-icon { opacity: 1; }
+.course-collection.sheet-mode { padding-bottom: 0; overflow: hidden; }

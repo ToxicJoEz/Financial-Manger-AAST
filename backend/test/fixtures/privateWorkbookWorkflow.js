@@ -55,7 +55,8 @@ async function workbook() {
   // Rows 5-6: two students sharing merged cells (one cycle, 7000 split 3500 / 3500).
   const values = {
     C5: '11/9/20226',
-    D5: 'Different spelling existing student',
+    // The existing student, spelled with an alef variant and extra spaces: still the same name.
+    D5: 'الطالب  الموجود',
     E5: '+20 1000000000',
     F5: 'KET 2',
     G5: '21/09/2026',
@@ -236,14 +237,19 @@ try {
   assert.equal((await req(path + '/commit', 'POST', payload)).status, 409);
   assert.equal(ok(await upload(path + '/preview', bytes)).groups.filter(g => g.alreadyImported).length, 3);
 
-  // Multiple phone matches are never silently merged.
-  const extra = await prisma.student.create({ data: { name: 'نفس الهاتف', mobile: existing.mobile } });
+  // Multiple name-and-phone matches are never silently merged.
+  const extra = await prisma.student.create({ data: { name: 'الطالب الموجود', mobile: existing.mobile } });
+  // A sibling sharing the phone under another name is shown, but never treated as the same student.
+  const sibling = await prisma.student.create({ data: { name: 'أخت الطالب', mobile: existing.mobile } });
   // Import the same file again as if new (its earlier import records cleared).
   await prisma.importBatch.deleteMany({});
   const other = path;
   let conflict = ok(await upload(other + '/preview', bytes));
   conflict = ok(await req(other + '/review', 'POST', { previewToken: conflict.previewToken, edits }));
   const conflictPair = conflict.groups.find(g => g.rowIds.length === 2);
+  const conflictRow = conflict.rows.find(r => r.id === conflictPair.rowIds[0]);
+  assert(!conflictRow.matches.some(m => m.id === sibling.id), 'a sibling with the same phone is not a match');
+  assert(conflictRow.sharedPhone.includes(sibling.name));
   const choicePayload = {
     ...payload,
     previewToken: conflict.previewToken,

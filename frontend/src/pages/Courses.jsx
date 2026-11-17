@@ -17,7 +17,9 @@ import Dialog from '../components/Dialog';
 import { useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
-import { LayoutGrid, List, ChevronRight, FileSpreadsheet, Link2 } from 'lucide-react';
+import { LayoutGrid, List, ChevronRight, FileSpreadsheet, Link2, Table, Layers, PlayCircle, CircleCheck, Wallet, HandCoins, Hourglass } from 'lucide-react';
+import SheetView from '../components/courses/SheetView';
+import CycleDetailsModal from '../components/courses/CycleDetailsModal';
 import { PageHeading, EmptyState } from '../components/WorkspaceUI';
 import { Plus, Edit2, Trash2, Archive, BookOpen, X, CheckCircle, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -54,6 +56,9 @@ const Courses = () => {
   const [expandedCourse, setExpandedCourse] = useState(null);
   // List view by default; each person's choice is remembered on their browser.
   const [view, setView] = useState(() => { try { return localStorage.getItem('aast-course-view') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; } });
+  // Private cycles, for admins and the main mod: the employee sheet view by default (remembered separately).
+  const [privateView, setPrivateView] = useState(() => { try { return localStorage.getItem('aast-private-course-view') || 'sheet'; } catch { return 'sheet'; } });
+  const [sheetCycle, setSheetCycle] = useState(null), [sheetRefresh, setSheetRefresh] = useState(0);
   const [loadError, setLoadError] = useState(false);
   const [courses, setCourses] = useState([]);
   // The server pages and filters cycles; tab counts come from the database too.
@@ -164,6 +169,7 @@ const Courses = () => {
       setTotal(coursesRes.data.total);
       setCounts(coursesRes.data.counts);
       setInstructorsList(instructorsRes.data);
+      setSheetRefresh(n => n + 1);
     } catch (error) {
       if (request !== dataRequest.current) return;
       setLoadError(true);
@@ -182,6 +188,12 @@ const Courses = () => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId, section, page, query, filterBranch, filterStatus]);
+  // After any change, the cycle open from the sheet reloads too.
+  useEffect(() => {
+    if (!sheetCycle?.id || !sheetRefresh) return;
+    axios.get('/cycles/' + sheetCycle.id).then(({ data }) => setSheetCycle(data)).catch(() => setSheetCycle(null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheetRefresh]);
   useEffect(() => {
     const refreshAssignments = () => fetchData();
     window.addEventListener('assignments-updated', refreshAssignments);
@@ -611,54 +623,70 @@ const Courses = () => {
     return groups;
   }, []).map(linkOrder);
   const chainTitle = group => group.map(c => c.name).join(' → ');
-  const renderTile = course => <CourseTile key={course.id} course={course} studentQuery={query} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
+  // Everything a cycle's card, row or details window needs (handlers open the dialogs on this page).
+  const cycleProps = course => ({
+    course: course,
+    studentQuery: query,
+    isSelected: selectedCycleIds.includes(course.id),
+    onToggleSelect: canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined,
+    editForm: editingCourse?.id === course.id ? editForm : null,
+    onCancelEdit: () => { if (!editSaving) setEditingCourse(null); },
+    expanded: expandedCourse === course.id,
+    user: user,
+    onPaymentsChanged: fetchData,
+    onReplace: assignmentId => {
             setReplacementAssignmentId(assignmentId);
             setAssignCourseId(course.id);
             setSelectedInstructorId('');
             setHourlyRate('');
             setExpandedCourse(null);
             setIsAssignModalOpen(true);
-          }} onRestore={async () => {
+          },
+    onRestore: async () => {
             await axios.post(`/cycles/${course.id}/restore`);
             fetchData();
-          }} onExpand={() => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(expandedCourse === course.id ? null : course.id); }} onAssign={() => {
+          },
+    onExpand: () => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(expandedCourse === course.id ? null : course.id); },
+    onAssign: () => {
             setReplacementAssignmentId(null);
             setAssignCourseId(course.id);
             setIsAssignModalOpen(true);
             setSelectedInstructorId('');
             setHourlyRate('');
-          }} onEdit={() => setEditingCourse(course)} onPermanentDelete={() => setPermanentTarget(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
+          },
+    onEdit: () => setEditingCourse(course),
+    onPermanentDelete: () => setPermanentTarget(course),
+    onDelete: () => setDeleteId(course.id),
+    onRevert: () => handleRevertFinish(course.id),
+    onRemove: id => handleRemoveInstructor(course.id, id),
+    onReview: setReviewingAssignment,
+    onFinish: () => {
             setFinishingCourse(course);
             setFinishTotalHours(course.totalHours || '');
             const ih = {};
             startHours(course, ih);
             setInstructorHours(ih);
-          }} onNextLevel={() => handleNextLevel(course)} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />;
-  const renderRow = course => <CourseRows key={course.id} course={course} studentQuery={query} isSelected={selectedCycleIds.includes(course.id)} onToggleSelect={canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined} editForm={editingCourse?.id === course.id ? editForm : null} onCancelEdit={() => { if (!editSaving) setEditingCourse(null); }} expanded={expandedCourse === course.id} user={user} onPaymentsChanged={fetchData} onReplace={assignmentId => {
-                setReplacementAssignmentId(assignmentId);
-                setAssignCourseId(course.id);
-                setSelectedInstructorId('');
-                setHourlyRate('');
-                setExpandedCourse(null);
-                setIsAssignModalOpen(true);
-              }} onRestore={async () => {
-                await axios.post(`/cycles/${course.id}/restore`);
-                fetchData();
-              }} onExpand={() => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(expandedCourse === course.id ? null : course.id); }} onAssign={() => {
-                setReplacementAssignmentId(null);
-                setAssignCourseId(course.id);
-                setIsAssignModalOpen(true);
-                setSelectedInstructorId('');
-                setHourlyRate('');
-              }} onEdit={() => setEditingCourse(course)} onPermanentDelete={() => setPermanentTarget(course)} onDelete={() => setDeleteId(course.id)} onRevert={() => handleRevertFinish(course.id)} onRemove={id => handleRemoveInstructor(course.id, id)} onReview={setReviewingAssignment} onFinish={() => {
-                setFinishingCourse(course);
-                setFinishTotalHours(course.totalHours || '');
-                    const ih = {};
-                startHours(course, ih);
-                setInstructorHours(ih);
-              }} onNextLevel={() => handleNextLevel(course)} onEnroll={() => handleOpenEnroll(course)} onEditEnrollment={enr => handleOpenEditEnrollment(course, enr)} onRemoveEnrollment={enr => handleRequestRemoveEnrollment(course, enr)} />;
+          },
+    onNextLevel: () => handleNextLevel(course),
+    onEnroll: () => handleOpenEnroll(course),
+    onEditEnrollment: enr => handleOpenEditEnrollment(course, enr),
+    onRemoveEnrollment: enr => handleRequestRemoveEnrollment(course, enr)
+  });
+  const renderTile = course => <CourseTile key={course.id} {...cycleProps(course)} />;
+  const renderRow = course => <CourseRows key={course.id} {...cycleProps(course)} />;
   // Inside Group or Private, the top of the page carries that section's colour and name.
   const heroSection = parentCourse ? (parentCourse.isPrivate ? 'private' : 'group') : section || null;
+  const sheetAllowed = payrollAccess && heroSection === 'private';
+  const shownView = sheetAllowed ? privateView : view === 'sheet' ? 'list' : view;
+  const pickView = next => {
+    if (sheetAllowed) { setPrivateView(next); try { localStorage.setItem('aast-private-course-view', next); } catch { /* per-browser only */ } }
+    else { setView(next); try { localStorage.setItem('aast-course-view', next); } catch { /* per-browser only */ } }
+  };
+  // A sheet row opens the same cycle window as the list.
+  const openSheetCycle = async id => {
+    try { const { data } = await axios.get('/cycles/' + id); setEditingCourse(null); setSheetCycle(data); setExpandedCourse(id); }
+    catch (error) { toast.error(error.response?.data?.error || 'This cycle could not be opened.'); }
+  };
   const heading = <>
       <nav className="course-breadcrumb" aria-label="Breadcrumb"><Link to="/courses">Courses</Link><ChevronRight size={14} />{heroSection && <><Link to={SECTIONS[heroSection].path}>{SECTIONS[heroSection].label}</Link><ChevronRight size={14} /></>}<span>{parentCourse?.name || 'All cycles'}</span></nav>
       <PageHeading eyebrow={parentCourse?.code || (heroSection ? SECTIONS[heroSection].short : 'Across the academy')} title={parentCourse ? `${parentCourse.name} cycles` : heroSection ? `All ${SECTIONS[heroSection].short.toLowerCase()} cycles` : 'All cycles'} description="Every cycle has its own teaching team, students, and financial records.">
@@ -675,13 +703,13 @@ const Courses = () => {
 
       <div className="section-tabs" aria-label="Course status">
 
-        {[['', 'All cycles', counts.all ?? 0], ['active', 'Active', counts.active ?? 0], ['finished', 'Completed', counts.finished ?? 0], ['tuition-due', 'Tuition outstanding', counts.tuitionDue ?? 0], ...(payrollAccess ? [['payroll-due', "Employee payments due", counts.payrollDue ?? 0]] : []), ['pending', 'Pending approval', counts.pending ?? 0], ...(user.role !== 'user' ? [['archived', 'Archived', counts.archived ?? 0]] : [])].map(([value, label, count]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}>{label}<span>{count}</span></MotionTab>)}
+        {[['', 'All cycles', counts.all ?? 0, Layers, 'all'], ['active', 'Active', counts.active ?? 0, PlayCircle, 'active'], ['finished', 'Completed', counts.finished ?? 0, CircleCheck, 'done'], ['tuition-due', 'Tuition outstanding', counts.tuitionDue ?? 0, Wallet, 'owed'], ...(payrollAccess ? [['payroll-due', "Employee payments due", counts.payrollDue ?? 0, HandCoins, 'pay']] : []), ['pending', 'Pending approval', counts.pending ?? 0, Hourglass, 'wait'], ...(user.role !== 'user' ? [['archived', 'Archived', counts.archived ?? 0, Archive, 'archived']] : [])].map(([value, label, count, Icon, tone]) => <MotionTab key={value} active={filterStatus === value} onClick={() => setFilterStatus(value)}><Icon size={15} className={'status-tab-icon tone-' + tone} aria-hidden="true" />{label}<span>{count}</span></MotionTab>)}
 
       </div>
 
       {filterStatus === 'tuition-due' && <p className="payment-view-note">Courses with remaining student tuition, including partial payments. Retained financial records still count; archived financial records do not.</p>}
       {filterStatus === 'payroll-due' && <p className="payment-view-note">Completed courses with unpaid employee earnings. Employee payments are settled after course completion.</p>}
-      <section className={view === 'grid' ? 'course-collection' : 'panel course-collection list-view'}>
+      <section className={shownView === 'grid' ? 'course-collection' : 'panel course-collection list-view' + (shownView === 'sheet' ? ' sheet-mode' : '')}>
 
         <div className="filter-toolbar">
 
@@ -698,13 +726,7 @@ const Courses = () => {
 
           {isAnyFilterActive && <button className="text-button" onClick={clearAllFilters}><X size={14} />Reset</button>}
 
-          <span className="result-count">{total} cycles</span><div className="view-switch" aria-label="Cycle view"><button aria-label="Card view" aria-pressed={view === 'grid'} className={view === 'grid' ? 'active' : ''} onClick={() => {
-            setView('grid');
-            localStorage.setItem('aast-course-view', 'grid');
-          }}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={view === 'list'} className={view === 'list' ? 'active' : ''} onClick={() => {
-            setView('list');
-            localStorage.setItem('aast-course-view', 'list');
-          }}><List size={18} /></button></div>
+          {shownView !== 'sheet' && <span className="result-count">{total} cycles</span>}<div className="view-switch" aria-label="Cycle view">{sheetAllowed && <button aria-label="Sheet view" title="Sheet view: each employee's students, like the Excel sheets" aria-pressed={shownView === 'sheet'} className={shownView === 'sheet' ? 'active' : ''} onClick={() => pickView('sheet')}><Table size={17} /></button>}<button aria-label="Card view" aria-pressed={shownView === 'grid'} className={shownView === 'grid' ? 'active' : ''} onClick={() => pickView('grid')}><LayoutGrid size={17} /></button><button aria-label="List view" aria-pressed={shownView === 'list'} className={shownView === 'list' ? 'active' : ''} onClick={() => pickView('list')}><List size={18} /></button></div>
 
         </div>
 
@@ -724,9 +746,12 @@ const Courses = () => {
             </div>
           </div>
         )}
-        <MotionRegion transitionKey={view + ':' + filterStatus + ':' + filterBranch}>
+        {/* Switching to or from the sheet fades like the other views. */}
+        <MotionRegion transitionKey={shownView === 'sheet' ? 'sheet' : 'cycles'}>
+        {shownView === 'sheet' ? <SheetView params={{ parentCourseId: parentId || undefined, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined, from: dateRangeStart || undefined, to: dateRangeEnd || undefined }} refreshKey={sheetRefresh} onOpen={openSheetCycle} /> : <>
+        <MotionRegion transitionKey={shownView + ':' + filterStatus + ':' + filterBranch}>
 
-        {view === 'grid' ? <div className="course-grid">{chainGroups.map(group => group.length > 1 ? <div className="level-chain" key={'chain-' + group[0].id}><div className="level-chain-label"><Link2 size={14} />{group.length} linked levels · {chainTitle(group)}</div><div className="level-chain-cards">{group.map(renderTile)}</div></div> : renderTile(group[0]))}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th className="select-column">{canSelectCycles && <input type="checkbox" aria-label="Select all" checked={selectedCycleIds.length === filteredCourses.length && filteredCourses.length > 0} onChange={toggleSelectAll} />}</th><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead>{chainGroups.map(group => <tbody key={'rows-' + group[0].id} className={group.length > 1 ? 'level-chain-rows' : undefined}>{group.length > 1 && <tr className="level-chain-head"><td colSpan={8}><Link2 size={13} />{group.length} linked levels · {chainTitle(group)}</td></tr>}{group.map(renderRow)}{group.length > 1 && <tr className="level-chain-gap" aria-hidden="true"><td colSpan={8} /></tr>}</tbody>)}</table></div>}
+        {shownView === 'grid' ? <div className="course-grid">{chainGroups.map(group => group.length > 1 ? <div className="level-chain" key={'chain-' + group[0].id}><div className="level-chain-label"><Link2 size={14} />{group.length} linked levels · {chainTitle(group)}</div><div className="level-chain-cards">{group.map(renderTile)}</div></div> : renderTile(group[0]))}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th className="select-column">{canSelectCycles && <input type="checkbox" aria-label="Select all" checked={selectedCycleIds.length === filteredCourses.length && filteredCourses.length > 0} onChange={toggleSelectAll} />}</th><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead>{chainGroups.map(group => <tbody key={'rows-' + group[0].id} className={group.length > 1 ? 'level-chain-rows' : undefined}>{group.length > 1 && <tr className="level-chain-head"><td colSpan={8}><Link2 size={13} />{group.length} linked levels · {chainTitle(group)}</td></tr>}{group.map(renderRow)}{group.length > 1 && <tr className="level-chain-gap" aria-hidden="true"><td colSpan={8} /></tr>}</tbody>)}</table></div>}
 
         {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{isAnyFilterActive ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{isAnyFilterActive ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{isAnyFilterActive && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
 
@@ -741,6 +766,9 @@ const Courses = () => {
           </div>
         </div>}
         <div className="panel-footnote">Showing {filteredCourses.length} of {total} cycles<span>Expand a cycle to manage its details</span></div>
+        </>}
+        </MotionRegion>
+        {sheetCycle && <CycleDetailsModal {...cycleProps(sheetCycle)} expanded={expandedCourse === sheetCycle.id} onExpand={() => { if (editSaving) return; setEditingCourse(null); setExpandedCourse(null); setSheetCycle(null); }} />}
 
       </section>
 

@@ -28,7 +28,8 @@ import {
   closeInstructorHours,
   reopenInstructorHours,
   approveCycle,
-  rejectCycle
+  rejectCycle,
+  getCyclesSheet
 } from '../controllers/courseController.js';
 import {
   protect,
@@ -50,6 +51,7 @@ router.delete('/:id/permanent', modOrAbove, confirmedMoneyGuard('cycle'), perman
 
 router.get('/bulk-deletion-preview', modOrAbove, bulkCyclesInBranch, bulkCycleDeletionPreview);
 router.get('/overview', getCyclesOverview);
+router.get('/sheet', managersOnly('use the sheet view'), getCyclesSheet);
 router.get('/', getCourses);
 router.get('/:id', getCourses);
 router.post('/bulk-archive', modOrAbove, bulkCyclesInBranch, bulkArchiveCourses);

@@ -174,10 +174,11 @@ try {
   assert(tuition && book);
   assert.equal(tuition.state, 'UNCHECKED');
   assert.equal(tuition.recordedBy, 'fouad-mod');
-  assert(
-    checks.items.some(i => i.recordedBy !== 'fouad-mod'),
-    'money on Fouad cycles counts regardless of who recorded it'
-  );
+  // Money the main mod or an admin recorded needs no check: only branch mods' and users' records are listed.
+  const managerNames = (
+    await prisma.user.findMany({ where: { OR: [{ role: 'admin' }, { role: 'mod', branchScope: null }] } })
+  ).map(u => u.username);
+  assert(checks.items.every(i => !managerNames.includes(i.recordedBy)), 'manager-recorded money is not listed');
   assert(checks.items.every(i => !['MIAMI', 'SMART'].includes(i.branch)));
   assert.equal((await req('/finances/checks?branch=NOWHERE')).status, 400);
   assert.equal(ok(await req('/finances/checks?branch=MIAMI&summary=1')).branch, 'MIAMI');

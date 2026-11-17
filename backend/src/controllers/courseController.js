@@ -139,6 +139,91 @@ function startRange(from, to) {
   return Object.keys(range).length ? range : null;
 }
 
+// The cycle list's filters (section or umbrella, search, branch, status, start range), shared by the list and the sheet.
+async function cycleFilters(user, q) {
+  const manager = isManager(user);
+  const visibility = {
+    ...(manager ? {} : { archivedAt: null, parentCourse: { archivedAt: null } }),
+    ...cycleBranchWhere(user)
+  };
+  const keys = ['parentCourseId', 'section', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
+  if (keys.some(key => q[key] !== undefined && typeof q[key] !== 'string'))
+    throw Object.assign(new Error('Invalid filters.'), { status: 400 });
+  const parentCourseId = q.parentCourseId || null;
+  // "group" or "private": every cycle of that section of Courses.
+  if (q.section && !['group', 'private'].includes(q.section))
+    throw Object.assign(new Error('Invalid section.'), { status: 400 });
+  const status = q.status || '';
+  if (!CYCLE_STATUSES.includes(status)) throw Object.assign(new Error('Invalid status filter.'), { status: 400 });
+  if (!manager && status === 'archived')
+    throw Object.assign(new Error('Only managers can view archived cycles.'), { status: 403 });
+  const payroll = canSeePayroll(user);
+  if (!payroll && status === 'payroll-due')
+    throw Object.assign(new Error('Employee payments are not available to you.'), { status: 403 });
+  const page = Number(q.page ?? 1),
+    pageSize = Number(q.pageSize ?? 24);
+  if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
+    throw Object.assign(new Error('Invalid page.'), { status: 400 });
+  const search = (q.search || '').trim().slice(0, 160);
+  const phoneSearch = /^[+\d\s()-]{3,}$/.test(search) ? search.replace(/[^\d+]/g, '') : '';
+  const range = startRange(q.from, q.to);
+  const scope = {
+    ...visibility,
+    ...(parentCourseId ? { parentCourseId } : {}),
+    ...(q.section ? { parentCourse: { ...(visibility.parentCourse || {}), isPrivate: q.section === 'private' } } : {})
+  };
+  const tuitionIds = await tuitionDueIds(parentCourseId);
+  const statusWhere = {
+    '': { archivedAt: null },
+    active: { archivedAt: null, isFinished: false },
+    finished: { archivedAt: null, isFinished: true },
+    'tuition-due': { archivedAt: null, id: { in: tuitionIds } },
+    'payroll-due': payrollDueWhere,
+    // Waiting for the main mod: employee requests, or a new cycle a branch mod created.
+    pending: {
+      archivedAt: null,
+      OR: [{ pendingAssignments: { some: { status: 'PENDING' } } }, { approvalStatus: 'PENDING' }]
+    },
+    unassigned: { archivedAt: null, isFinished: false, instructors: { none: {} } },
+    archived: { archivedAt: { not: null } }
+  };
+  const filters = [
+    scope,
+    statusWhere[status],
+    ...(search
+      ? [
+          {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { branch: { contains: search, mode: 'insensitive' } },
+              { instructors: { some: { instructor: { name: { contains: search, mode: 'insensitive' } } } } },
+              // Students by name or phone number.
+              {
+                enrollments: {
+                  some: {
+                    deletedAt: null,
+                    student: {
+                      deletedAt: null,
+                      OR: [
+                        { name: { contains: search, mode: 'insensitive' } },
+                        { englishName: { contains: search, mode: 'insensitive' } },
+                        ...(phoneSearch ? [{ mobile: { contains: phoneSearch } }] : [])
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      : []),
+    ...(q.branch ? [{ branch: q.branch }] : []),
+    ...(range ? [{ startDate: range }] : [])
+  ];
+  const where = { AND: filters };
+  return { where, scope, statusWhere, manager, payroll, page, pageSize, parentCourseId };
+}
+
 // One cycle by id, or one page of cycles with the filters and tab counts worked out in the database.
 export const getCourses = async (req, res) => {
   try {
@@ -157,81 +242,7 @@ export const getCourses = async (req, res) => {
         : res.status(404).json({ error: 'Cycle not found.' });
     }
     const q = req.query;
-    const keys = ['parentCourseId', 'section', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
-    if (keys.some(key => q[key] !== undefined && typeof q[key] !== 'string'))
-      return res.status(400).json({ error: 'Invalid filters.' });
-    const parentCourseId = q.parentCourseId || null;
-    // "group" or "private": every cycle of that section of Courses.
-    if (q.section && !['group', 'private'].includes(q.section))
-      return res.status(400).json({ error: 'Invalid section.' });
-    const status = q.status || '';
-    if (!CYCLE_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status filter.' });
-    if (!manager && status === 'archived')
-      return res.status(403).json({ error: 'Only managers can view archived cycles.' });
-    const payroll = canSeePayroll(req.user);
-    if (!payroll && status === 'payroll-due')
-      return res.status(403).json({ error: 'Employee payments are not available to you.' });
-    const page = Number(q.page ?? 1),
-      pageSize = Number(q.pageSize ?? 24);
-    if (!Number.isInteger(page) || page < 1 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100)
-      return res.status(400).json({ error: 'Invalid page.' });
-    const search = (q.search || '').trim().slice(0, 160);
-    const phoneSearch = /^[+\d\s()-]{3,}$/.test(search) ? search.replace(/[^\d+]/g, '') : '';
-    const range = startRange(q.from, q.to);
-    const scope = {
-      ...visibility,
-      ...(parentCourseId ? { parentCourseId } : {}),
-      ...(q.section ? { parentCourse: { ...(visibility.parentCourse || {}), isPrivate: q.section === 'private' } } : {})
-    };
-    const tuitionIds = await tuitionDueIds(parentCourseId);
-    const statusWhere = {
-      '': { archivedAt: null },
-      active: { archivedAt: null, isFinished: false },
-      finished: { archivedAt: null, isFinished: true },
-      'tuition-due': { archivedAt: null, id: { in: tuitionIds } },
-      'payroll-due': payrollDueWhere,
-      // Waiting for the main mod: employee requests, or a new cycle a branch mod created.
-      pending: {
-        archivedAt: null,
-        OR: [{ pendingAssignments: { some: { status: 'PENDING' } } }, { approvalStatus: 'PENDING' }]
-      },
-      unassigned: { archivedAt: null, isFinished: false, instructors: { none: {} } },
-      archived: { archivedAt: { not: null } }
-    };
-    const filters = [
-      scope,
-      statusWhere[status],
-      ...(search
-        ? [
-            {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { branch: { contains: search, mode: 'insensitive' } },
-                { instructors: { some: { instructor: { name: { contains: search, mode: 'insensitive' } } } } },
-                // Students by name or phone number.
-                {
-                  enrollments: {
-                    some: {
-                      deletedAt: null,
-                      student: {
-                        deletedAt: null,
-                        OR: [
-                          { name: { contains: search, mode: 'insensitive' } },
-                          { englishName: { contains: search, mode: 'insensitive' } },
-                          ...(phoneSearch ? [{ mobile: { contains: phoneSearch } }] : [])
-                        ]
-                      }
-                    }
-                  }
-                }
-              ]
-            }
-          ]
-        : []),
-      ...(q.branch ? [{ branch: q.branch }] : []),
-      ...(range ? [{ startDate: range }] : [])
-    ];
-    const where = { AND: filters };
+    const { where, scope, statusWhere, payroll, page, pageSize, parentCourseId } = await cycleFilters(req.user, q);
     // "Select range" picks every matching cycle, not only the page on screen.
     if (q.idsOnly === '1') {
       const ids = await prisma.cycle.findMany({ where, select: { id: true }, take: 1000 });
@@ -1425,5 +1436,168 @@ export const getCyclesOverview = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// The Private sheet (admins and the main mod): like their old per-employee Excel sheets, one row per student, for
+// one employee at a time, with the same filters as the cycle list. A cycle with two employees (hours closed early,
+// replacement) appears on both sheets with each one's hours. Cycles with no employee are on the "unassigned" sheet.
+const SHEET_LIMIT = 3000;
+const UNASSIGNED = 'unassigned';
+const mostCommon = values => {
+  const counts = new Map();
+  for (const v of values) if (v != null) counts.set(v, (counts.get(v) || 0) + 1);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? null;
+};
+export const getCyclesSheet = async (req, res) => {
+  try {
+    const q = { ...req.query, page: undefined, pageSize: undefined };
+    if (q.parentCourseId) {
+      const umbrella = await prisma.course.findUnique({ where: { id: String(q.parentCourseId) }, select: { isPrivate: true } });
+      if (!umbrella?.isPrivate) return res.status(400).json({ error: 'The sheet view is for private cycles only.' });
+    } else q.section = 'private';
+    const { where } = await cycleFilters(req.user, q);
+    const cycles = await prisma.cycle.findMany({
+      where,
+      take: SHEET_LIMIT,
+      orderBy: [{ startDate: 'desc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        branch: true,
+        cycleNumber: true,
+        startDate: true,
+        endDate: true,
+        totalHours: true,
+        courseFee: true,
+        isFinished: true,
+        archivedAt: true,
+        approvalStatus: true,
+        parentCourse: { select: { name: true, bookPrice: true } },
+        instructors: {
+          select: { hourlyRate: true, hoursTaught: true, closedAt: true, instructor: { select: { id: true, name: true } } }
+        },
+        payrollEarnings: { select: { instructorId: true, amountMinor: true, batch: { select: { status: true } } } },
+        enrollments: {
+          where: { deletedAt: null, student: { deletedAt: null } },
+          orderBy: { enrolledAt: 'asc' },
+          select: {
+            id: true,
+            amountPaid: true,
+            customFee: true,
+            student: { select: { name: true, englishName: true, mobile: true } },
+            bookPayments: activeBookInclude
+          }
+        }
+      }
+    });
+    const sheets = new Map();
+    const sheetOf = (id, name) => {
+      if (!sheets.has(id)) sheets.set(id, { id, name, rates: [], students: 0, owed: 0, cycles: new Set(), salaryDue: new Set(), rows: [] });
+      return sheets.get(id);
+    };
+    for (const cycle of cycles) {
+      const teams = cycle.instructors.length
+        ? cycle.instructors.map(ci => ({ sheet: sheetOf(ci.instructor.id, ci.instructor.name), ci }))
+        : [{ sheet: sheetOf(UNASSIGNED, 'No employee yet'), ci: null }];
+      const course = cycle.cycleNumber == null ? cycle.parentCourse.name : `${cycle.parentCourse.name} ${cycle.cycleNumber}`;
+      for (const { sheet, ci } of teams) {
+        sheet.cycles.add(cycle.id);
+        if (ci?.hourlyRate != null) sheet.rates.push(Number(ci.hourlyRate));
+        // The employee's salary for this cycle: running (null), hours to confirm, unpaid, processing or paid.
+        const earning = ci && cycle.payrollEarnings.find(p => p.instructorId === ci.instructor.id);
+        const pay = !ci
+          ? null
+          : earning
+            ? earning.amountMinor <= 0n
+              ? 'NONE'
+              : earning.batch?.status === 'PAID'
+                ? 'PAID'
+                : earning.batch?.status === 'PROCESSING'
+                  ? 'PROCESSING'
+                  : 'UNPAID'
+            : cycle.isFinished
+              ? 'NO_HOURS'
+              : null;
+        if (['UNPAID', 'PROCESSING', 'NO_HOURS'].includes(pay)) sheet.salaryDue.add(cycle.id);
+        cycle.enrollments.forEach((e, index) => {
+          const fee = e.customFee ?? cycle.courseFee ?? 0,
+            due = Math.max(0, fee - e.amountPaid);
+          sheet.students++;
+          sheet.owed += due;
+          sheet.rows.push({
+            enrollmentId: e.id,
+            cycleId: cycle.id,
+            cycleName: cycle.name,
+            course,
+            branch: cycle.branch,
+            startDate: cycle.startDate,
+            endDate: cycle.endDate,
+            hours: ci?.hoursTaught ?? cycle.totalHours,
+            hoursClosed: Boolean(ci?.closedAt),
+            rate: ci?.hourlyRate ?? null,
+            student: e.student.name,
+            mobile: e.student.mobile,
+            fee,
+            paid: e.amountPaid,
+            due,
+            status: fee === 0 ? 'EXEMPT' : e.amountPaid >= fee ? 'PAID' : e.amountPaid > 0 ? 'PARTIAL' : 'UNPAID',
+            books: cycle.parentCourse.bookPrice > 0 ? (e.bookPayments?.[0]?.status ?? 'UNPAID') : null,
+            shared: cycle.enrollments.length > 1 ? { index, size: cycle.enrollments.length } : null,
+            isFinished: cycle.isFinished,
+            pay,
+            archived: Boolean(cycle.archivedAt),
+            approvalStatus: cycle.approvalStatus
+          });
+        });
+        // A cycle with no students yet still shows, as an empty row.
+        if (!cycle.enrollments.length)
+          sheet.rows.push({
+            enrollmentId: null,
+            cycleId: cycle.id,
+            cycleName: cycle.name,
+            course,
+            branch: cycle.branch,
+            startDate: cycle.startDate,
+            endDate: cycle.endDate,
+            hours: ci?.hoursTaught ?? cycle.totalHours,
+            hoursClosed: Boolean(ci?.closedAt),
+            rate: ci?.hourlyRate ?? null,
+            student: null,
+            isFinished: cycle.isFinished,
+            pay,
+            archived: Boolean(cycle.archivedAt),
+            approvalStatus: cycle.approvalStatus
+          });
+      }
+    }
+    const round = n => Math.round(n * 100) / 100;
+    const employees = [...sheets.values()]
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        rate: mostCommon(s.rates),
+        students: s.students,
+        cycles: s.cycles.size,
+        owed: round(s.owed),
+        salaryDue: s.salaryDue.size
+      }))
+      // Busiest first: the most cycles, then the most students; cycles with no employee last.
+      .sort(
+        (a, b) =>
+          (a.id === UNASSIGNED) - (b.id === UNASSIGNED) ||
+          b.cycles - a.cycles ||
+          b.students - a.students ||
+          a.name.localeCompare(b.name, 'ar')
+      );
+    const chosen = sheets.get(String(req.query.employeeId || '')) || sheets.get(employees[0]?.id);
+    res.json({
+      employees,
+      employee: chosen ? employees.find(e => e.id === chosen.id) : null,
+      rows: chosen?.rows || [],
+      truncated: cycles.length === SHEET_LIMIT
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
   }
 };

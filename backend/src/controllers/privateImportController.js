@@ -2,6 +2,7 @@ import { createHmac, createHash } from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
 import { parsePrivateWorkbook, phoneNumbers, privateDate } from '../utils/privateWorkbook.js';
+import { nameKey, sameName, sameStudent, sharesPhone } from '../utils/studentIdentity.js';
 import { importError } from '../utils/importWorkbook.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
@@ -53,8 +54,11 @@ const snapshot = matches =>
   matches
     .map(s => ({ id: s.id, updatedAt: s.updatedAt, archived: Boolean(s.deletedAt) }))
     .sort((a, b) => a.id.localeCompare(b.id));
-const match = (row, students) =>
-  students.filter(s => phoneNumbers(s.mobile).some(n => phoneNumbers(row.mobile).includes(n)));
+// An existing student is reused only when both the name and the phone match (siblings share phones).
+const match = (row, students) => students.filter(s => sameStudent(s, row));
+// Students who share the phone under a different name (e.g. a sibling): shown, but never reused.
+const phoneOnly = (row, students) =>
+  students.filter(s => !s.deletedAt && sharesPhone(s, row.mobile) && !sameName(s, row.name)).map(s => s.name);
 const studentFields = {
   id: true,
   name: true,
@@ -233,6 +237,7 @@ async function preview(req, res, claim) {
     ...row,
     groupId: groupOf.get(row.id),
     matches: match(row, students),
+    sharedPhone: phoneOnly(row, students),
     errors: studentErrors(row)
   }));
   const { exp, iat, ...payload } = claim;
@@ -425,10 +430,11 @@ export const commitPrivateImport = atomic(
             students.push(student);
             created++;
           }
-          const phones = phoneNumbers(row.mobile),
+          // One phone may belong to several students (siblings); the same phone and name is one student.
+          const phones = phoneNumbers(row.mobile).map(p => p + '|' + nameKey(row.name)),
             previous = phones.map(p => selectedByPhone.get(p)).filter(Boolean);
           if (previous.some(id => id !== student.id))
-            throw importError(`The same phone was assigned to different students in this import. Review ${row.name}.`);
+            throw importError(`The same name and phone were assigned to different students in this import. Review ${row.name}.`);
           if (enrolled.some(e => e.student.id === student.id))
             throw importError(`${row.name} appears twice in the same group. Review the workbook.`);
           phones.forEach(p => selectedByPhone.set(p, student.id));

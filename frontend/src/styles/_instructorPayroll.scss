@@ -69,3 +69,19 @@
 }
 .payroll-run-chevron { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); color: #8a97ad; transition: transform .15s ease; }
 .payroll-run.is-open .payroll-run-chevron { transform: translateY(-50%) rotate(180deg); }
+
+// Salary rows: cycle name, then one quiet line with a clear branch chip, start date and (private) students.
+.payroll-cycle-cell { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.payroll-cycle-title { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 2px; strong { color: #1d2c48; font-size: 13px; font-weight: 800; } }
+.payroll-cycle-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; color: #5d6f8c; font-size: 12px;
+  > span { display: inline-flex; align-items: center; gap: 5px; }
+  svg { color: #8a98ae; flex-shrink: 0; }
+}
+.payroll-branch-chip { padding: 3px 9px 3px 7px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--branch-color) 35%, #fff); background: color-mix(in srgb, var(--branch-color) 12%, #fff); color: color-mix(in srgb, var(--branch-color) 75%, #000); font-size: 11px; font-weight: 800; letter-spacing: .03em;
+  i { width: 7px; height: 7px; border-radius: 50%; background: var(--branch-color); }
+}
+.payroll-hours { display: inline-flex; align-items: baseline; gap: 3px; padding: 3px 9px; border-radius: 7px; background: #eef2ff; color: #3949a3; font-size: 12px; white-space: nowrap;
+  b { font-size: 13px; font-weight: 800; color: #24357f; }
+  i { font-style: normal; color: #8a97c9; }
+}
+.payroll-earnings-table td.payroll-salary { font-size: 14px; font-weight: 800; color: #1d2c48; white-space: nowrap; small { font-size: 11px; font-weight: 600; color: #7b8aa3; } }

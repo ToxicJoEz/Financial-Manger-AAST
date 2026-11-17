@@ -1,0 +1,89 @@
+// Private sheet view: dense and spreadsheet-like, but easy to scan. Colour carries meaning: green is settled,
+// red is tuition owed, amber is a completed cycle whose employee still needs paying, blue is still running.
+.sheet-view { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 420px; border-top: 1px solid #e6ebf3; transition: opacity .25s ease;
+  &.is-loading { opacity: .72; }
+}
+// The cross-fade wrapper sits in the grid: let it shrink like the sheet inside it.
+.sheet-view > .calm-region { min-width: 0; display: flex; flex-direction: column; }
+.sheet-people { border-right: 1px solid #e6ebf3; background: #f8fafd; padding: 10px 8px; display: flex; flex-direction: column; gap: 8px; min-width: 0;
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 70vh; }
+  button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: #4f6282; font-size: 13px; text-align: start; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+    &:hover { background: #fff; color: #22324f; }
+    &.active { background: #fff; border-color: #cdd6ea; color: #1d2c48; font-weight: 700; box-shadow: inset 3px 0 0 #7c3aed; }
+    &.is-unassigned { color: #a35c00; font-style: italic; }
+  }
+}
+.sheet-find { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 9px; border: 1px solid #dfe5ef; border-radius: 8px; background: #fff; color: #8a98ae;
+  input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 12px; color: #2f4363; }
+}
+.sheet-person-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-person-meta { display: inline-flex; align-items: center; gap: 6px; color: #7b8aa3; font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 600; }
+.sheet-owed-dot { width: 7px; height: 7px; border-radius: 50%; background: #dc2626; }
+.sheet-salary-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #fde8c4; color: #8a4b00; font-style: normal; font-size: 10px; font-weight: 800; }
+.sheet-main { min-width: 0; display: flex; flex-direction: column; }
+.sheet-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 16px; border-bottom: 1px solid #e6ebf3; color: #5d6f8c; font-size: 12px;
+  h3 { margin: 0; font-size: 16px; font-weight: 800; color: #1d2c48; }
+}
+.sheet-head-rate { padding: 3px 9px; border-radius: 7px; background: #eef2ff; color: #3949a3; b { font-size: 13px; font-weight: 800; } }
+.sheet-head-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: #f3effe; color: #7c3aed; }
+
+// Status pills: icon and word together, never colour alone.
+.sheet-pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 700; line-height: 1.35; white-space: nowrap;
+  &.tone-paid, &.tone-settled { background: #e3f6ea; border-color: #bfe6cd; color: #12703f; }
+  &.tone-unpaid { background: #fde8e8; border-color: #f6c5c5; color: #b42318; }
+  &.tone-partial { background: #fff1d6; border-color: #f5d79a; color: #8a5300; }
+  &.tone-free, &.tone-muted { background: #f1f4f9; border-color: #e1e7f0; color: #6b7a92; font-weight: 600; }
+  &.tone-running { background: #e8efff; border-color: #c9d7fb; color: #2f54c9; }
+  &.tone-due { background: #ffedd2; border-color: #f4c27a; color: #8a4300; }
+  &.tone-processing { background: #f2ecff; border-color: #d9cbfb; color: #5b34b8; }
+}
+
+.sheet-scroll { overflow-x: auto; }
+.sheet-table { width: 100%; border-collapse: collapse; font-size: 13px; color: #24344f;
+  th, td { padding: 8px 10px; text-align: start; white-space: nowrap; }
+  thead th { position: sticky; top: 0; z-index: 1; background: #fff; border-bottom: 1px solid #d3dbe8; color: #6b7b95; font-size: 11px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+  tbody tr:not(.sheet-month) { cursor: pointer; transition: background-color .15s ease;
+    td { border-bottom: 1px solid #edf0f5; transition: background-color .15s ease; }
+    &:hover td, &:focus-visible td { background: #eef2fd; }
+    &:focus-visible { outline: 2px solid #8da2f2; outline-offset: -2px; }
+  }
+  // A completed cycle whose employee still needs paying stands out on its own: warm tint and an amber edge.
+  tbody tr.cycle-due td { background: #fff8ec; }
+  tbody tr.cycle-due:hover td { background: #fff0d6; }
+  tbody tr.cycle-due td:first-child { box-shadow: inset 4px 0 0 #f0a23a; }
+  .sheet-month th { padding: 16px 10px 7px; background: #fff; color: #3d55d6; font-size: 12px; font-weight: 800; letter-spacing: .01em; text-transform: none; border-bottom: 1px solid #dde4f0; }
+  .num { text-align: end; font-variant-numeric: tabular-nums; }
+  .muted { color: #95a2b7; }
+  .c-date { width: 56px; color: #6b7b95; font-variant-numeric: tabular-nums; }
+  .c-student { max-width: 260px; overflow: hidden; text-overflow: ellipsis; font-weight: 600; color: #1d2c48; }
+  .c-phone { width: 120px; color: #6b7b95; font-variant-numeric: tabular-nums; line-height: 1.35; span { display: block; } }
+  .c-course { width: 96px; font-weight: 800; color: #1d2c48; }
+  .c-hours { width: 120px; }
+  .c-money { width: 110px; font-weight: 600; }
+  .c-status { width: 116px; }
+  .c-cycle { width: 190px; }
+  .c-books { width: 54px; text-align: center; color: #5d6f8c; font-weight: 700; }
+  // Students sharing one private cycle: a bracket on the left, no lines between them.
+  tr.is-shared td:first-child { box-shadow: inset 3px 0 0 #c9b6f5; }
+  tr.is-shared.cycle-due td:first-child { box-shadow: inset 4px 0 0 #f0a23a; }
+  tr.is-shared:not(.shared-last) td { border-bottom-color: transparent; }
+  tr.is-archived td { color: #a3afc2; text-decoration: line-through; text-decoration-color: #cfd6e2; }
+  tfoot td { position: sticky; bottom: 0; background: #f3f6fb; border-top: 1px solid #d3dbe8; font-weight: 800; font-size: 12px; color: #1d2c48; }
+  tfoot .unpaid { color: #b42318; }
+  tfoot .paid { color: #12703f; }
+}
+.sheet-hours { display: inline-flex; align-items: baseline; gap: 3px; padding: 2px 8px; border-radius: 6px; background: #eef2ff; color: #3949a3; font-size: 12px;
+  b { font-size: 13px; font-weight: 800; color: #24357f; }
+  i { font-style: normal; color: #8a97c9; }
+  small { margin-inline-start: 4px; color: #a35c00; font-weight: 700; }
+}
+.sheet-fee { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  .sheet-pill { font-variant-numeric: tabular-nums; }
+  small { color: #8a5300; font-size: 11px; font-weight: 700; }
+}
+.sheet-flag { margin-inline-start: 8px; padding: 1px 6px; border: 1px dashed #d99a2b; border-radius: 5px; background: var(--warning-soft); color: var(--warning); font-size: 10px; font-weight: 700; }
+.sheet-note { margin: 0; padding: 8px 16px; color: #8a98ae; font-size: 12px; }
+@media (max-width: 760px) {
+  .sheet-view { grid-template-columns: 1fr; }
+  .sheet-people { border-right: 0; border-bottom: 1px solid #e6ebf3; ul { flex-direction: row; overflow-x: auto; max-height: none; } button { white-space: nowrap; } }
+}

@@ -13,6 +13,7 @@ import prisma, { atomic } from '../db/prisma.js';
 import { isManager } from '../utils/courseView.js';
 import { canSeePayroll, branchScopeOf } from '../utils/access.js';
 import { parseStudentsWorkbook, importError, normalizedName } from '../utils/importWorkbook.js';
+import { sameName as namesMatch, sharesPhone } from '../utils/studentIdentity.js';
 import { profileFields } from '../utils/studentProfile.js';
 import { appendPayment } from '../utils/paymentLedger.js';
 import { moneyMinor, numberValue } from '../utils/numbers.js';
@@ -43,8 +44,9 @@ async function inspect(parsed, user) {
     const candidates = students.filter(
       s =>
         !s.deletedAt &&
-        normalizedName(s.name) === normalizedName(row.name) &&
-        ((row.mobile && s.mobile === row.mobile) || (row.dateOfBirth && dateOnly(s.dateOfBirth) === row.dateOfBirth))
+        // Same name AND the same phone (or date of birth); a shared phone alone is a sibling, not a match.
+        namesMatch(s, row.name) &&
+        ((row.mobile && sharesPhone(s, row.mobile)) || (row.dateOfBirth && dateOnly(s.dateOfBirth) === row.dateOfBirth))
     );
     const existing = row.registrationNumber
       ? students.find(s => s.registrationNumber === row.registrationNumber)

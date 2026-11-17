@@ -4,7 +4,8 @@ import { logAction } from '../utils/logger.js';
 import { CHECKED_BRANCHES } from '../utils/access.js';
 
 // Money recorded for a checked branch (tuition ledger entries and book payments on that branch's cycles)
-// stays "Unchecked" until an admin or the main mod confirms it. A check stores a fingerprint of the record,
+// stays "Unchecked" until an admin or the main mod confirms it. Money an admin or the main mod recorded themselves
+// needs no check and is left out of the list and its counts. A check stores a fingerprint of the record,
 // so a later change shows as "Changed after check" instead of silently staying checked.
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
@@ -69,6 +70,14 @@ async function moneyRecords(branch, range) {
     }),
     prisma.moneyCheck.findMany({ where: { branch } })
   ]);
+  const managers = new Set(
+    (
+      await prisma.user.findMany({
+        where: { OR: [{ role: 'admin' }, { role: 'mod', branchScope: null }] },
+        select: { username: true }
+      })
+    ).map(u => u.username)
+  );
   const checkOf = new Map(checks.map(c => [`${c.kind}:${c.recordId}`, c]));
   const cycleName = new Map(cycles.map(c => [c.id, c.name]));
   const withState = (item, fingerprint) => {
@@ -124,7 +133,9 @@ async function moneyRecords(branch, range) {
         bookFingerprint(b)
       )
     )
-  ].sort((a, b) => new Date(b.date) - new Date(a.date) || a.id.localeCompare(b.id));
+  ]
+    .filter(item => !managers.has(item.recordedBy))
+    .sort((a, b) => new Date(b.date) - new Date(a.date) || a.id.localeCompare(b.id));
   return { items, payments, books };
 }
 
