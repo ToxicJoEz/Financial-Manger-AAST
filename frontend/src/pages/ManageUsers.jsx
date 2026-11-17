@@ -6,7 +6,7 @@ import BranchManager from '../components/BranchManager';
 import { useState, useEffect, useContext } from 'react';
 import axios from 'axios';
 import { AuthContext } from '../context/AuthContext';
-import { UserPlus, ListOrdered, ShieldCheck, Pencil, Building2, DatabaseBackup } from 'lucide-react';
+import { UserPlus, ListOrdered, ShieldCheck, Pencil, Building2, DatabaseBackup, Trash2, AlertTriangle } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
@@ -54,6 +54,21 @@ const ManageUsers = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const isAdmin = currentUser?.role === 'admin';
+  // Permanent deletion (admins only): the username must be typed to confirm.
+  const [deleting, setDeleting] = useState(null), [deleteBusy, setDeleteBusy] = useState(false);
+  async function deleteAccount() {
+    setDeleteBusy(true);
+    try {
+      const { data } = await axios.delete('/users/' + deleting.user.id, { data: { confirm: deleting.typed } });
+      toast.success(data.message);
+      setDeleting(null);
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'The account could not be deleted.');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
   // Admins and the main mod choose which branches a user can view.
   const mainManager = canSeePayroll(currentUser);
   // Branches and Backup & restore open in their own window (admins and the main mod).
@@ -190,6 +205,7 @@ const ManageUsers = () => {
                 <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [] } })}><Pencil size={13} />Edit access</button>
 
                 <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
+                {isAdmin && u.id !== currentUser?.id && <button className="btn-sm btn-outline team-delete" title="Permanently delete this account" aria-label={'Permanently delete ' + u.username} onClick={() => setDeleting({ user: u, typed: '' })}><Trash2 size={13} />Delete</button>}
               </> : <span className="text-muted team-managed">Managed by an admin</span>}
             </div>}</td>
           </tr>)}
@@ -219,6 +235,14 @@ const ManageUsers = () => {
       </div>
     </Dialog>}</AnimatePresence>
 
+    <AnimatePresence>{deleting && <Dialog title="Delete account" onClose={() => { if (!deleteBusy) setDeleting(null); }}>
+      <div className="modal-content card max-w-sm w-full relative team-delete-dialog">
+        <h3 className="team-confirm-title"><AlertTriangle size={18} />Permanently delete {deleting.user.username}?</h3>
+        <p className="text-muted">The account is removed for good and can't be restored. Their notifications and pending employee requests go with it. Cycles, students and payments they recorded stay, and the activity log keeps what they did.</p>
+        <label className="team-delete-confirm">Type <strong>{deleting.user.username}</strong> to confirm<input className="input-field" autoFocus value={deleting.typed} onChange={e => setDeleting(d => ({ ...d, typed: e.target.value }))} /></label>
+        <div className="flex justify-end gap-3"><button onClick={() => setDeleting(null)} disabled={deleteBusy} className="btn-secondary">Cancel</button><button onClick={deleteAccount} disabled={deleteBusy || deleting.typed !== deleting.user.username} className="btn-primary btn-danger-solid">{deleteBusy ? 'Deleting…' : 'Delete permanently'}</button></div>
+      </div>
+    </Dialog>}</AnimatePresence>
     <AnimatePresence>{confirmModal && <Dialog title="Confirm account change" onClose={() => setConfirmModal(null)}>
       <div className="modal-content card max-w-sm w-full relative">
         <h3 className="team-confirm-title">{confirmModal.title}</h3>

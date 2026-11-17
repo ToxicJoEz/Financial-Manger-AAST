@@ -271,3 +271,8 @@ tr.just-added-label-row > td { padding: 10px 14px 6px; background: #fff; color: 
 // Umbrella cards: cycles waiting for approval, or just imported.
 .catalog-new-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
 @media (prefers-reduced-motion: reduce) { .course-tile.is-just-added, tr.is-just-added > td { animation: none; } }
+
+// Team & access: permanent account deletion (admins only).
+.team-delete { color: #b42318 !important; border-color: #f3c0c0 !important; svg { margin-inline-end: 4px; } }
+.team-delete-dialog .team-confirm-title { display: flex; align-items: center; gap: 8px; color: #b42318; }
+.team-delete-confirm { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 16px; font-size: 13px; color: #4f6282; strong { color: #1d2c48; } }

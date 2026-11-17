@@ -43,6 +43,7 @@ export function safeAudit(value, depth = 0) {
 }
 // [method, path after /api/, action, how it reads in the log]. ':id' stands for any id.
 const ROUTE_ACTIONS = [
+  ['DELETE', 'users/:id', 'DELETE_USER', 'Permanently delete account'],
   ['POST', 'auth/login', 'LOGIN_LOCAL', 'Password sign-in'],
   ['POST', 'auth/sso', 'LOGIN_SSO', 'AAST SSO sign-in'],
   ['POST', 'auth/logout', 'LOGOUT', 'Signed out'],

@@ -398,3 +398,27 @@ export const updateUserBranchScope = atomic(async (req, res, next) => {
     next(error);
   }
 });
+
+// Permanently deletes an account: admins only (not the main mod). The root admin, your own account and the last
+// admin cannot be deleted. The person must type the username to confirm. Their notifications and their own
+// employee requests go with the account; cycles, students and money they recorded stay, and the activity log
+// keeps everything they did (by username).
+export const deleteUserPermanently = atomic(async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (target.username === 'main-admin')
+    return res.status(400).json({ error: 'The permanent root administrator (main-admin) cannot be deleted.' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account.' });
+  if (req.body?.confirm !== target.username)
+    return res.status(400).json({ error: `Type the username (${target.username}) to confirm the deletion.` });
+  if (target.role === 'admin' && (await prisma.user.count({ where: { role: 'admin', isBanned: false, id: { not: target.id } } })) === 0)
+    return res.status(409).json({ error: 'This is the last active admin, so it cannot be deleted.' });
+  const pending = await prisma.pendingAssignment.count({ where: { submittedById: target.id, status: 'PENDING' } });
+  await prisma.user.delete({ where: { id: target.id } });
+  await logAction(
+    'DELETE_USER',
+    `Permanently deleted the ${target.role} account ${target.username}${target.branchScope ? ` (${target.branchScope})` : ''}${pending ? `; ${pending} pending employee request${pending === 1 ? '' : 's'} went with it` : ''}.`,
+    req.user.username
+  );
+  res.json({ message: `${target.username} was permanently deleted.` });
+});

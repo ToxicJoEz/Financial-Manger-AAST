@@ -35,6 +35,8 @@ export async function announceCycleDecision(cycle, user, approved, reason) {
     data: { isResolved: true, resolvedBy: user.username, isRead: true }
   });
   if (!cycle.createdById || cycle.createdById === user.id) return;
+  // The branch mod who created it may have been deleted since.
+  if (!(await prisma.user.findUnique({ where: { id: cycle.createdById }, select: { id: true } }))) return;
   await prisma.notification.create({
     data: {
       userId: cycle.createdById,

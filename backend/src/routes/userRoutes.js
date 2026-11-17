@@ -7,7 +7,8 @@ import {
   unlockUserAccount,
   updateUserPermissions,
   updateUserBranchScope,
-  updateUserBranches
+  updateUserBranches,
+  deleteUserPermanently
 } from '../controllers/userController.js';
 import { protect, modOrAbove, adminOnly, mainManager } from '../middlewares/authMiddleware.js';
 
@@ -24,5 +25,7 @@ router.put('/:id/permissions', protect, modOrAbove, updateUserPermissions);
 router.put('/:id/branch-scope', protect, mainManager, updateUserBranchScope);
 router.put('/:id/branches', protect, mainManager, updateUserBranches);
 router.post('/:id/unlock', protect, modOrAbove, unlockUserAccount);
+// Permanent deletion: admins only, not even the main mod.
+router.delete('/:id', protect, adminOnly, deleteUserPermanently);
 
 export default router;

@@ -190,6 +190,21 @@ try {
   // Money the main mod recorded needs no check.
   const miamiChecks = ok(await req('/finances/checks?branch=MIAMI', 'GET', undefined, main)).items;
   assert(!miamiChecks.some(i => i.cycleId === privateCycle.id), 'main mod money is not in Checks');
+  // 6. Permanent account deletion: admins only, typed confirmation, never the root admin or yourself.
+  const admin = await login('main-admin');
+  const orphan = ok(
+    await req('/cycles', 'POST', { parentCourseId: 'course-ielts', branch: 'MIAMI', startDate: '2026-12-10' }, miami)
+  );
+  const modAccount = await prisma.user.findUnique({ where: { username: 'miami-mod' } });
+  assert.equal((await req(`/users/${modAccount.id}`, 'DELETE', { confirm: 'miami-mod' }, main)).status, 403, 'not the main mod');
+  assert.equal((await req(`/users/${modAccount.id}`, 'DELETE', { confirm: 'wrong' }, admin)).status, 400, 'typed name must match');
+  const root = await prisma.user.findUnique({ where: { username: 'main-admin' } });
+  assert.equal((await req(`/users/${root.id}`, 'DELETE', { confirm: 'main-admin' }, admin)).status, 400, 'root admin stays');
+  ok(await req(`/users/${modAccount.id}`, 'DELETE', { confirm: 'miami-mod' }, admin));
+  assert.equal(await prisma.user.findUnique({ where: { id: modAccount.id } }), null);
+  assert(await prisma.cycle.findUnique({ where: { id: orphan.id } }), 'their cycles stay');
+  // A cycle whose creator was deleted can still be approved.
+  ok(await req(`/cycles/${orphan.id}/approve`, 'POST', {}, main));
   console.log('PASS: numberless exam cycles; branch mod cycles pending until approved (details lock) or rejected; students lock on money check');
 } finally {
   await new Promise(resolve => server.close(resolve));
