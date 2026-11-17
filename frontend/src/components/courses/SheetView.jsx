@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { Search, Users, BookOpen, CircleCheck, CircleAlert, Clock3, PlayCircle, Hourglass, Wallet } from 'lucide-react';
+import { Search, Users, BookOpen, CircleCheck, CircleAlert, Clock3, PlayCircle, Hourglass, Wallet, ChevronRight, ChevronDown } from 'lucide-react';
 import '../../styles/_sheet.scss';
 import { CalmRegion } from '../WorkspaceMotion';
 import ApprovalBadge, { isNewCycle } from '../ApprovalBadge';
@@ -66,8 +66,23 @@ export default function SheetView({ params, refreshKey, onOpen, justAdded = [], 
     }
     const rank = row => ({ PAID: 0, NONE: 0, RUNNING: 1 })[cycleState(row)] ?? 2;
     for (const group of out) group.rows = group.rows.map((row, i) => [row, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([row]) => row);
+    // A month is settled when every cycle in it is completed with the employee paid, no student owes anything, and
+    // nothing in it is new or waiting for approval. The current month never counts as settled.
+    const thisMonth = monthOf(new Date());
+    for (const group of out) {
+      group.cycles = new Set(group.rows.map(r => r.cycleId)).size;
+      group.settled = group.month !== thisMonth && group.rows.every(r => ['PAID', 'NONE'].includes(cycleState(r)) && !(r.due > 0) && r.approvalStatus !== 'PENDING' && !justAdded.includes(r.cycleId));
+    }
     return out;
-  }, [data]);
+  }, [data, justAdded]);
+  // Settled months fold to one line so what needs attention is on top; a click opens one. A search opens them all.
+  // Choices reset when the employee or the filters change.
+  const [toggled, setToggled] = useState({});
+  const [toggledFor, setToggledFor] = useState(shownKey);
+  if (toggledFor !== shownKey) { setToggledFor(shownKey); setToggled({}); }
+  const searching = Boolean(params?.search);
+  const isOpen = group => toggled[group.month] ?? (searching || !group.settled);
+  const flip = group => setToggled(old => ({ ...old, [group.month]: !isOpen(group) }));
   const students = (data?.rows || []).filter(r => r.student);
   const totals = { fee: students.reduce((n, r) => n + r.fee, 0), paid: students.reduce((n, r) => n + r.paid, 0), due: students.reduce((n, r) => n + r.due, 0) };
   const showBooks = students.some(r => r.books);
@@ -99,9 +114,9 @@ export default function SheetView({ params, refreshKey, onOpen, justAdded = [], 
       <div className="sheet-scroll">
         <table className="sheet-table">
           <thead><tr><th className="c-date">Start</th><th className="c-date">End</th><th>Student</th><th className="c-phone">Phone</th><th className="c-course">Course</th><th className="num c-hours">Hours × rate</th><th className="num c-money">Fee</th><th className="c-cycle">Cycle</th>{showBooks && <th className="c-books">Books</th>}</tr></thead>
-          {groups.map(group => <tbody key={group.month}>
-            <tr className="sheet-month"><th colSpan={columns} scope="rowgroup">{group.month}</th></tr>
-            {group.rows.map(row => {
+          {groups.map(group => <tbody key={group.month} className={group.settled ? 'is-settled-month' : undefined}>
+            <tr className="sheet-month"><th colSpan={columns} scope="rowgroup">{group.settled ? <button type="button" className="sheet-month-toggle" aria-expanded={isOpen(group)} onClick={() => flip(group)}>{isOpen(group) ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}{group.month}<span className="sheet-month-summary"><CircleCheck size={13} aria-hidden="true" />{group.cycles} cycle{group.cycles === 1 ? '' : 's'} · all paid</span></button> : group.month}</th></tr>
+            {isOpen(group) && group.rows.map(row => {
               const [tone, label, TIcon] = row.student ? TUITION[row.status] : ['muted', 'No students', null];
               const [ctone, clabel, CIcon] = CYCLE[cycleState(row)];
               const first = !row.shared || row.shared.index === 0;

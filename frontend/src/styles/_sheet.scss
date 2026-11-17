@@ -94,3 +94,14 @@
 .sheet-table tbody tr.is-new-cycle td:first-child, .sheet-table tr.is-shared.is-new-cycle td:first-child { box-shadow: inset 4px 0 0 #13a389; }
 .sheet-table tbody tr.is-just-added td { animation: new-row-glow 1.8s ease both; }
 @media (prefers-reduced-motion: reduce) { .sheet-table tbody tr.is-just-added td { animation: none; } }
+
+// Settled months (every cycle completed with the employee paid, nothing owed) fold to one line.
+.sheet-month-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer;
+  svg { color: #8a98ae; }
+  &:hover .sheet-month-summary { border-color: #9fd9b8; }
+  &:focus-visible { outline: 2px solid #8da2f2; outline-offset: 3px; border-radius: 4px; }
+}
+.sheet-month-summary { display: inline-flex; align-items: center; gap: 4px; margin-inline-start: 8px; padding: 2px 9px 2px 7px; border-radius: 999px; border: 1px solid #c9ead6; background: #effaf3; color: #1d7a4a; font-size: 11px; font-weight: 700; letter-spacing: 0;
+  svg { color: #1d9a5c; }
+}
+.sheet-table tbody.is-settled-month .sheet-month th { color: #5d6f8c; }

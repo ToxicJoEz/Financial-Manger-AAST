@@ -38,8 +38,10 @@ if ((await prisma.user.count()) !== usersBefore) throw new Error('User accounts 
 await prisma.$disconnect();
 console.log(`Business data cleared. ${usersBefore} user accounts kept.`);
 
-// 3. Reseed.
-const seed = spawnSync(process.execPath, [join(backend, 'src/scripts/seedLocalTestData.js'), '--add-local-test-data'], {
+// 3. Reseed: the small sample set, or with --large the big one (~1,000 cycles, ~3,000 students, 120 employees).
+const large = process.argv.includes('--large');
+const script = large ? ['src/scripts/seedLargeTestData.js', '--add-large-test-data'] : ['src/scripts/seedLocalTestData.js', '--add-local-test-data'];
+const seed = spawnSync(process.execPath, [join(backend, script[0]), script[1]], {
   cwd: backend,
   stdio: 'inherit'
 });
