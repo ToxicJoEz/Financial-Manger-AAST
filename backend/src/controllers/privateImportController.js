@@ -520,7 +520,7 @@ export const commitPrivateImport = atomic(
           }
         });
         if (isFinished) await savePayrollRecord(cycle.id);
-        cycles.push({ id: cycle.id, name: cycle.name, students: enrolled.length });
+        cycles.push({ id: cycle.id, name: cycle.name, parentCourseId: sub.id, students: enrolled.length });
       }
       const audit = auditContext.getStore();
       if (audit)

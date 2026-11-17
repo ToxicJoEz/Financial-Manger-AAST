@@ -37,6 +37,8 @@ const summary = (course, user) => {
     archivedCount: visible.filter(c => c.archivedAt).length,
     activeCount: live.filter(c => !c.isFinished).length,
     completedCount: live.filter(c => c.isFinished).length,
+    // New cycles from branch mods still waiting for the main mod's approval.
+    pendingCount: live.filter(c => c.approvalStatus === 'PENDING').length,
     branches: [...new Set(live.map(c => c.branch))],
     byBranch,
     students: live.reduce((n, c) => n + c._count.enrollments, 0)
@@ -56,6 +58,7 @@ const relations = {
       archivedAt: true,
       branch: true,
       isFinished: true,
+      approvalStatus: true,
       _count: {
         select: {
           enrollments: {

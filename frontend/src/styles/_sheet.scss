@@ -87,3 +87,10 @@
   .sheet-view { grid-template-columns: 1fr; }
   .sheet-people { border-right: 0; border-bottom: 1px solid #e6ebf3; ul { flex-direction: row; overflow-x: auto; max-height: none; } button { white-space: nowrap; } }
 }
+
+// The "New" look in the sheet: teal rows with a teal edge (see _sections.scss for the badge and animations).
+.sheet-table tbody tr.is-new-cycle td { background: #f0fbf8; }
+.sheet-table tbody tr.is-new-cycle:hover td { background: #e2f7f2; }
+.sheet-table tbody tr.is-new-cycle td:first-child, .sheet-table tr.is-shared.is-new-cycle td:first-child { box-shadow: inset 4px 0 0 #13a389; }
+.sheet-table tbody tr.is-just-added td { animation: new-row-glow 1.8s ease both; }
+@media (prefers-reduced-motion: reduce) { .sheet-table tbody tr.is-just-added td { animation: none; } }

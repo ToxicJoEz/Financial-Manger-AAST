@@ -234,7 +234,6 @@
   &.is-pending { border: 1px dashed #d99a2b; background: var(--warning-soft); color: var(--warning); }
   &.is-rejected { border: 1px solid #f3c0c0; background: #fdecec; color: #b42318; }
 }
-.course-tile.is-awaiting-approval, tr.is-awaiting-approval > td:first-child { box-shadow: inset 3px 0 0 #e0a43a; }
 .cycle-approval { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 14px 0 0; padding: 12px 14px; border: 1px dashed #e0b45c; border-radius: var(--radius-md); background: var(--warning-soft);
   > p { flex: 1 1 260px; margin: 0; color: var(--warning); font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: flex-start; svg { flex-shrink: 0; margin-top: 1px; } }
   &.is-rejected { border-style: solid; border-color: #f3c0c0; background: #fdecec; > p { color: #b42318; } }
@@ -250,3 +249,25 @@
 }
 .motion-tab.active .status-tab-icon, .section-tabs button.active .status-tab-icon { opacity: 1; }
 .course-collection.sheet-mode { padding-bottom: 0; overflow: hidden; }
+
+// The "New" look: teal, a colour nothing else uses (green paid, red owed, amber salary due, blue running).
+// Branch mods' cycles keep it until approved or rejected; cycles the main mod just added keep it until they leave.
+.new-badge { display: inline-flex; align-items: center; gap: 4px; vertical-align: middle; margin-inline: 4px; padding: 2px 8px 2px 6px; border-radius: 999px; border: 1px solid #8fdccc; background: #e2f7f2; color: #0b6b5c; font-size: 11px; font-weight: 800; line-height: 1.4; white-space: nowrap; letter-spacing: .01em;
+  svg { color: #13a389; }
+  &.is-pending { border-style: dashed; }
+}
+@keyframes new-cycle-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes new-cycle-pulse { 0% { box-shadow: 0 0 0 0 rgba(19, 163, 137, .45); } 70% { box-shadow: 0 0 0 12px rgba(19, 163, 137, 0); } 100% { box-shadow: 0 0 0 0 rgba(19, 163, 137, 0); } }
+@keyframes new-row-glow { 0% { background-color: #c9f1e7; } 100% { background-color: #f0fbf8; } }
+.course-tile.is-new-cycle { border-color: #8fdccc !important; box-shadow: 0 0 0 1px #8fdccc, 0 6px 18px rgba(19, 163, 137, .1); background: linear-gradient(#f4fcfa, #fff 70px); }
+.course-tile.is-just-added { animation: new-cycle-in .45s ease both, new-cycle-pulse 1.4s ease .45s 2; }
+tr.is-new-cycle > td { background: #f0fbf8; }
+tr.is-new-cycle > td:first-child { box-shadow: inset 4px 0 0 #13a389; }
+tr.is-just-added > td { animation: new-row-glow 1.8s ease both; }
+.just-added-label { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; margin: 0 0 -4px; color: #0b6b5c; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+  &::after { content: ''; flex: 1; height: 1px; background: #b8e9de; }
+}
+tr.just-added-label-row > td { padding: 10px 14px 6px; background: #fff; color: #0b6b5c; font-size: 12px; font-weight: 800; border-bottom: 1px solid #b8e9de; }
+// Umbrella cards: cycles waiting for approval, or just imported.
+.catalog-new-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 0; }
+@media (prefers-reduced-motion: reduce) { .course-tile.is-just-added, tr.is-just-added > td { animation: none; } }

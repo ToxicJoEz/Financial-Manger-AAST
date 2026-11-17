@@ -146,7 +146,7 @@ async function cycleFilters(user, q) {
     ...(manager ? {} : { archivedAt: null, parentCourse: { archivedAt: null } }),
     ...cycleBranchWhere(user)
   };
-  const keys = ['parentCourseId', 'section', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize'];
+  const keys = ['parentCourseId', 'section', 'search', 'branch', 'status', 'from', 'to', 'page', 'pageSize', 'ids'];
   if (keys.some(key => q[key] !== undefined && typeof q[key] !== 'string'))
     throw Object.assign(new Error('Invalid filters.'), { status: 400 });
   const parentCourseId = q.parentCourseId || null;
@@ -220,7 +220,9 @@ async function cycleFilters(user, q) {
     ...(q.branch ? [{ branch: q.branch }] : []),
     ...(range ? [{ startDate: range }] : [])
   ];
-  const where = { AND: filters };
+  // Just-added cycles, by id: shown on top right after creating them, whatever the other filters are.
+  const ids = q.ids ? String(q.ids).split(',').filter(Boolean).slice(0, 500) : null;
+  const where = ids ? { AND: [visibility, { id: { in: ids } }] } : { AND: filters };
   return { where, scope, statusWhere, manager, payroll, page, pageSize, parentCourseId };
 }
 
@@ -1590,7 +1592,11 @@ export const getCyclesSheet = async (req, res) => {
           b.students - a.students ||
           a.name.localeCompare(b.name, 'ar')
       );
-    const chosen = sheets.get(String(req.query.employeeId || '')) || sheets.get(employees[0]?.id);
+    // "focus": a cycle just created; its employee's sheet opens so it can be seen at once.
+    const focused = req.query.focus
+      ? [...sheets.values()].find(s => s.rows.some(r => r.cycleId === String(req.query.focus)))
+      : null;
+    const chosen = focused || sheets.get(String(req.query.employeeId || '')) || sheets.get(employees[0]?.id);
     res.json({
       employees,
       employee: chosen ? employees.find(e => e.id === chosen.id) : null,

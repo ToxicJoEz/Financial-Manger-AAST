@@ -75,6 +75,12 @@ try {
     )
   );
   assert.equal(pending.approvalStatus, 'PENDING');
+  // Umbrella cards count cycles waiting for approval.
+  const umbrellas = ok(await req('/courses', 'GET', undefined, main));
+  assert.equal((umbrellas.rows || umbrellas).find(u => u.id === 'course-ielts').pendingCount, 1);
+  // Just-added cycles can be fetched by id, whatever the other filters (shown pinned on top).
+  const pinned = ok(await req(`/cycles?ids=${pending.id},${plain.id}&status=finished`, 'GET', undefined, main)).rows;
+  assert.deepEqual(pinned.map(r => r.id).sort(), [pending.id, plain.id].sort());
   const mainUser = await prisma.user.findUnique({ where: { username: 'Youssef Wael' } });
   const inbox = ok(await req('/notifications/history', 'GET', undefined, main)).items;
   const request = inbox.find(n => n.relatedId === pending.id);
@@ -173,6 +179,9 @@ try {
   assert.equal((await req('/cycles/sheet', 'GET', undefined, miami)).status, 403);
   assert.equal((await req('/cycles/sheet?parentCourseId=course-ket', 'GET', undefined, main)).status, 400);
   const sheet = ok(await req('/cycles/sheet?employeeId=demo-instructor-1', 'GET', undefined, main));
+  // "focus" opens the sheet of the employee a just-added cycle belongs to.
+  const focused = ok(await req(`/cycles/sheet?employeeId=unassigned&focus=${privateCycle.id}`, 'GET', undefined, main));
+  assert.equal(focused.employee.id, 'demo-instructor-1');
   assert.equal(sheet.employee.id, 'demo-instructor-1');
   assert.equal(sheet.employee.rate, 180);
   const line = sheet.rows.find(r => r.cycleId === privateCycle.id);

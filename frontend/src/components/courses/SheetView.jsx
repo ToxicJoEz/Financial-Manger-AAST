@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { Search, Users, BookOpen, CircleCheck, CircleAlert, Clock3, PlayCircle, Hourglass, Wallet } from 'lucide-react';
 import '../../styles/_sheet.scss';
 import { CalmRegion } from '../WorkspaceMotion';
+import ApprovalBadge, { isNewCycle } from '../ApprovalBadge';
 
 // The Private sheet (admins and the main mod): like the old per-employee Excel sheets. Pick an employee on the left;
 // their students are listed one per row, newest month first, with totals. Clicking a row opens the cycle.
@@ -27,7 +28,7 @@ const monthOf = d => (d ? new Date(d).toLocaleDateString('en-GB', { month: 'long
 const remembered = () => { try { return localStorage.getItem('aast-sheet-employee') || ''; } catch { return ''; } };
 const Pill = ({ tone, Icon, children }) => <span className={'sheet-pill tone-' + tone}>{Icon && <Icon size={13} aria-hidden="true" />}{children}</span>;
 
-export default function SheetView({ params, refreshKey, onOpen }) {
+export default function SheetView({ params, refreshKey, onOpen, justAdded = [], focus = null }) {
   const [employeeId, setEmployeeId] = useState(remembered);
   const [data, setData] = useState(null), [error, setError] = useState(''), [loading, setLoading] = useState(true);
   // Which filters and employee the rows on screen belong to: the table cross-fades only when that changes,
@@ -35,17 +36,23 @@ export default function SheetView({ params, refreshKey, onOpen }) {
   const [shownKey, setShownKey] = useState('');
   const [find, setFind] = useState('');
   const key = JSON.stringify(params);
+  const choose = id => { setEmployeeId(id); try { localStorage.setItem('aast-sheet-employee', id); } catch { /* per-browser convenience only */ } };
+  // A cycle just added: open the sheet of the employee it belongs to (once), so it is on screen straight away.
+  const focused = useRef(null);
   useEffect(() => {
     const controller = new AbortController();
+    const focusNow = focus && focused.current !== focus ? focus : undefined;
     setLoading(true);
-    axios.get('/cycles/sheet', { params: { ...params, employeeId: employeeId || undefined }, signal: controller.signal })
-      .then(({ data }) => { setData(data); setError(''); setShownKey(key + '|' + (data.employee?.id || '')); })
+    axios.get('/cycles/sheet', { params: { ...params, employeeId: employeeId || undefined, focus: focusNow }, signal: controller.signal })
+      .then(({ data }) => {
+        setData(data); setError(''); setShownKey(key + '|' + (data.employee?.id || ''));
+        if (focusNow) { focused.current = focusNow; if (data.employee && data.employee.id !== employeeId) choose(data.employee.id); }
+      })
       .catch(e => { if (!controller.signal.aborted) setError(e.response?.data?.error || 'The sheet could not be loaded.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, employeeId, refreshKey]);
-  const choose = id => { setEmployeeId(id); try { localStorage.setItem('aast-sheet-employee', id); } catch { /* per-browser convenience only */ } };
+  }, [key, employeeId, refreshKey, focus]);
 
   // Month separators, newest first. Inside a month: completed cycles already paid to the employee, then running
   // cycles, then completed cycles the employee is not paid for yet (salary due, processing, or hours to confirm).
@@ -98,11 +105,12 @@ export default function SheetView({ params, refreshKey, onOpen }) {
               const [tone, label, TIcon] = row.student ? TUITION[row.status] : ['muted', 'No students', null];
               const [ctone, clabel, CIcon] = CYCLE[cycleState(row)];
               const first = !row.shared || row.shared.index === 0;
-              const classes = [row.shared && 'is-shared', row.shared && first && 'shared-first', row.shared && row.shared.index === row.shared.size - 1 && 'shared-last', row.archived && 'is-archived', 'cycle-' + ctone].filter(Boolean).join(' ');
+              const fresh = justAdded.includes(row.cycleId);
+              const classes = [isNewCycle(row, fresh) && 'is-new-cycle', fresh && 'is-just-added', row.shared && 'is-shared', row.shared && first && 'shared-first', row.shared && row.shared.index === row.shared.size - 1 && 'shared-last', row.archived && 'is-archived', 'cycle-' + ctone].filter(Boolean).join(' ');
               return <tr key={(row.enrollmentId || row.cycleId) + current?.id} className={classes} tabIndex={0} title={row.cycleName} onClick={() => onOpen(row.cycleId)} onKeyDown={e => { if (e.key === 'Enter') onOpen(row.cycleId); }}>
                 <td className="c-date">{first ? day(row.startDate) : ''}</td>
                 <td className="c-date">{first ? (row.endDate ? day(row.endDate) : '') : ''}</td>
-                <td dir="auto" className="c-student">{row.student || <span className="muted">—</span>}{row.approvalStatus === 'PENDING' && first && <span className="sheet-flag">Awaiting approval</span>}</td>
+                <td dir="auto" className="c-student">{row.student || <span className="muted">—</span>}{first && <ApprovalBadge record={row} justAdded={fresh} />}</td>
                 <td className="c-phone">{phones(row.mobile).map(n => <span key={n}>{n}</span>)}</td>
                 <td className="c-course">{first ? row.course : ''}</td>
                 <td className="num c-hours">{first ? <span className="sheet-hours"><b>{row.hours ?? '—'}</b> h <i>×</i> <b>{row.rate != null ? money(row.rate) : '—'}</b>{row.hoursClosed && <small>closed</small>}</span> : <span className="muted">shared</span>}</td>

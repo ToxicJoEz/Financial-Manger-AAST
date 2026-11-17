@@ -19,6 +19,7 @@ import axios from 'axios';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { LayoutGrid, List, ChevronRight, FileSpreadsheet, Link2, Table, Layers, PlayCircle, CircleCheck, Wallet, HandCoins, Hourglass } from 'lucide-react';
 import SheetView from '../components/courses/SheetView';
+import { takeJustAdded } from '../utils/justAdded';
 import CycleDetailsModal from '../components/courses/CycleDetailsModal';
 import { PageHeading, EmptyState } from '../components/WorkspaceUI';
 import { Plus, Edit2, Trash2, Archive, BookOpen, X, CheckCircle, Search } from 'lucide-react';
@@ -59,6 +60,12 @@ const Courses = () => {
   // Private cycles, for admins and the main mod: the employee sheet view by default (remembered separately).
   const [privateView, setPrivateView] = useState(() => { try { return localStorage.getItem('aast-private-course-view') || 'sheet'; } catch { return 'sheet'; } });
   const [sheetCycle, setSheetCycle] = useState(null), [sheetRefresh, setSheetRefresh] = useState(0);
+  // Cycles just added on this page (or imported just before opening it): shown with the "New" look until the person
+  // leaves the page or refreshes. Memory only, never saved.
+  const [justAdded, setJustAdded] = useState(takeJustAdded);
+  const [sheetFocus, setSheetFocus] = useState(() => justAdded[0] || null);
+  const [justAddedExtra, setJustAddedExtra] = useState([]);
+  const addJustAdded = ids => { setJustAdded(old => [...ids, ...old.filter(id => !ids.includes(id))]); setSheetFocus(ids[0]); };
   const [loadError, setLoadError] = useState(false);
   const [courses, setCourses] = useState([]);
   // The server pages and filters cycles; tab counts come from the database too.
@@ -188,6 +195,32 @@ const Courses = () => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId, section, page, query, filterBranch, filterStatus]);
+  // Just-added cycles that are not on the page shown (another page, another tab or filter) are pinned on top.
+  useEffect(() => {
+    const missing = justAdded.filter(id => !courses.some(c => c.id === id));
+    if (!missing.length) { setJustAddedExtra([]); return; }
+    let alive = true;
+    axios.get('/cycles', { params: { ids: missing.join(','), pageSize: 100 } })
+      .then(({ data }) => { if (alive) setJustAddedExtra(data.rows || []); })
+      .catch(() => { if (alive) setJustAddedExtra([]); });
+    return () => { alive = false; };
+  }, [justAdded, courses]);
+  // Another umbrella or section is another page: the "New" look does not carry over.
+  const scopeKey = useRef(parentId + ':' + section);
+  useEffect(() => {
+    if (scopeKey.current === parentId + ':' + section) return;
+    scopeKey.current = parentId + ':' + section;
+    setJustAdded([]); setSheetFocus(null);
+  }, [parentId, section]);
+  // Right after adding: mark it new, make sure the sheet can show it, then bring it into view.
+  const showJustAdded = (ids, branch) => {
+    addJustAdded(ids);
+    if (shownView === 'sheet') {
+      setFilterName(''); setFilterStatus(''); setDateRangeStart(''); setDateRangeEnd('');
+      if (filterBranch && branch && filterBranch !== branch) setFilterBranch(branch);
+    }
+    setTimeout(() => document.querySelector('.is-just-added')?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 700);
+  };
   // After any change, the cycle open from the sheet reloads too.
   useEffect(() => {
     if (!sheetCycle?.id || !sheetRefresh) return;
@@ -219,7 +252,7 @@ const Courses = () => {
   const handleAddSubmit = async e => {
     e.preventDefault();
     try {
-      await axios.post('/cycles', {
+      const { data: created } = await axios.post('/cycles', {
         ...schedule,
         parentCourseId: nextFrom ? nextFrom.parentCourseId : parentId,
         previousCycleId: nextFrom?.id,
@@ -235,6 +268,7 @@ const Courses = () => {
       toast.success(nextFrom ? `Next level created${nextFrom.chosen.length ? ` with ${nextFrom.chosen.length} students (not paid yet)` : ''}` : 'Cycle created');
       setIsAddModalOpen(false);
       resetForm();
+      showJustAdded([created.id], created.branch);
       fetchData();
     } catch (error) {
       toast.error(error.response?.data?.error || 'Failed to create course');
@@ -626,6 +660,7 @@ const Courses = () => {
   // Everything a cycle's card, row or details window needs (handlers open the dialogs on this page).
   const cycleProps = course => ({
     course: course,
+    justAdded: justAdded.includes(course.id),
     studentQuery: query,
     isSelected: selectedCycleIds.includes(course.id),
     onToggleSelect: canSelectCycles && !course.lockedReason ? () => toggleSelectCycle(course.id) : undefined,
@@ -748,10 +783,10 @@ const Courses = () => {
         )}
         {/* Switching to or from the sheet fades like the other views. */}
         <MotionRegion transitionKey={shownView === 'sheet' ? 'sheet' : 'cycles'}>
-        {shownView === 'sheet' ? <SheetView params={{ parentCourseId: parentId || undefined, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined, from: dateRangeStart || undefined, to: dateRangeEnd || undefined }} refreshKey={sheetRefresh} onOpen={openSheetCycle} /> : <>
+        {shownView === 'sheet' ? <SheetView params={{ parentCourseId: parentId || undefined, search: query || undefined, branch: filterBranch || undefined, status: filterStatus || undefined, from: dateRangeStart || undefined, to: dateRangeEnd || undefined }} refreshKey={sheetRefresh} onOpen={openSheetCycle} justAdded={justAdded} focus={sheetFocus} /> : <>
         <MotionRegion transitionKey={shownView + ':' + filterStatus + ':' + filterBranch}>
 
-        {shownView === 'grid' ? <div className="course-grid">{chainGroups.map(group => group.length > 1 ? <div className="level-chain" key={'chain-' + group[0].id}><div className="level-chain-label"><Link2 size={14} />{group.length} linked levels · {chainTitle(group)}</div><div className="level-chain-cards">{group.map(renderTile)}</div></div> : renderTile(group[0]))}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th className="select-column">{canSelectCycles && <input type="checkbox" aria-label="Select all" checked={selectedCycleIds.length === filteredCourses.length && filteredCourses.length > 0} onChange={toggleSelectAll} />}</th><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead>{chainGroups.map(group => <tbody key={'rows-' + group[0].id} className={group.length > 1 ? 'level-chain-rows' : undefined}>{group.length > 1 && <tr className="level-chain-head"><td colSpan={8}><Link2 size={13} />{group.length} linked levels · {chainTitle(group)}</td></tr>}{group.map(renderRow)}{group.length > 1 && <tr className="level-chain-gap" aria-hidden="true"><td colSpan={8} /></tr>}</tbody>)}</table></div>}
+        {shownView === 'grid' ? <div className="course-grid">{justAddedExtra.length > 0 && <><div className="just-added-label">Just added · {justAddedExtra.length}</div>{justAddedExtra.map(renderTile)}</>}{chainGroups.map(group => group.length > 1 ? <div className="level-chain" key={'chain-' + group[0].id}><div className="level-chain-label"><Link2 size={14} />{group.length} linked levels · {chainTitle(group)}</div><div className="level-chain-cards">{group.map(renderTile)}</div></div> : renderTile(group[0]))}</div> : <div className="table-scroll"><table className="data-table course-ledger"><thead><tr><th className="select-column">{canSelectCycles && <input type="checkbox" aria-label="Select all" checked={selectedCycleIds.length === filteredCourses.length && filteredCourses.length > 0} onChange={toggleSelectAll} />}</th><th>Course</th><th>Branch</th><th>Teaching team</th><th>Students</th><th>Hours</th><th>Status</th><th aria-label="Details" /></tr></thead>{justAddedExtra.length > 0 && <tbody className="just-added-rows"><tr className="just-added-label-row"><td colSpan={8}>Just added · {justAddedExtra.length}</td></tr>{justAddedExtra.map(renderRow)}</tbody>}{chainGroups.map(group => <tbody key={'rows-' + group[0].id} className={group.length > 1 ? 'level-chain-rows' : undefined}>{group.length > 1 && <tr className="level-chain-head"><td colSpan={8}><Link2 size={13} />{group.length} linked levels · {chainTitle(group)}</td></tr>}{group.map(renderRow)}{group.length > 1 && <tr className="level-chain-gap" aria-hidden="true"><td colSpan={8} /></tr>}</tbody>)}</table></div>}
 
         {!filteredCourses.length && <div className="empty-state"><BookOpen size={28} /><h3>{isAnyFilterActive ? 'No matching cycles' : 'A fresh start for your courses'}</h3><p>{isAnyFilterActive ? 'Try a different search or reset your filters.' : 'Create the first cycle for this course to get started.'}</p>{isAnyFilterActive && <button className="btn-secondary" onClick={clearAllFilters}>Reset filters</button>}</div>}
 
@@ -776,7 +811,7 @@ const Courses = () => {
 
       {/* Add Course Modal */}
 
-      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
+      <AnimatePresence>{user.role !== 'user' && importOpen && parentCourse && <CycleImportDialog parent={parentCourse} instructors={instructorsList} manager={user.role !== 'user'} onClose={() => setImportOpen(false)} onImported={() => { setFilterName(''); setFilterBranch(''); setFilterStatus(''); return fetchData(); }} onSaved={async result => { setImportOpen(false); setFilterName(''); setFilterBranch(''); setFilterStatus(''); addJustAdded([result.cycleId]); await fetchData(); setExpandedCourse(result.cycleId); toast.success(`${result.cycleName} imported`); }} />}</AnimatePresence>
       <AnimatePresence>{isAddModalOpen && <Dialog title="Create cycle" onClose={() => setIsAddModalOpen(false)}>
 
           <div className="modal-content card max-w-lg w-full relative">
