@@ -190,6 +190,12 @@ try {
   // Money the main mod recorded needs no check.
   const miamiChecks = ok(await req('/finances/checks?branch=MIAMI', 'GET', undefined, main)).items;
   assert(!miamiChecks.some(i => i.cycleId === privateCycle.id), 'main mod money is not in Checks');
+  // 7. Usernames ignore letter case when signing in, and new accounts cannot differ from old ones only by case.
+  assert(await login('YOUSSEF WAEL'), 'sign-in ignores case');
+  assert.equal((await req('/auth/login', 'POST', { username: 'youssef wael', password: 'wrong' })).status, 401);
+  const dup = await req('/auth/register', 'POST', { username: 'JOE', password: 'CaseDupTest!123', role: 'user' }, main);
+  assert.equal(dup.status, 400);
+  assert.match(dup.data.error, /already taken/);
   // 6. Permanent account deletion: admins only, typed confirmation, never the root admin or yourself.
   const admin = await login('main-admin');
   const orphan = ok(

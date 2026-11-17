@@ -31,7 +31,20 @@ export const loginUser = atomic(async (req, res, next) => {
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { username } });
+    // Usernames are matched without regard to letter case ("Refaay" = "refaay"). The exact spelling wins; if old
+    // accounts differ only by case, the one whose password matches is used.
+    const typed = String(username).trim();
+    let user = await prisma.user.findUnique({ where: { username: typed } });
+    if (!user) {
+      const sameName = await prisma.user.findMany({ where: { username: { equals: typed, mode: 'insensitive' } } });
+      user = sameName[0] || null;
+      if (sameName.length > 1)
+        for (const candidate of sameName)
+          if (candidate.password && (await bcrypt.compare(password, candidate.password))) {
+            user = candidate;
+            break;
+          }
+    }
 
     if (user) auditActor(user, 'PASSWORD');
     if (user && user.password && (await bcrypt.compare(password, user.password))) {
@@ -109,10 +122,13 @@ export const registerUser = atomic(async (req, res, next) => {
       }
     }
 
-    const userExists = await prisma.user.findUnique({ where: { username } });
+    // Usernames are unique regardless of letter case, since sign-in ignores case.
+    const userExists = await prisma.user.findFirst({
+      where: { username: { equals: String(username || '').trim(), mode: 'insensitive' } }
+    });
     if (userExists) {
       res.status(400);
-      throw new Error('Username is already taken');
+      throw new Error(`Username is already taken (${userExists.username}). Usernames ignore upper and lower case.`);
     }
 
     const salt = await bcrypt.genSalt(10);
