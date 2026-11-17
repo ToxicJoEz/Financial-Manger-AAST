@@ -1,5 +1,6 @@
 import {dateText} from '../utils/dates';
 import ArchiveControls from '../components/ArchiveControls';
+import { branchScopeOf } from '../utils/access';
 import StudentDetailsDialog from '../components/StudentDetailsDialog';
 import { AuthContext } from '../context/AuthContext';
 import StudentProfileFields from '../components/StudentProfileFields';
@@ -14,6 +15,8 @@ import { PageHeading, initials } from '../components/WorkspaceUI';
 export default function Students() {
   const { user } = useContext(AuthContext);
   const manager = ['admin', 'mod'].includes(user.role);
+  // Branch mods add and edit students but never archive or delete them (the main mod or an admin does).
+  const canRemove = manager && !branchScopeOf(user);
   const [students, setStudents] = useState([]);
   const [viewingStudent, setViewingStudent] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -256,7 +259,7 @@ export default function Students() {
             <table className="students-table">
               <thead>
                 <tr>
-                  {manager && <th className="select-column"><input type="checkbox" aria-label="Select all" checked={selectedStudentIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></th>}
+                  {canRemove && <th className="select-column"><input type="checkbox" aria-label="Select all" checked={selectedStudentIds.length === filtered.length && filtered.length > 0} onChange={toggleSelectAll} /></th>}
                   <th>Student</th>
                   <th>Registration ID</th>
                   <th>Contact</th>
@@ -266,7 +269,7 @@ export default function Students() {
               </thead>
               <tbody>
                 {filtered.map(student => <tr key={student.id}>
-                    {manager && <td className="select-column"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedStudentIds.includes(student.id)} onChange={() => toggleSelectStudent(student.id)} /></td>}
+                    {canRemove && <td className="select-column"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedStudentIds.includes(student.id)} onChange={() => toggleSelectStudent(student.id)} /></td>}
                     <td>
                       <div className="student-info-cell">
                         <span className="student-avatar">{initials(student.name)}</span>
@@ -302,7 +305,7 @@ export default function Students() {
                   })}>
                           <Edit2 size={15} />
                         </button>
-                        <ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>
+                        {canRemove && <ArchiveControls entity="students" record={student} onSaved={fetchStudents}/>}
 
                       </div>
                     </td>}

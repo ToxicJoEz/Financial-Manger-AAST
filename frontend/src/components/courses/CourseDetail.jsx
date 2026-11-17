@@ -304,7 +304,7 @@ export function CourseDetail({
 
                 {filteredEnrollments.map(enr => <StudentTuitionRow key={enr.id} course={course} enrollment={enr} manager={manager} readOnly={studentsReadOnly} onBooksChanged={onPaymentsChanged} onEdit={() => onEditEnrollment(enr)} onRemove={() => onRemoveEnrollment(enr)} />)}
               </div>}
-              {manager&&!studentsReadOnly&&<RemovedEnrollments courseId={course.id} refreshKey={(course.enrollments||[]).map(row=>row.id).join(',')} onSaved={onPaymentsChanged}/>}
+              {payroll&&!studentsReadOnly&&<RemovedEnrollments courseId={course.id} refreshKey={(course.enrollments||[]).map(row=>row.id).join(',')} onSaved={onPaymentsChanged}/>}
 
           </div>}
 

@@ -532,9 +532,13 @@ try {
     'Branch mod enrolls an exempt student in own cycle'
   );
   const extra = (await prisma.enrollment.findFirst({ where: { courseId: fc.id, studentId: 'demo-student-8' } }))?.id;
+  // Branch mods add students but never remove them, even from their own unchecked cycle.
+  const noRemoval = await req(`/cycles/${fc.id}/enrollments/${extra}`, 'DELETE', { confirm: true, mode: 'KEEP' }, fouad);
+  refused(noRemoval, 'Branch mod removes a student from own unchecked cycle', [403]);
+  check('Removal refusal says branch mods only add', /can add students but not remove/.test(noRemoval.data?.error || ''), noRemoval.data);
   must(
-    await req(`/cycles/${fc.id}/enrollments/${extra}`, 'DELETE', { confirm: true, mode: 'KEEP' }, fouad),
-    'Branch mod removes a student from own unchecked cycle'
+    await req(`/cycles/${fc.id}/enrollments/${extra}`, 'DELETE', { confirm: true, mode: 'KEEP' }, main),
+    'Main mod removes that student instead'
   );
   must(await req(`/cycles/${fc.id}`, 'PUT', { venue: 'Fouad room 2' }, fouad), 'Branch mod edits own unchecked cycle');
   must(

@@ -37,7 +37,9 @@ import {
   cycleInBranch,
   bulkCyclesInBranch,
   confirmedMoneyGuard,
-  managersOnly
+  managersOnly,
+  noStudentRemovalByBranchMod,
+  branchModsCannot
 } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -45,7 +47,12 @@ const router = express.Router();
 router.use(protect);
 router.param('id', cycleInBranch);
 router.get('/:id/removed-enrollments', modOrAbove, getRemovedEnrollments);
-router.post('/:id/removed-enrollments/:removalId/adjust', modOrAbove, adjustRemovedEnrollment);
+router.post(
+  '/:id/removed-enrollments/:removalId/adjust',
+  modOrAbove,
+  branchModsCannot('adjust removed students'),
+  adjustRemovedEnrollment
+);
 router.get('/:id/deletion-preview', modOrAbove, deletionPreview('cycle'));
 router.delete('/:id/permanent', modOrAbove, confirmedMoneyGuard('cycle'), permanentlyDelete('cycle'));
 
@@ -79,17 +86,27 @@ router.post(
 
 // Enrollment routes (accessible to all authenticated users)
 // Users only view cycles; they may still request employee changes (approved by the main mod).
-router.post('/:id/enrollments/:enrollmentId/books', modOrAbove, updateBookStatus);
+router.post(
+  '/:id/enrollments/:enrollmentId/books',
+  modOrAbove,
+  branchModsCannot('mark books unpaid', req => req.body?.status === 'UNPAID'),
+  updateBookStatus
+);
 router.get('/:id/enrollments', getCourseEnrollments);
 router.post('/:id/enrollments', modOrAbove, enrollStudent);
 router.put('/:id/enrollments/:enrollmentId', modOrAbove, updateEnrollment);
-router.delete('/:id/enrollments/:enrollmentId', modOrAbove, removeEnrollment);
+router.delete('/:id/enrollments/:enrollmentId', modOrAbove, noStudentRemovalByBranchMod, removeEnrollment);
 
 // Payment history (amounts, methods, receipts) is for admins and mods; users only see paid / not paid.
 router.get('/:id/enrollments/:enrollmentId/payments', modOrAbove, getPayments);
 router.post('/:id/enrollments/:enrollmentId/payments', modOrAbove, recordPayment);
 // Unpaid students (carried into a next level) are settled in one step: full, discounted or exempt.
 router.post('/:id/enrollments/:enrollmentId/settle', modOrAbove, settleEnrollment);
-router.post('/:id/enrollments/:enrollmentId/payments/:paymentId/reverse', modOrAbove, reversePayment);
+router.post(
+  '/:id/enrollments/:enrollmentId/payments/:paymentId/reverse',
+  modOrAbove,
+  branchModsCannot('undo payments'),
+  reversePayment
+);
 
 export default router;

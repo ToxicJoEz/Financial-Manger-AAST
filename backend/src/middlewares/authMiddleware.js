@@ -177,6 +177,17 @@ export const notBranchMod = (req, res, next) => {
   next();
 };
 
+// Branch mods have limited power: they add students and record payments (marking them paid). Taking anything away
+// (removing, archiving or deleting students, undoing payments, marking books unpaid) is for the main mod or an admin.
+export const branchModsCannot = (what, when = () => true) => (req, res, next) => {
+  if (branchScopeOf(req.user) && when(req))
+    return res.status(403).json({
+      error: `Branch mods can add students and mark them paid, but not ${what}. Ask the main mod or an admin.`
+    });
+  next();
+};
+export const noStudentRemovalByBranchMod = branchModsCannot('remove students');
+
 export const adminOnly = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();

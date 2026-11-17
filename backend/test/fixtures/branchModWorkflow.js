@@ -253,14 +253,15 @@ try {
     )
   );
   const secondEntry = await prisma.paymentEntry.findFirst({ where: { enrollmentId: second.id } });
-  ok(
-    await req(
-      '/cycles/' + fresh.id + '/enrollments/' + second.id + '/payments/' + secondEntry.id + '/reverse',
-      'POST',
-      { note: 'Wrong receipt' },
-      fouad
-    )
-  );
+  // Branch mods mark students paid but never undo a payment, even an unchecked one; the main mod does.
+  const undo = '/cycles/' + fresh.id + '/enrollments/' + second.id + '/payments/' + secondEntry.id + '/reverse';
+  const refusedUndo = await req(undo, 'POST', { note: 'Wrong receipt' }, fouad);
+  assert.equal(refusedUndo.status, 403);
+  assert.match(refusedUndo.data.error, /not undo payments/);
+  ok(await req(undo, 'POST', { note: 'Wrong receipt' }, main));
+  // Nor do they archive or delete students.
+  assert.equal((await req('/students/demo-student-7/archive', 'POST', {}, fouad)).status, 403);
+  assert.equal((await req('/students/bulk-delete', 'POST', { ids: ['demo-student-7'] }, fouad)).status, 403);
   // Completed cycles take no new students, for anyone, until they are reopened.
   await prisma.cycle.update({ where: { id: cycle.id }, data: { isFinished: true } });
   assert.equal(
