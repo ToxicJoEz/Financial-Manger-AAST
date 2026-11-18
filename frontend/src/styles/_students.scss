@@ -159,13 +159,11 @@
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: #4c65eb;
+  // Plain text: phone numbers are for reading, not clicking.
+  color: #4f6282;
   font-size: 0.8125rem;
-  text-decoration: none;
-
-  &:hover {
-    text-decoration: underline;
-  }
+  font-variant-numeric: tabular-nums;
+  svg { color: #95a2b7; }
 }
 
 .student-no-contact {

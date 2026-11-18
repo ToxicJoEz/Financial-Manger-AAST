@@ -1,6 +1,7 @@
 import prisma from '../db/prisma.js';
 import { canSeePayroll, canCheckBranchMoney, cycleBranchWhere, CHECKED_BRANCHES } from '../utils/access.js';
 import { moneyCheckSummary } from './moneyCheckController.js';
+import { unplacedCount } from './placementController.js';
 
 // Counts of things waiting for someone, for sidebar badges and the Overview "Needs your attention" strip.
 // Each user only gets the counts that apply to them.
@@ -17,6 +18,8 @@ export const getAttention = async (req, res, next) => {
       prisma.cycle.count({ where: { ...activeCycle, isFinished: false, instructors: { none: {} } } })
     ]);
     const result = {
+      // Tested students waiting to be placed (Tests tab badge).
+      unplacedTests: await unplacedCount(user),
       pendingApprovals: requests + cyclesToApprove,
       cyclesToApprove,
       myPendingRequests: myRequests + myCycles,

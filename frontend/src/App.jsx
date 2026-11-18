@@ -1,4 +1,5 @@
-import { canSeePayroll, canCheckBranchMoney } from './utils/access';
+import { canSeePayroll, canCheckBranchMoney, canUsePlacements } from './utils/access';
+import PlacementTests from './pages/PlacementTests';
 import MoneyChecks from './pages/MoneyChecks';
 import ActivityLog from './pages/ActivityLog';
 import FinanceLayout from './layouts/FinanceLayout';
@@ -69,6 +70,11 @@ const PayrollRoute = () => {
   const { user } = useContext(AuthContext);
   return canSeePayroll(user) ? <Finances /> : <Navigate to="/finances/income" replace />;
 };
+// Placement tests: users with the toggle, admins and the main mod.
+const TestsRoute = () => {
+  const { user } = useContext(AuthContext);
+  return canUsePlacements(user) ? <PlacementTests /> : <Navigate to="/" replace />;
+};
 // The activity log is for admins and the main mod only.
 const LogsRoute = () => {
   const { user } = useContext(AuthContext);
@@ -117,6 +123,7 @@ const App = () => {
             <Route path="/courses/:courseId/sub/:subCourseId" element={<OldSubRoute />} />
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/students" element={<Students />} />
+            <Route path="/tests" element={<TestsRoute />} />
             <Route path="/finances" element={<FinanceRoute />}>
               <Route index element={<FinanceHome />} />
               <Route path="income" element={<Income />} />

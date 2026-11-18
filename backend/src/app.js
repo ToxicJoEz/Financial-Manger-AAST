@@ -19,6 +19,7 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import financeRoutes from './routes/financeRoutes.js';
 import studentRoutes from './routes/studentRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
+import placementRoutes from './routes/placementRoutes.js';
 import { branchesReady } from './controllers/branchController.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js';
 
@@ -59,6 +60,7 @@ app.use('/api/finances', financeRoutes);
 app.use('/api/exports', exportRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/backups', backupRoutes);
+app.use('/api/placements', placementRoutes);
 
 // Global Error Handlers (Must be placed AFTER all routes)
 app.use(notFound);

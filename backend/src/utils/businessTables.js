@@ -14,6 +14,7 @@ export const BUSINESS_TABLES = [
   'PendingAssignment',
   'CourseInstructor',
   'Enrollment',
+  'PlacementTest',
   'Student',
   'Cycle',
   'Course',

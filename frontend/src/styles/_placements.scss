@@ -1,0 +1,80 @@
+// Placement tests page and dialogs.
+.placements-panel { padding: 0; overflow: hidden; .filter-toolbar { padding: 14px 16px; } }
+.placements-table {
+  td { vertical-align: middle; }
+  .placements-by { display: block; color: #95a2b7; font-size: 11px; }
+  // The actions sit in a normal table cell (so the row's border runs the full width), in a flex box inside it.
+  .placements-actions-cell { width: 1%; white-space: nowrap; }
+  .placements-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  tbody tr { animation: placement-row-in .35s ease both; animation-delay: var(--row-delay, 0ms); transition: background-color .15s ease; }
+  tbody tr:hover td { background: #f6f8fd; }
+  // Waiting students without a registration ID stand out for the main mod.
+  tbody tr.is-missing-reg td { background: #fffaf0; }
+  tbody tr.is-missing-reg td:first-child { box-shadow: inset 3px 0 0 #f0a23a; }
+}
+// Fade only (no sliding), so nothing pokes out of the table and flashes a scrollbar.
+@keyframes placement-row-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .placements-table tbody tr { animation: none; } }
+.placements-panel { transition: opacity .25s ease; &.is-refreshing { opacity: .7; } }
+.placements-student { strong { display: block; color: #1d2c48; } }
+.placements-reg { display: block; color: #6b7b95; font-size: 11px; font-variant-numeric: tabular-nums; }
+.placement-noreg { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; margin-top: 3px; padding: 1px 4px 1px 7px; border-radius: 999px; background: #ffedd2; border: 1px solid #f4c27a; color: #8a4300; font-size: 11px; font-weight: 700;
+  .text-button { padding: 1px 7px; font-size: 11px; font-weight: 800; color: #1d4ed8; }
+}
+.placement-reg-wrap { overflow: hidden; }
+.placement-reg-note { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #f4c27a; border-radius: 10px; background: #fff8ec; color: #8a4300; font-size: 13px; svg { flex-shrink: 0; } }
+.placement-place-button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 0; border-radius: 8px; background: #4c65eb; color: #fff; font-size: 12px; font-weight: 700; cursor: pointer; transition: background-color .15s ease, transform .15s ease;
+  &:hover { background: #3b52d6; } &:active { transform: scale(.97); }
+}
+.placement-level { display: inline-flex; padding: 3px 10px; border-radius: 999px; background: #eef2ff; border: 1px solid #c9d7fb; color: #2f54c9; font-size: 12px; font-weight: 800; }
+.placement-status { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 7px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  &.is-placed { background: #e3f6ea; border: 1px solid #bfe6cd; color: #12703f; }
+  &.is-waiting { background: #fff1d6; border: 1px solid #f5d79a; color: #8a5300; }
+}
+.placement-dialog { width: min(560px, 100%); display: flex; flex-direction: column; gap: 12px;
+  h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+  label { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: #4f6282; }
+  .policy-check { flex-direction: row; align-items: center; }
+}
+.placement-new-student { display: grid; gap: 10px; }
+.placement-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 640px) { .placement-fields { grid-template-columns: 1fr; } }
+.placement-match { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #f5d79a; border-radius: 10px; background: #fff8ec; color: #8a5300;
+  div { flex: 1; display: flex; flex-direction: column; gap: 2px; font-size: 12px; strong { font-size: 13px; } }
+}
+.placement-filters { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.placement-cycles { display: flex; flex-direction: column; gap: 6px; max-height: 360px; overflow-y: auto; padding-inline-end: 2px; }
+.placement-none { padding: 18px 4px; text-align: center; }
+.placement-cycle { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid #e1e7f0; border-radius: 10px; background: #fff; text-align: start; cursor: pointer; transition: border-color .15s ease, background-color .15s ease, transform .15s ease; animation: placement-row-in .3s ease both;
+  &:hover { border-color: #8da2f2; background: #f5f7ff; } &:active { transform: scale(.99); }
+}
+.placement-cycle-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  strong { display: flex; align-items: center; flex-wrap: wrap; color: #1d2c48; font-size: 14px; } small { color: #6b7b95; font-size: 12px; }
+}
+// The start date, clearly on the right.
+.placement-cycle-start { display: flex; align-items: center; gap: 7px; padding: 6px 10px; border-radius: 9px; background: #eef2ff; color: #3949a3;
+  > span { display: flex; flex-direction: column; line-height: 1.15; } small { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #7b88c4; } b { font-size: 14px; font-weight: 800; color: #24357f; font-variant-numeric: tabular-nums; }
+}
+.placement-cycle-go { color: #8a98ae; flex-shrink: 0; }
+.tested-student-meta { color: #2f54c9; font-weight: 700; }
+// Team & access: the placement tests toggle and tag.
+.access-placement-toggle { align-items: flex-start !important; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid #dfe5ef; border-radius: 10px; background: #f8fafd;
+  span { display: flex; flex-direction: column; gap: 2px; } small { color: #6b7b95; }
+}
+.team-placement-tag { display: inline-flex; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #eef2ff; border: 1px solid #c9d7fb; color: #2f54c9; font-size: 11px; font-weight: 700; }
+// A waiting student without a registration ID: the name itself opens "Add registration ID".
+.placements-name-button { display: block; padding: 0; border: 0; background: transparent; text-align: start; cursor: pointer;
+  strong { text-decoration: underline dotted #d99a2b; text-underline-offset: 3px; transition: color .15s ease; }
+  &:hover strong { color: #b35c00; }
+  &:focus-visible { outline: 2px solid #8da2f2; outline-offset: 2px; border-radius: 4px; }
+}
+
+// Height glides between tabs instead of holding the old height and snapping.
+.smooth-region { overflow: hidden; transition: height .35s cubic-bezier(.22, 1, .36, 1); }
+@media (prefers-reduced-motion: reduce) { .smooth-region { transition: none; } }
+// The score, easy to spot.
+.placement-score { display: inline-block; min-width: 34px; padding: 2px 8px; border-radius: 7px; background: #eef2ff; color: #24357f; font-size: 13px; font-weight: 800; text-align: center; font-variant-numeric: tabular-nums; }
+
+// The table only ever scrolls sideways; never a vertical scrollbar flashing during a transition.
+.placements-panel .table-scroll { overflow-y: hidden; }
+.smooth-region-inner { position: relative; }

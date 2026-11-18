@@ -80,6 +80,7 @@ export const loginUser = atomic(async (req, res, next) => {
           isActive: user.isActive,
           isBanned: user.isBanned,
           canManageBooks: Boolean(user.canManageBooks),
+          canPlacementTest: Boolean(user.canPlacementTest),
           branchScope: user.branchScope ?? null,
           branches: user.branches ?? null
         },
@@ -300,6 +301,7 @@ export const ssoLogin = atomic(async (req, res, next) => {
         isActive: user.isActive,
         isBanned: user.isBanned,
         canManageBooks: Boolean(user.canManageBooks),
+          canPlacementTest: Boolean(user.canPlacementTest),
         branchScope: user.branchScope ?? null,
         branches: user.branches ?? null
       },

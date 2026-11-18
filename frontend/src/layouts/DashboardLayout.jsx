@@ -1,4 +1,4 @@
-import { canSeePayroll } from '../utils/access';
+import { canSeePayroll, canUsePlacements } from '../utils/access';
 import AssignmentReviewDialog from '../components/AssignmentReviewDialog';
 import { RequestReviewContext } from '../context/RequestReviewContext';
 import { useContext, useState, useEffect, useRef } from 'react';
@@ -7,11 +7,11 @@ import { AuthContext } from '../context/AuthContext';
 import { Brand, initials } from '../components/WorkspaceUI';
 import { MotionRegion, MotionSurface } from '../components/WorkspaceMotion';
 import { AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, BookOpen, Users, Wallet, Settings2, ScrollText, LogOut, Bell, ChevronRight, Menu, X, Check, Search, UserRound, PanelLeftClose, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Users, Wallet, Settings2, ScrollText, LogOut, Bell, ChevronRight, Menu, X, Check, Search, UserRound, PanelLeftClose, GraduationCap, ClipboardCheck } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-const pageNames = { '/logs':'Activity log', '/': 'Overview', '/notifications': 'Notifications', '/courses': 'Courses', '/students': 'Students', '/employees': 'Employees', '/instructors': 'Employees', '/finances': 'Finance', '/finances/income': 'Finance / Income', '/finances/payroll': 'Finance / Payroll', '/users': 'Team & access', '/profile': 'My profile', '/register-user': 'Invite a colleague' };
+const pageNames = { '/logs':'Activity log', '/': 'Overview', '/notifications': 'Notifications', '/courses': 'Courses', '/students': 'Students', '/tests': 'Tests', '/employees': 'Employees', '/instructors': 'Employees', '/finances': 'Finance', '/finances/income': 'Finance / Income', '/finances/payroll': 'Finance / Payroll', '/users': 'Team & access', '/profile': 'My profile', '/register-user': 'Invite a colleague' };
 const plainText = (html = '') => new DOMParser().parseFromString(html, 'text/html').body.textContent || '';
 
 export default function DashboardLayout() {
@@ -76,8 +76,8 @@ export default function DashboardLayout() {
   }, [mobileOpen]);
 
   const unread = unreadTotal;
-  const navCount = to => to === '/courses' ? attention?.pendingApprovals || 0 : to === '/finances' ? (attention?.moneyChecks?.unchecked.count || 0) + (attention?.moneyChecks?.changed.count || 0) : 0;
-  const nav = [{ to: '/', name: 'Overview', icon: LayoutDashboard }, { to: '/courses', name: 'Courses', icon: BookOpen }, { to: '/students', name: 'Students', icon: GraduationCap }, ...(isManager ? [{ to: '/employees', name: 'Employees', icon: Users }, { to: '/finances', name: 'Finance', icon: Wallet }] : [])];
+  const navCount = to => to === '/tests' ? attention?.unplacedTests || 0 : to === '/courses' ? attention?.pendingApprovals || 0 : to === '/finances' ? (attention?.moneyChecks?.unchecked.count || 0) + (attention?.moneyChecks?.changed.count || 0) : 0;
+  const nav = [{ to: '/', name: 'Overview', icon: LayoutDashboard, color: '#60a5fa' }, { to: '/courses', name: 'Courses', icon: BookOpen, color: '#a78bfa' }, { to: '/students', name: 'Students', icon: GraduationCap, color: '#34d399' }, ...(canUsePlacements(user) ? [{ to: '/tests', name: 'Tests', icon: ClipboardCheck, color: '#f472b6' }] : []), ...(isManager ? [{ to: '/employees', name: 'Employees', icon: Users, color: '#22d3ee' }, { to: '/finances', name: 'Finance', icon: Wallet, color: '#fbbf24' }] : [])];
   const openRequestReview = async id => {
     if (!canSeePayroll(user)) return;
     const load = ++reviewLoad.current;
@@ -112,9 +112,9 @@ export default function DashboardLayout() {
     <aside ref={sidebarRef} className={`sidebar ${mobileOpen ? 'is-open' : ''}`} aria-label="Main navigation">
       <div className="sidebar-brand"><Link to="/" aria-label="AAST Finance overview"><Brand inverse /></Link><button className="icon-button sidebar-close" aria-label="Close menu" onClick={() => setMobileOpen(false)}><PanelLeftClose size={20} /></button></div>
       <div className="nav-section-label">Workspace</div>
-      <nav className="side-nav">{nav.map(({ to, name, icon: Icon }) => <NavLink key={to} to={to} end={to === '/'} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{navCount(to) > 0 ? <span className="nav-count" aria-label={`${navCount(to)} need attention`}>{navCount(to) > 99 ? '99+' : navCount(to)}</span> : to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
+      <nav className="side-nav">{nav.map(({ to, name, icon: Icon, color }) => <NavLink key={to} to={to} end={to === '/'} style={{ '--nav-color': color }} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Icon size={19} strokeWidth={1.8} /><span>{name}</span>{navCount(to) > 0 ? <span className="nav-count" aria-label={`${navCount(to)} need attention`}>{navCount(to) > 99 ? '99+' : navCount(to)}</span> : to === '/finances' && <span className="nav-tag">EGP</span>}</NavLink>)}</nav>
       <div className="nav-section-label administration-label">Settings</div>
-      <nav className="side-nav">{isManager && <NavLink to="/users" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{canSeePayroll(user)&&<NavLink to="/logs" className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
+      <nav className="side-nav">{isManager && <NavLink to="/users" style={{ '--nav-color': '#c4b5fd' }} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><Settings2 size={19} strokeWidth={1.8} />Team & access</NavLink>}<NavLink to="/profile" style={{ '--nav-color': '#93c5fd' }} className={({ isActive }) => `side-link ${isActive ? 'active' : ''}`}><UserRound size={19} strokeWidth={1.8} />My profile</NavLink>{canSeePayroll(user)&&<NavLink to="/logs" style={{ '--nav-color': '#fb923c' }} className={({isActive})=>`side-link ${isActive?'active':''}`}><ScrollText size={19} strokeWidth={1.8}/>Activity log</NavLink>}</nav>
       <div className="sidebar-bottom">
         <div className="account-row"><Link to="/profile" className="account-link"><span className="avatar">{initials(user.firstName || user.username)}</span><span className="account-name">{user.firstName || user.username}<small>{user.role === 'mod' ? 'Moderator' : user.role === 'admin' ? 'Administrator' : 'User'}</small></span></Link></div><button className="sidebar-logout" onClick={async () => { try { await logout(); } catch { toast.error('The sign-out activity could not be recorded.'); } finally { navigate('/login'); } }}><LogOut size={18} /><span>Sign out</span></button>
       </div>

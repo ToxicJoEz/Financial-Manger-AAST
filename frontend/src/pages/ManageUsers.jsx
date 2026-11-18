@@ -1,3 +1,4 @@
+import '../styles/_placements.scss';
 import { AnimatePresence } from 'framer-motion';
 import { PageHeading } from '../components/WorkspaceUI';
 import Dialog from '../components/Dialog';
@@ -45,7 +46,7 @@ function AccessFields({ form, setForm, adminView, canPickBranches }) {
     <label>Role</label>
     <div className="access-role-picker" role="radiogroup" aria-label="Role">{roles.map(r => <button key={r.value} type="button" role="radio" aria-checked={form.role === r.value} className={form.role === r.value ? 'active' : ''} onClick={() => setForm(f => ({ ...f, role: r.value }))}><strong>{r.label}</strong><span>{r.help}</span></button>)}</div>
     {form.role === 'mod' && <><label htmlFor="access-branch">Mod for</label><CustomFilterDropdown id="access-branch" allowClear={false} value={form.branch} onChange={value => setForm(f => ({ ...f, branch: value }))} options={modOptions} placeholder={adminView ? 'Choose main or a branch' : 'Choose a branch'} /></>}
-    {form.role === 'user' && (canPickBranches ? <><label>Can view branches</label><div className="access-branch-boxes">{BRANCHES.map(b => { const on = form.branches.includes(b); return <button key={b} type="button" role="checkbox" aria-checked={on} className={on ? 'active' : ''} style={{ '--branch-color': getBranchColor(b) }} onClick={() => setForm(f => ({ ...f, branches: on ? f.branches.filter(x => x !== b) : [...f.branches, b] }))}>{branchName(b)}</button>; })}</div><small className="muted">Users only view courses and students in these branches. With none, they see nothing.</small></> : <small className="muted">New users see your branch only. The main mod can add more branches.</small>)}
+    {form.role === 'user' && (canPickBranches ? <><label>Can view branches</label><div className="access-branch-boxes">{BRANCHES.map(b => { const on = form.branches.includes(b); return <button key={b} type="button" role="checkbox" aria-checked={on} className={on ? 'active' : ''} style={{ '--branch-color': getBranchColor(b) }} onClick={() => setForm(f => ({ ...f, branches: on ? f.branches.filter(x => x !== b) : [...f.branches, b] }))}>{branchName(b)}</button>; })}</div><small className="muted">Users only view courses and students in these branches. With none, they see nothing.</small><label className="policy-check access-placement-toggle"><input type="checkbox" checked={Boolean(form.placement)} onChange={e => setForm(f => ({ ...f, placement: e.target.checked }))} /><span><strong>Placement tests</strong><small>Can open the Tests tab and record placement test results for these branches.</small></span></label></> : <small className="muted">New users see your branch only. The main mod can add more branches.</small>)}
   </>;
 }
 
@@ -170,6 +171,8 @@ const ManageUsers = () => {
         await axios.put('/users/' + target.id + '/branch-scope', { branchScope });
       if (form.role === 'user' && mainManager && (target.role !== 'user' || (target.branches || '') !== BRANCHES.filter(b => form.branches.includes(b)).join(',')))
         await axios.put('/users/' + target.id + '/branches', { branches: form.branches });
+      if (form.role === 'user' && mainManager && Boolean(form.placement) !== Boolean(target.canPlacementTest))
+        await axios.put('/users/' + target.id + '/permissions', { canPlacementTest: Boolean(form.placement) });
       toast.success(`${target.username}'s access updated`);
       setEditing(null);
       fetchUsers();
@@ -196,13 +199,13 @@ const ManageUsers = () => {
         <tbody>
           {users.map(u => <tr key={u.id}>
             <td><div className="team-person">{u.avatar ? <img src={u.avatar} alt="" /> : <span className="team-avatar">{u.username.charAt(0).toUpperCase()}</span>}<div><strong>{u.username}</strong><small>{u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : 'No name set'}</small></div></div></td>
-            <td><span className={`team-role team-role-${u.role}${u.branchScope ? ' is-branch' : ''}`}>{roleLabel(u)}</span><small className="team-access">{accessSummary(u)}</small></td>
+            <td><span className={`team-role team-role-${u.role}${u.branchScope ? ' is-branch' : ''}`}>{roleLabel(u)}</span><small className="team-access">{accessSummary(u)}</small>{u.role === 'user' && u.canPlacementTest && <span className="team-placement-tag">Placement tests</span>}</td>
             <td><div className="team-status">{u.isBanned ? <span className="badge badge-error">Banned</span> : u.isActive ? <span className="badge badge-success">Active</span> : <span className="badge badge-error">Deactivated</span>}{u.isLocked && <span className="badge badge-warning">Locked (too many sign-in attempts)</span>}</div></td>
             <td className="team-last">{lastActive(u.lastLogin)}</td>
             <td>{u.username === 'main-admin' ? <span className="team-root"><ShieldCheck size={15} />Root admin</span> : <div className="team-actions">
               {u.isLocked && canModify(u) && <button className="btn-sm btn-outline" onClick={() => handleUnlock(u)}>Unlock</button>}
               {canModify(u) ? <>
-                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [] } })}><Pencil size={13} />Edit access</button>
+                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [], placement: Boolean(u.canPlacementTest) } })}><Pencil size={13} />Edit access</button>
 
                 <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
                 {isAdmin && u.id !== currentUser?.id && <button className="btn-sm btn-outline team-delete" title="Permanently delete this account" aria-label={'Permanently delete ' + u.username} onClick={() => setDeleting({ user: u, typed: '' })}><Trash2 size={13} />Delete</button>}

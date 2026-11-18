@@ -23,6 +23,8 @@ model User {
   isBanned  Boolean  @default(false)
   lastLogin DateTime?
   canManageBooks Boolean @default(false)
+  // Users only: can enter placement test results (the Tests tab). Set by admins and the main mod.
+  canPlacementTest Boolean @default(false)
   // Mods only: null = main mod (all branches, payroll); a branch (e.g. FOUAD) = branch mod whose money is checked.
   branchScope String?
   // Users (role "user") see only these branches (comma-separated); none means nothing until assigned.
@@ -231,6 +233,27 @@ model Student {
   deletedBy          String?
 
   enrollments        Enrollment[]
+  placementTests     PlacementTest[]
+}
+
+// A placement test result entered by the testing office: the score and the level they recommend. The student is
+// "placed" as soon as they are enrolled in any cycle after the test (worked out, not stored).
+model PlacementTest {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  branch      String
+  score       Float
+  level       String
+  testedAt    DateTime @default(now())
+  enteredById String?
+  enteredBy   String
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([studentId])
+  @@index([branch])
 }
 
 model Enrollment {

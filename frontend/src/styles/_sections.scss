@@ -276,3 +276,13 @@ tr.just-added-label-row > td { padding: 10px 14px 6px; background: #fff; color: 
 .team-delete { color: #b42318 !important; border-color: #f3c0c0 !important; svg { margin-inline-end: 4px; } }
 .team-delete-dialog .team-confirm-title { display: flex; align-items: center; gap: 8px; color: #b42318; }
 .team-delete-confirm { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 16px; font-size: 13px; color: #4f6282; strong { color: #1d2c48; } }
+
+// Sidebar: each section's icon has its own colour so it can be found at a glance; the active one turns white.
+.sidebar .side-link svg { color: var(--nav-color, currentColor); transition: color .15s ease, transform .15s ease; }
+.sidebar .side-link:hover svg { transform: scale(1.06); }
+.sidebar .side-link.active svg { color: #fff; }
+// Signing out is red.
+.sidebar .sidebar-logout { background: #4a2330; border-color: #7a3242; color: #ffd7dc;
+  svg { color: #ff7b8a; }
+  &:hover { background: #b42335; border-color: #d43a4d; color: #fff; svg { color: #fff; } }
+}

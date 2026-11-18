@@ -275,7 +275,7 @@ export default function Students() {
                         <span className="student-avatar">{initials(student.name)}</span>
                         <div className="student-name-block">
                           <button type="button" className="student-name-link" onClick={()=>setViewingStudent(student)}>{student.name}</button> {student.deletedAt && <span className="deleted-tag">Archived</span>}
-                          <span>{student.englishName || `ID: ${student.id.slice(0, 8)}…`}</span><small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?dateText(student.dateOfBirth):null].filter(Boolean).join(" · ")}</small>
+                          {student.englishName && <span>{student.englishName}</span>}<small>{[student.nationality, student.placeOfBirth, student.dateOfBirth?dateText(student.dateOfBirth):null].filter(Boolean).join(" · ")}</small>
                         </div>
                       </div>
                     </td>
@@ -283,10 +283,10 @@ export default function Students() {
                       <span className="student-reg-badge">{student.registrationNumber||'Not issued'}</span>
                     </td>
                     <td>
-                      {student.mobile ? <a href={`tel:${student.mobile}`} className="student-contact-link">
+                      {student.mobile ? <span className="student-contact-link">
                           <Phone size={13} />
                           {student.mobile}
-                        </a> : <span className="student-no-contact">No phone registered</span>}
+                        </span> : <span className="student-no-contact">No phone registered</span>}
                     </td>
                     <td>
                       <span className="muted">

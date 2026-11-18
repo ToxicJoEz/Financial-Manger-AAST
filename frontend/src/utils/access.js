@@ -17,3 +17,5 @@ export const branchScopeOf = user => (user?.role === 'mod' && user.branchScope ?
 export const modTitle = user => (user?.branchScope ? `${branchName(user.branchScope)} mod` : 'Main mod');
 // Rebuilt from the live branch list each time it is read.
 export const modTitleOptions = () => [{ value: 'MAIN', label: 'Main mod' }, ...MOD_BRANCH_SCOPES.map(b => ({ value: b, label: `${branchName(b)} mod` }))];
+// Placement tests (the Tests tab): users with the toggle, admins and the main mod.
+export const canUsePlacements = user => canSeePayroll(user) || (user?.role === 'user' && Boolean(user.canPlacementTest));

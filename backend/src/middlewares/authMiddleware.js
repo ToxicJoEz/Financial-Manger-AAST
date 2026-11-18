@@ -27,6 +27,7 @@ export const protect = async (req, res, next) => {
           isActive: true,
           isBanned: true,
           canManageBooks: true,
+          canPlacementTest: true,
           branchScope: true,
           branches: true
         }

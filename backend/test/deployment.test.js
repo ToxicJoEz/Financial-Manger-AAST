@@ -94,3 +94,6 @@ test('Wiping all but accounts keeps users and branches and empties everything el
 
 test('Branch mod cycles wait for approval, lock when approved; exam umbrellas allow numberless cycles', () =>
   fixture('cycleApprovalWorkflow.js'));
+
+test('Placement tests: testers record results for their branches; students are placed when they join a cycle', () =>
+  fixture('placementWorkflow.js'));

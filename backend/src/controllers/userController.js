@@ -2,7 +2,7 @@ import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import prisma, { atomic } from '../db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { logAction } from '../utils/logger.js';
-import { MOD_BRANCH_SCOPES } from '../utils/access.js';
+import { MOD_BRANCH_SCOPES, canSeePayroll } from '../utils/access.js';
 import { isAccountLocked, unlockUser } from '../utils/loginRateLimiter.js';
 
 // Helper to strictly enforce hierarchical modification rules
@@ -31,6 +31,7 @@ export const getUsers = async (req, res, next) => {
         isActive: true,
         isBanned: true,
         canManageBooks: true,
+        canPlacementTest: true,
         branchScope: true,
         branches: true,
         avatar: true,
@@ -93,6 +94,7 @@ export const updateUserStatus = atomic(async (req, res, next) => {
         isActive: true,
         isBanned: true,
         canManageBooks: true,
+        canPlacementTest: true,
         branchScope: true,
         branches: true,
         avatar: true,
@@ -172,7 +174,8 @@ export const updateUserRole = atomic(async (req, res, next) => {
       data: {
         role,
         ...(role !== 'mod' ? { branchScope: null } : isMainMod(req.user) ? { branchScope } : {}),
-        ...(role !== 'user' ? { branches: null } : {})
+        // Branches and the placement tests toggle belong to user accounts only.
+        ...(role !== 'user' ? { branches: null, canPlacementTest: false } : {})
       },
       select: {
         id: true,
@@ -184,6 +187,7 @@ export const updateUserRole = atomic(async (req, res, next) => {
         isActive: true,
         isBanned: true,
         canManageBooks: true,
+        canPlacementTest: true,
         branchScope: true,
         branches: true,
         avatar: true,
@@ -294,8 +298,13 @@ export const updateProfile = atomic(async (req, res, next) => {
 // @desc    Update user permissions (e.g. canManageBooks)
 export const updateUserPermissions = atomic(async (req, res, next) => {
   try {
-    const { canManageBooks } = req.body;
+    const { canManageBooks, canPlacementTest } = req.body;
     const targetUser = await prisma.user.findUnique({ where: { id: req.params.id } });
+    // The placement tests toggle is for user accounts, set by admins and the main mod.
+    if (canPlacementTest !== undefined && !canSeePayroll(req.user))
+      return res.status(403).json({ error: 'Only admins and the main mod can give access to placement tests.' });
+    if (canPlacementTest && targetUser && targetUser.role !== 'user')
+      return res.status(400).json({ error: 'Placement tests access is for user accounts.' });
 
     if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
@@ -308,7 +317,8 @@ export const updateUserPermissions = atomic(async (req, res, next) => {
     const updatedUser = await prisma.user.update({
       where: { id: req.params.id },
       data: {
-        canManageBooks: canManageBooks !== undefined ? Boolean(canManageBooks) : targetUser.canManageBooks
+        canManageBooks: canManageBooks !== undefined ? Boolean(canManageBooks) : targetUser.canManageBooks,
+        canPlacementTest: canPlacementTest !== undefined ? Boolean(canPlacementTest) : targetUser.canPlacementTest
       },
       select: {
         id: true,
@@ -320,6 +330,7 @@ export const updateUserPermissions = atomic(async (req, res, next) => {
         isActive: true,
         isBanned: true,
         canManageBooks: true,
+        canPlacementTest: true,
         branchScope: true,
         branches: true,
         avatar: true,
@@ -330,7 +341,7 @@ export const updateUserPermissions = atomic(async (req, res, next) => {
 
     await logAction(
       'USER_PERMISSIONS_UPDATED',
-      'Permissions updated for @' + targetUser.username + ': canManageBooks=' + Boolean(updatedUser.canManageBooks),
+      `Permissions updated for @${targetUser.username}: placement tests ${updatedUser.canPlacementTest ? 'on' : 'off'}, books ${updatedUser.canManageBooks ? 'on' : 'off'}`,
       req.user.username,
       targetUser.username
     );
