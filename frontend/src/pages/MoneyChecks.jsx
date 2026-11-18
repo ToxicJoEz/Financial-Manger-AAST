@@ -1,4 +1,5 @@
 import { useContext, useEffect, useRef, useState } from 'react';
+import { useNames } from '../context/NamesContext';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { AnimatePresence } from 'framer-motion';
@@ -30,6 +31,7 @@ const keyOf = item => `${item.kind}:${item.id}`;
 
 // Money recorded in each branch, confirmed record by record by an admin or the main mod.
 export default function MoneyChecks() {
+  const { nameOf } = useNames();
   const { user } = useContext(AuthContext);
   const canMark = canCheckBranchMoney(user);
   const [params, setParams] = useSearchParams();
@@ -72,7 +74,7 @@ export default function MoneyChecks() {
     setSelected([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, from, to, branch]);
-  const items = (data?.items || []).filter(item => !search.trim() || `${item.student} ${item.cycle} ${item.receiptNumber || ''} ${item.recordedBy}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const items = (data?.items || []).filter(item => !search.trim() || `${item.student} ${item.cycle} ${item.receiptNumber || ''} ${item.recordedBy} ${nameOf(item.recordedBy)}`.toLowerCase().includes(search.trim().toLowerCase()));
   const groups = Object.values(items.reduce((map, item) => {
     const group = (map[item.cycleId || item.cycle] ||= { id: item.cycleId || item.cycle, name: item.cycle, items: [] });
     group.items.push(item);
@@ -131,8 +133,8 @@ export default function MoneyChecks() {
             <td>{typeLabels[item.type] || item.type}{item.description && item.kind === 'PAYMENT' && <small className="money-check-note" title={item.description}>{item.description}</small>}</td>
             <td>{[methodLabels[item.method], item.receiptNumber && `رقم الحافظة ${item.receiptNumber}`].filter(Boolean).join(' · ') || <span className="muted">—</span>}</td>
             <td className={`number currency${item.amount < 0 ? ' is-negative' : ''}`}>{money(item.amount)} EGP</td>
-            <td>@{item.recordedBy}</td>
-            <td><span className={`money-check-state is-${item.state.toLowerCase()}`}>{stateLabels[item.state]}</span>{item.check && <small className="money-check-by">by @{item.check.checkedBy} · {dateText(item.check.checkedAt)}{item.check.note ? ` · ${item.check.note}` : ''}</small>}</td>
+            <td>{nameOf(item.recordedBy)}</td>
+            <td><span className={`money-check-state is-${item.state.toLowerCase()}`}>{stateLabels[item.state]}</span>{item.check && <small className="money-check-by">by {nameOf(item.check.checkedBy)} · {dateText(item.check.checkedAt)}{item.check.note ? ` · ${item.check.note}` : ''}</small>}</td>
           </tr>)}
         </tbody></table></div>
       </article>;

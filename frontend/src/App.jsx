@@ -1,4 +1,5 @@
 import { canSeePayroll, canCheckBranchMoney, canUsePlacements } from './utils/access';
+import { NamesProvider } from './context/NamesContext';
 import PlacementTests from './pages/PlacementTests';
 import MoneyChecks from './pages/MoneyChecks';
 import ActivityLog from './pages/ActivityLog';
@@ -107,7 +108,7 @@ const App = () => {
           
           {/* Protected Routes (Wrapped in the Global Dashboard Layout) */}
           <Route element={<ProtectedRoute>
-                <DashboardLayout />
+                <NamesProvider><DashboardLayout /></NamesProvider>
               </ProtectedRoute>}>
             <Route path="/" element={<Home />} />
             <Route path="/register-user" element={<Navigate to="/users" replace state={{ add: true }} />} />

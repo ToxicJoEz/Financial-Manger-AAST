@@ -281,12 +281,24 @@ tr.just-added-label-row > td { padding: 10px 14px 6px; background: #fff; color: 
 .sidebar .side-link svg { color: var(--nav-color, currentColor); transition: color .15s ease, transform .15s ease; }
 .sidebar .side-link:hover svg { transform: scale(1.06); }
 .sidebar .side-link.active svg { color: #fff; }
-// Signing out is red.
-.sidebar .sidebar-logout { background: #4a2330; border-color: #7a3242; color: #ffd7dc;
-  svg { color: #ff7b8a; }
-  &:hover { background: #b42335; border-color: #d43a4d; color: #fff; svg { color: #fff; } }
+// Signing out uses #EBD24C, the opposite of the active tab's indigo (#4C65EB), so it stands apart.
+.sidebar .sidebar-logout { background: #ebd24c; border-color: #ebd24c; color: #202a43;
+  svg { color: #202a43; }
+  &:hover { background: #f2dd6a; border-color: #f2dd6a; color: #202a43; svg { color: #202a43; } }
 }
 
 // Searchable dropdown lists float above their window (drawn in their own layer), so they never resize it.
 .employee-search-results.is-floating { z-index: 1200; margin-top: 0; overflow-y: auto; animation: dropdown-in .14s ease both; }
 @keyframes dropdown-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+// Sidebar texture: the sign-in screen's engraved lines as still, flowing waves behind the menu.
+// (The sidebar is already pinned to the screen with position: fixed, so the texture anchors to it.)
+.sidebar { isolation: isolate; }
+.sidebar > :not(.sidebar-texture) { position: relative; z-index: 1; }
+.sidebar-texture { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.sidebar-guilloche { position: absolute; top: 50%; left: 50%; width: 1500px; height: 1500px; transform: translate(-30%, -50%); fill: none; stroke: #fff; stroke-width: 0.9; opacity: 0.15;
+  // Only the lace shows (no outer rings): the rosette is far bigger than the sidebar, so no circle outline is visible.
+  circle { display: none; }
+  // Fullest at the top and bottom, lightest in the middle where the menu is, so the text stays easy to read.
+  mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, .75) 14%, rgba(0, 0, 0, .4) 30%, rgba(0, 0, 0, .4) 72%, rgba(0, 0, 0, .85) 88%, #000 100%);
+}

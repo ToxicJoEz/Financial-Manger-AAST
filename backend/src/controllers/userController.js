@@ -1,4 +1,5 @@
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
+import { fullName, readNames } from '../utils/people.js';
 import prisma, { atomic } from '../db/prisma.js';
 import bcrypt from 'bcryptjs';
 import { logAction } from '../utils/logger.js';
@@ -432,4 +433,26 @@ export const deleteUserPermanently = atomic(async (req, res) => {
     req.user.username
   );
   res.json({ message: `${target.username} was permanently deleted.` });
+});
+
+// Everyone's display name, for showing full names instead of usernames (usernames are only for signing in).
+export const getDirectory = async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({ select: { username: true, firstName: true, lastName: true } });
+    res.json({ names: Object.fromEntries(users.map(u => [u.username, fullName(u)])) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Admins and the main mod set an account's full name.
+export const updateUserName = atomic(async (req, res) => {
+  const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (!enforceHierarchy(req.user, target))
+    return res.status(403).json({ error: 'You do not have permission to change this account.' });
+  const names = readNames(req.body);
+  const updated = await prisma.user.update({ where: { id: target.id }, data: names });
+  await logAction('USER_NAME_UPDATED', `Name for @${target.username}: ${fullName(target)} -> ${fullName(updated)}`, req.user.username, target.username);
+  res.json({ success: true, user: { id: updated.id, username: updated.username, firstName: updated.firstName, lastName: updated.lastName } });
 });

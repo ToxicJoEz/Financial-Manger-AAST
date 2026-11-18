@@ -1,4 +1,5 @@
 import prisma, { atomic } from '../db/prisma.js';
+import { checkPhone } from '../utils/people.js';
 import { logAction } from '../utils/logger.js';
 import { canSeePayroll, branchScopeOf, visibleBranchesOf } from '../utils/access.js';
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
@@ -83,8 +84,13 @@ export const listPlacements = async (req, res, next) => {
     const allowed = placementBranches(req.user);
     const branch = typeof req.query.branch === 'string' && req.query.branch ? req.query.branch : null;
     const search = String(req.query.search || '').trim().slice(0, 100);
+    // Filters: recommended level ("KET") and purpose ("IELTS").
+    const level = typeof req.query.level === 'string' && req.query.level ? req.query.level : null;
+    const purpose = typeof req.query.purpose === 'string' && req.query.purpose ? req.query.purpose : null;
     const tests = await prisma.placementTest.findMany({
       where: {
+        ...(level ? { level: { equals: level, mode: 'insensitive' } } : {}),
+        ...(purpose ? { purpose } : {}),
         ...(allowed ? { branch: { in: branch ? allowed.filter(b => b === branch) : allowed } } : branch ? { branch } : {}),
         ...(search
           ? {
@@ -165,6 +171,7 @@ export const createPlacement = atomic(async (req, res) => {
       const registrationNumber = typeof input.registrationNumber === 'string' ? input.registrationNumber.trim() : '';
       if (!name) fail('Enter the student name.');
       if (name.length > 200 || mobile.length > 100 || registrationNumber.length > 100) fail('Some details are too long.');
+      checkPhone(mobile);
       // The same student already exists (same name and phone): say so instead of creating a duplicate.
       const people = await prisma.student.findMany({
         where: { deletedAt: null, OR: [{ mobile: { not: null } }, ...(registrationNumber ? [{ registrationNumber }] : [])] },

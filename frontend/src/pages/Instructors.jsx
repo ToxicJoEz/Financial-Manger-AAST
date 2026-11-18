@@ -1,4 +1,5 @@
 import ArchiveControls from '../components/ArchiveControls';
+import { cleanPhone } from '../utils/people';
 import EmployeeDetailsDialog from '../components/EmployeeDetailsDialog';
 import {MotionRegion} from '../components/WorkspaceMotion';
 import '../styles/_employeeDirectory.scss';
@@ -215,7 +216,7 @@ const Instructors = () => {
                 </div>
                 <div>
                   <label className="input-label appearance-text-blue-800">Mobile Number</label>
-                  <input type="text" className="input-field appearance-border-blue-100 appearance-focus-border-blue-400" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="01xxxxxxxxx" />
+                  <input type="text" className="input-field appearance-border-blue-100 appearance-focus-border-blue-400" value={mobile} inputMode="tel" onChange={e => setMobile(cleanPhone(e.target.value))} placeholder="01xxxxxxxxx" />
                 </div>
                 <div>
                   <label className="input-label appearance-text-blue-800 appearance-mb-1 block">Campus Branches</label>
@@ -259,9 +260,9 @@ const Instructors = () => {
                 </div>
                 <div>
                   <label className="input-label appearance-text-blue-800">Mobile Number</label>
-                  <input type="text" className="input-field appearance-border-blue-100 appearance-focus-border-blue-400" value={editingInst.mobile || ''} onChange={e => setEditingInst({
+                  <input type="text" className="input-field appearance-border-blue-100 appearance-focus-border-blue-400" value={editingInst.mobile || ''} inputMode="tel" onChange={e => setEditingInst({
                   ...editingInst,
-                  mobile: e.target.value
+                  mobile: cleanPhone(e.target.value)
                 })} placeholder="01xxxxxxxxx" />
                 </div>
                 <div>

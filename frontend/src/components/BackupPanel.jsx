@@ -1,4 +1,5 @@
 import { useContext, useRef, useState } from 'react';
+import { useNames } from '../context/NamesContext';
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 import { DatabaseBackup, Download, Upload, AlertTriangle, ShieldCheck } from 'lucide-react';
@@ -11,6 +12,7 @@ const LABELS = [['User', 'accounts'], ['Course', 'umbrellas'], ['Cycle', 'cycles
 // Full backups (everything: accounts, courses, money, payroll, logs) as a file on this computer, and restoring
 // one. Files travel in parts because hosting limits each request's size. Manual only: nothing is scheduled.
 export default function BackupPanel() {
+  const { nameOf } = useNames();
   const { logout } = useContext(AuthContext);
   const [progress, setProgress] = useState(null),
     [restore, setRestore] = useState(null),
@@ -84,7 +86,7 @@ export default function BackupPanel() {
       <h3><AlertTriangle size={20} />Replace everything with this backup?</h3>
       <dl className="backup-facts">
         <div><dt>File</dt><dd>{restore.fileName} · {size(restore.size)}</dd></div>
-        <div><dt>Made</dt><dd>{when(restore.createdAt)} by {restore.createdBy}</dd></div>
+        <div><dt>Made</dt><dd>{when(restore.createdAt)} by {nameOf(restore.createdBy)}</dd></div>
         {LABELS.map(([key, label]) => <div key={key}><dt>{label[0].toUpperCase() + label.slice(1)}</dt><dd>{(restore.counts?.[key] ?? 0).toLocaleString()}</dd></div>)}
       </dl>
       <p className="alert-error">All current data, including accounts and the activity log, is replaced by this backup. Anything added since it was made is lost. You will be signed out.</p>

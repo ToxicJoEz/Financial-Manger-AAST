@@ -97,6 +97,30 @@ try {
   assert.equal((await req(`/placements/${second.id}`, 'DELETE', undefined, joe)).status, 403);
   assert.equal((await req(`/placements/${first.id}`, 'DELETE', undefined, main)).status, 409);
   ok(await req(`/placements/${second.id}`, 'DELETE', undefined, main));
+  // Filters: recommended level and purpose.
+  const third = ok(await req('/placements', 'POST', { studentId: 'demo-student-3', branch: 'MIAMI' }, main));
+  ok(await req(`/placements/${third.id}`, 'PUT', { score: 30, level: 'KET', purpose: 'IELTS' }, joe));
+  const ket = ok(await req('/placements?status=unplaced&level=ket', 'GET', undefined, main));
+  assert(ket.rows.length && ket.rows.every(r => r.level === 'KET'));
+  assert(ok(await req('/placements?status=all&purpose=IELTS', 'GET', undefined, main)).rows.every(r => r.purpose === 'IELTS'));
+  // Several tested students placed in one cycle, one after another (what "Place together" does).
+  const ketCycle = cycle;
+  for (const r of ket.rows) ok(await req(`/cycles/${ketCycle.id}/enrollments`, 'POST', { studentId: r.student.id, tuitionType: 'FULL', recordPayment: true, amountPaid: Number(ketCycle.courseFee), paymentMethod: 'CASH' }, main));
+  assert.equal(ok(await req('/placements?status=unplaced&level=KET', 'GET', undefined, main)).rows.length, 0);
+  // Phone numbers have at most 14 digits.
+  const longPhone = await req('/placements', 'POST', { newStudent: { name: 'Long Phone', mobile: '0101234567890123' }, branch: 'MIAMI' }, main);
+  assert.equal(longPhone.status, 400);
+  assert.match(longPhone.data.error, /14 digits/);
+  assert.equal((await req('/students', 'POST', { name: 'Long Phone', mobile: '+20 101 234 567 890 12' }, main)).status, 400);
+  ok(await req('/students', 'POST', { name: 'Ok Phone', mobile: '+20 1012345678' }, main));
+  // Full names: set on accounts, shown instead of usernames (usernames are only for signing in).
+  const named = ok(await req('/auth/register', 'POST', { username: 'name-test', password: 'NameTest!123', role: 'user', firstName: 'Sara', lastName: 'Nabil' }, main));
+  let names = ok(await req('/users/directory', 'GET', undefined, joe)).names;
+  assert.equal(names['name-test'], 'Sara Nabil');
+  ok(await req(`/users/${named.user.id}/name`, 'PUT', { firstName: 'Sara', lastName: 'Kamal' }, main));
+  assert.equal((await req(`/users/${named.user.id}/name`, 'PUT', { firstName: 'X' }, joe)).status, 403);
+  names = ok(await req('/users/directory', 'GET', undefined, joe)).names;
+  assert.equal(names['name-test'], 'Sara Kamal');
   // Turning the toggle off closes the tab again.
   ok(await req(`/users/${joeAccount.id}/permissions`, 'PUT', { canPlacementTest: false }, main));
   assert.equal((await req('/placements', 'GET', undefined, await login('Joe'))).status, 403);

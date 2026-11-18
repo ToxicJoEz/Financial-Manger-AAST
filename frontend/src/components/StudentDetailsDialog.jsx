@@ -1,4 +1,5 @@
 import PrivateBadge from './PrivateBadge';
+import { useNames } from '../context/NamesContext';
 import { useContext, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { ArrowLeft, BookOpen, CalendarDays, ChevronRight, GraduationCap, MapPin, Users, X, ClipboardCheck, CircleCheck, Hourglass } from 'lucide-react';
@@ -12,6 +13,7 @@ import { getBranchColor } from '../utils/branchColors';
 import '../styles/_studentDetails.scss';
 const date = value => value ? new Date(value).toLocaleDateString('en-GB',{day: '2-digit',month: '2-digit',year: '2-digit'}) : 'Not set';
 export default function StudentDetailsDialog({ studentId, onClose }) {
+  const { nameOf } = useNames();
   const { user }=useContext(AuthContext);
   const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(''),[retry,setRetry]=useState(0);
   const [filter,setFilter]=useState('all'),[cycleId,setCycleId]=useState(null),[cycle,setCycle]=useState(null),[cycleLoading,setCycleLoading]=useState(false),[cycleError,setCycleError]=useState('');
@@ -43,7 +45,7 @@ export default function StudentDetailsDialog({ studentId, onClose }) {
       <section className="student-tests">
         <div className="student-cycle-heading"><div><h3>Placement tests</h3><p>Scores and recommended levels from the testing office.</p></div><span>{(data.placementTests || []).length} {(data.placementTests || []).length === 1 ? 'test' : 'tests'}</span></div>
         {(data.placementTests || []).length ? <ul className="student-test-list">{data.placementTests.map(t => <li key={t.id}>
-          <span className="student-test-when"><ClipboardCheck size={15} aria-hidden="true" /><span><strong>{date(t.testedAt)}</strong><small>{branchName(t.branch)} · by @{t.enteredBy}</small></span></span>
+          <span className="student-test-when"><ClipboardCheck size={15} aria-hidden="true" /><span><strong>{date(t.testedAt)}</strong><small>{branchName(t.branch)} · by {nameOf(t.enteredBy)}</small></span></span>
           {t.score != null ? <span className="placement-score" title="Score">{t.score}<small>/{t.maxScore || 55}</small></span> : <span className="placement-status is-awaiting">Awaiting result</span>}
           {t.level && <span className="placement-level" title="Recommended level">{t.level}</span>}
           {t.purpose && <span className="placement-purpose" title="Purpose">{t.purpose}</span>}

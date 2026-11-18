@@ -1,4 +1,5 @@
 import {dateText} from '../utils/dates';
+import { cleanPhone } from '../utils/people';
 import ArchiveControls from '../components/ArchiveControls';
 import { branchScopeOf } from '../utils/access';
 import StudentDetailsDialog from '../components/StudentDetailsDialog';
@@ -396,7 +397,7 @@ export default function Students() {
                   <label>Mobile Number</label>
                   <input type="tel" placeholder="e.g. 01012345678" value={editingStudent.mobile || ''} onChange={e => setEditingStudent({
                 ...editingStudent,
-                mobile: e.target.value
+                mobile: cleanPhone(e.target.value)
               })} />
                 </div>
                 <StudentProfileFields prefix="edit" value={editingStudent} onChange={setEditingStudent} />

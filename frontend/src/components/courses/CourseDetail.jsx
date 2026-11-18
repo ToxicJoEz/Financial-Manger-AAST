@@ -1,4 +1,5 @@
 import { canSeePayroll } from '../../utils/access';
+import { useNames } from '../../context/NamesContext';
 import '../../styles/_cycleDetails.scss';
 import PrivateBadge from '../PrivateBadge';
 import ApprovalBadge from '../ApprovalBadge';
@@ -32,6 +33,7 @@ export function CourseDetail({
   onPaymentsChanged,
   onNextLevel
 }) {
+  const { nameOf } = useNames();
 
   const manager = user.role !== 'user';
   // Branch mods, two lock levels: the cycle's details lock once the main mod approves it; its students stay open
@@ -192,7 +194,7 @@ export function CourseDetail({
 
                   <strong>{pa.type === 'CLOSE_HOURS' ? `Close hours: ${pa.instructor?.name || 'Employee'} at ${pa.hours} h` : pa.type === 'REPLACE' ? `Replacement: ${pa.instructor?.name || "Employee"}` : pa.type === 'REMOVE' ? `Removal: ${pa.instructor?.name || "Employee"}` : pa.instructor?.name || 'Assignment'}</strong>
 
-                  <small>Requested by @{pa.submittedBy?.username}</small>
+                  <small>Requested by {nameOf(pa.submittedBy?.username)}</small>
 
                 </span>
 

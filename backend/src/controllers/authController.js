@@ -1,4 +1,5 @@
 import { auditActor } from '../utils/auditContext.js';
+import { readNames } from '../utils/people.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma, { atomic } from '../db/prisma.js';
@@ -159,7 +160,8 @@ export const registerUser = atomic(async (req, res, next) => {
         password: hashedPassword,
         role: assignedRole,
         branchScope,
-        branches
+        branches,
+        ...readNames(req.body)
       }
     });
 

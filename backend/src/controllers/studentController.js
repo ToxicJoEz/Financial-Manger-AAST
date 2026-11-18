@@ -1,4 +1,5 @@
 import { cycleBranchWhere, visibleBranchesOf } from '../utils/access.js';
+import { checkPhone } from '../utils/people.js';
 import { permanentlyRemoveEnrollment } from '../utils/removeEnrollment.js';
 import { activeBookInclude } from '../utils/bookPayments.js';
 import { enrollmentView, hidePayroll, studentMoneyForUser } from '../utils/courseView.js';
@@ -115,6 +116,7 @@ export const createStudentHandler = async (req, res, next) => {
     const cleanReg = typeof registrationNumber === 'string' ? registrationNumber.trim() || null : null;
     const cleanName = name.trim();
     const cleanMobile = mobile ? mobile.trim() : null;
+    checkPhone(cleanMobile);
 
     const existing = cleanReg ? await prisma.student.findUnique({ where: { registrationNumber: cleanReg } }) : null;
 
@@ -173,6 +175,7 @@ export const updateStudent = atomic(async (req, res, next) => {
           : null;
     const cleanName = name ? name.trim() : student.name;
     const cleanMobile = mobile !== undefined ? (mobile ? mobile.trim() : null) : student.mobile;
+    if (mobile !== undefined) checkPhone(cleanMobile);
 
     if (cleanReg && cleanReg !== student.registrationNumber) {
       const duplicate = await prisma.student.findUnique({ where: { registrationNumber: cleanReg } });

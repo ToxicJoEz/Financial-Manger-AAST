@@ -1,4 +1,5 @@
 import { recordCause } from '../utils/auditContext.js';
+import { checkPhone } from '../utils/people.js';
 import { createHash } from 'node:crypto';
 import { employeeName, employeeNumber, employeeBranches } from '../utils/employees.js';
 import { hidePayroll } from '../utils/courseView.js';
@@ -61,6 +62,7 @@ export const getInstructors = async (req, res) => {
 export const createInstructor = atomic(async (req, res) => {
   try {
     let { name, branches, employeeId, mobile } = req.body;
+    checkPhone(mobile);
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Employee name is required.' });
@@ -102,6 +104,7 @@ export const updateInstructor = atomic(async (req, res) => {
   try {
     const { id } = req.params;
     let { name, branches, employeeId, mobile } = req.body;
+    checkPhone(mobile);
 
     const existing = await prisma.instructor.findUnique({ where: { id } });
     if (!existing) {

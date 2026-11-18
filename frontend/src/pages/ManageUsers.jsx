@@ -1,4 +1,5 @@
 import '../styles/_placements.scss';
+import { fullName } from '../utils/people';
 import { AnimatePresence } from 'framer-motion';
 import { PageHeading } from '../components/WorkspaceUI';
 import Dialog from '../components/Dialog';
@@ -98,7 +99,7 @@ const ManageUsers = () => {
   // Old "Add colleague" links open the add dialog here.
   useEffect(() => {
     if (location.state?.add) {
-      setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] });
+      setAdding({ firstName: '', lastName: '', username: '', password: '', role: 'user', branch: 'MAIN', branches: [] });
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location.state, location.pathname, navigate]);
@@ -146,6 +147,8 @@ const ManageUsers = () => {
       const { data } = await axios.post('/auth/register', {
         username: adding.username.trim(),
         password: adding.password,
+        firstName: adding.firstName,
+        lastName: adding.lastName,
         role: adding.role,
         branchScope: adding.role === 'mod' && adding.branch !== 'MAIN' ? adding.branch : null,
         branches: adding.role === 'user' ? adding.branches : undefined
@@ -166,6 +169,8 @@ const ManageUsers = () => {
     setSaving(true);
     try {
       const branchScope = form.role === 'mod' && form.branch !== 'MAIN' ? form.branch : null;
+      if (mainManager && ((form.firstName || '') !== (target.firstName || '') || (form.lastName || '') !== (target.lastName || '')))
+        await axios.put(`/users/${target.id}/name`, { firstName: form.firstName, lastName: form.lastName });
       if (mainManager && form.role !== target.role) await axios.put(`/users/${target.id}/role`, { role: form.role, branchScope });
       if (mainManager && form.role === 'mod' && target.role === 'mod' && (target.branchScope || null) !== branchScope)
         await axios.put('/users/' + target.id + '/branch-scope', { branchScope });
@@ -173,7 +178,8 @@ const ManageUsers = () => {
         await axios.put('/users/' + target.id + '/branches', { branches: form.branches });
       if (form.role === 'user' && mainManager && Boolean(form.placement) !== Boolean(target.canPlacementTest))
         await axios.put('/users/' + target.id + '/permissions', { canPlacementTest: Boolean(form.placement) });
-      toast.success(`${target.username}'s access updated`);
+      toast.success(`${fullName({ ...target, ...form })}'s access updated`);
+      window.dispatchEvent(new Event('names-updated'));
       setEditing(null);
       fetchUsers();
     } catch (err) {
@@ -189,7 +195,7 @@ const ManageUsers = () => {
       {mainManager && <button type="button" className="btn-secondary" onClick={() => setTeamPanel('branches')}><Building2 size={16} />Branches</button>}
       {mainManager && <button type="button" className="btn-secondary" onClick={() => setTeamPanel('backup')}><DatabaseBackup size={16} />Backup &amp; restore</button>}
       {mainManager && <Link to="/logs" className="btn-secondary"><ListOrdered size={16} />Activity log</Link>}
-      <button type="button" className="btn-primary" onClick={() => setAdding({ username: '', password: '', role: 'user', branch: 'MAIN', branches: [] })}><UserPlus size={16} />Add person</button>
+      <button type="button" className="btn-primary" onClick={() => setAdding({ firstName: '', lastName: '', username: '', password: '', role: 'user', branch: 'MAIN', branches: [] })}><UserPlus size={16} />Add person</button>
     </PageHeading>
     {teamPanel && <Dialog title={teamPanel === 'branches' ? 'Branches' : 'Backup & restore'} onClose={() => setTeamPanel(null)}><div className="modal-content card team-panel-modal">{teamPanel === 'branches' ? <BranchManager /> : <BackupPanel />}</div></Dialog>}
     <div className="team-summary"><span><strong>{users.length}</strong> team members</span><span><i />{users.filter(u => !u.isBanned).length} active accounts</span></div>
@@ -198,14 +204,14 @@ const ManageUsers = () => {
         <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Last active</th><th aria-label="Actions" /></tr></thead>
         <tbody>
           {users.map(u => <tr key={u.id}>
-            <td><div className="team-person">{u.avatar ? <img src={u.avatar} alt="" /> : <span className="team-avatar">{u.username.charAt(0).toUpperCase()}</span>}<div><strong>{u.username}</strong><small>{u.firstName || u.lastName ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : 'No name set'}</small></div></div></td>
+            <td><div className="team-person">{u.avatar ? <img src={u.avatar} alt="" /> : <span className="team-avatar">{fullName(u).charAt(0).toUpperCase()}</span>}<div><strong>{fullName(u)}</strong><small>Signs in as {u.username}{!u.firstName && !u.lastName ? ' · no name set' : ''}</small></div></div></td>
             <td><span className={`team-role team-role-${u.role}${u.branchScope ? ' is-branch' : ''}`}>{roleLabel(u)}</span><small className="team-access">{accessSummary(u)}</small>{u.role === 'user' && u.canPlacementTest && <span className="team-placement-tag">Placement tests</span>}</td>
             <td><div className="team-status">{u.isBanned ? <span className="badge badge-error">Banned</span> : u.isActive ? <span className="badge badge-success">Active</span> : <span className="badge badge-error">Deactivated</span>}{u.isLocked && <span className="badge badge-warning">Locked (too many sign-in attempts)</span>}</div></td>
             <td className="team-last">{lastActive(u.lastLogin)}</td>
             <td>{u.username === 'main-admin' ? <span className="team-root"><ShieldCheck size={15} />Root admin</span> : <div className="team-actions">
               {u.isLocked && canModify(u) && <button className="btn-sm btn-outline" onClick={() => handleUnlock(u)}>Unlock</button>}
               {canModify(u) ? <>
-                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [], placement: Boolean(u.canPlacementTest) } })}><Pencil size={13} />Edit access</button>
+                <button className="btn-sm btn-outline" onClick={() => setEditing({ user: u, form: { firstName: u.firstName || '', lastName: u.lastName || '', role: u.role, branch: u.branchScope || 'MAIN', branches: u.branches ? u.branches.split(',') : [], placement: Boolean(u.canPlacementTest) } })}><Pencil size={13} />Edit access</button>
 
                 <button className={`btn-sm ${u.isBanned ? 'btn-outline' : 'btn-danger'}`} onClick={() => handleStatusToggle(u, 'ban')}>{u.isBanned ? 'Unban' : 'Ban'}</button>
                 {isAdmin && u.id !== currentUser?.id && <button className="btn-sm btn-outline team-delete" title="Permanently delete this account" aria-label={'Permanently delete ' + u.username} onClick={() => setDeleting({ user: u, typed: '' })}><Trash2 size={13} />Delete</button>}
@@ -219,8 +225,9 @@ const ManageUsers = () => {
     <AnimatePresence>{adding && <Dialog title="Add person" onClose={saving ? () => {} : () => setAdding(null)}>
       <form className="modal-content card team-dialog" onSubmit={createAccount}>
         <h3><UserPlus size={18} />Add a person</h3>
-        <p>Set a username and a first password, then share them privately. They can change the password in My profile.</p>
-        <label htmlFor="new-username">Username</label>
+        <p>Their full name is what everyone sees. The username is only for signing in: set it and a first password, then share them privately.</p>
+        <div className="team-name-fields"><label>First name<input className="input-field" required autoComplete="off" value={adding.firstName} onChange={e => setAdding(f => ({ ...f, firstName: e.target.value }))} /></label><label>Last name<input className="input-field" autoComplete="off" value={adding.lastName} onChange={e => setAdding(f => ({ ...f, lastName: e.target.value }))} /></label></div>
+        <label htmlFor="new-username">Username (for signing in)</label>
         <input id="new-username" className="input-field" required autoComplete="off" placeholder="e.g. sarah" value={adding.username} onChange={e => setAdding(f => ({ ...f, username: e.target.value }))} />
         <label htmlFor="initial-password">First password</label>
         <input id="initial-password" className="input-field" required type="password" autoComplete="new-password" value={adding.password} onChange={e => setAdding(f => ({ ...f, password: e.target.value }))} />
@@ -231,7 +238,9 @@ const ManageUsers = () => {
 
     <AnimatePresence>{editing && <Dialog title="Edit access" onClose={saving ? () => {} : () => setEditing(null)}>
       <div className="modal-content card team-dialog">
-        <h3><Pencil size={17} />{editing.user.username}</h3>
+        <h3><Pencil size={17} />{fullName(editing.user)}</h3>
+        <div className="team-name-fields"><label>First name<input className="input-field" value={editing.form.firstName} onChange={e => setEditing(x => ({ ...x, form: { ...x.form, firstName: e.target.value } }))} /></label><label>Last name<input className="input-field" value={editing.form.lastName} onChange={e => setEditing(x => ({ ...x, form: { ...x.form, lastName: e.target.value } }))} /></label></div>
+        <small className="muted">Signs in as {editing.user.username}</small>
         <p>Now: {roleLabel(editing.user)} · {accessSummary(editing.user)}</p>
         <AccessFields form={editing.form} setForm={update => setEditing(e => ({ ...e, form: typeof update === 'function' ? update(e.form) : update }))} adminView={isAdmin} canPickBranches={mainManager} />
         <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={saving} onClick={() => setEditing(null)}>Cancel</button><button type="button" className="btn-primary" disabled={saving} onClick={saveAccess}>{saving ? 'Saving…' : 'Save access'}</button></div>
