@@ -17,7 +17,11 @@ export const PURPOSES = ['General English', 'IELTS', 'TOEFL', 'PTE'];
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
-export const canUsePlacements = user => Boolean(user && (canSeePayroll(user) || (user.role === 'user' && user.canPlacementTest)));
+export const canUsePlacements = user =>
+  Boolean(user && (canSeePayroll(user) || branchScopeOf(user) || (user.role === 'user' && user.canPlacementTest)));
+// Creating tests (and picking or creating their student): admins, the main mod and branch mods (their own branch).
+// Placing students in a course stays with admins and the main mod.
+export const canCreateTests = user => Boolean(user && (canSeePayroll(user) || branchScopeOf(user)));
 // Branches this person sees tests for (null: all).
 const placementBranches = user => (canSeePayroll(user) ? null : visibleBranchesOf(user) || []);
 // Basic student details only: testers never see courses or money.
@@ -159,6 +163,8 @@ export const searchStudents = async (req, res, next) => {
 export const createPlacement = atomic(async (req, res) => {
   try {
     const branch = readBranch(req.body.branch);
+    const allowed = placementBranches(req.user);
+    if (allowed && !allowed.includes(branch)) fail(`You can only create tests for ${allowed.join(', ') || 'your branch'}.`, 403);
     let studentId = req.body.studentId;
     let siblings = [];
     if (studentId) {

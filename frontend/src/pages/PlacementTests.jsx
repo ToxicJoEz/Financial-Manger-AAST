@@ -12,7 +12,7 @@ import { MotionTab } from '../components/WorkspaceMotion';
 import Dialog from '../components/Dialog';
 import CustomFilterDropdown from '../components/CustomFilterDropdown';
 import EnrollmentDialog from '../components/EnrollmentDialog';
-import { branchName, canSeePayroll } from '../utils/access';
+import { branchName, canSeePayroll, canCreateTests } from '../utils/access';
 import '../styles/_placements.scss';
 
 // Placement tests. Admins and the main mod create a test for a student; the testing office enters the result
@@ -45,8 +45,10 @@ const Score = ({ test, max = 55 }) => test.score == null ? <span className="plac
 export default function PlacementTests() {
   const { nameOf } = useNames();
   const { user } = useContext(AuthContext);
-  // Admins and the main mod create tests and place students; the testing office fills in results.
+  // Admins and the main mod create tests and place students; branch mods create and edit tests for their branch
+  // (no placing); the testing office fills in results.
   const manager = canSeePayroll(user);
+  const creator = canCreateTests(user);
   const [status, setStatus] = useState(manager ? 'unplaced' : 'awaiting'), [search, setSearch] = useState(''), [query, setQuery] = useState(''), [branch, setBranch] = useState(''), [level, setLevel] = useState(''), [purpose, setPurpose] = useState('');
   // Ticked students (admins and the main mod), to place several in one course together.
   const [picked, setPicked] = useState([]), [bulk, setBulk] = useState(null);
@@ -79,8 +81,8 @@ export default function PlacementTests() {
   const selectable = manager ? rows.filter(t => t.score != null && !t.placed) : [];
   const empty = { awaiting: manager ? 'No tests are waiting for a result' : 'No tests waiting for your result', unplaced: 'Everyone tested is placed', placed: 'No one placed from a test yet', all: 'No placement tests yet' }[shownStatus] || 'No placement tests yet';
   return <section className="placements-page">
-    <PageHeading eyebrow="Placement" title="Tests" description={manager ? 'Create a test for a student; the testing office adds the result, then you place them in a course.' : 'Tests waiting for their result, for your branches.'}>
-      {manager && <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={16} />New test</button>}
+    <PageHeading eyebrow="Placement" title="Tests" description={manager ? 'Create a test for a student; the testing office adds the result, then you place them in a course.' : creator ? 'Create and edit tests for your branch. The main mod places students in a course.' : 'Tests waiting for their result, for your branches.'}>
+      {creator && <button className="btn-primary" onClick={() => setCreating(true)}><Plus size={16} />New test</button>}
     </PageHeading>
     <div className="section-tabs" aria-label="Placement tests">{TABS.map(([value, label, Icon, tone]) => <MotionTab key={value} active={status === value} onClick={() => setStatus(value)}><Icon size={15} className={'status-tab-icon tone-' + tone} aria-hidden="true" />{label}<span>{data?.counts?.[value] ?? 0}</span></MotionTab>)}</div>
     {/* Follows the rows on screen (not the tab just clicked), and slides in and out smoothly. */}
@@ -104,7 +106,7 @@ export default function PlacementTests() {
                 <td>{t.placed ? <span className="placement-status is-placed"><CircleCheck size={13} />In {t.placed.cycle.name}</span> : done ? <span className="placement-status is-waiting"><Hourglass size={13} />Not placed yet</span> : <span className="placement-status is-awaiting"><FilePenLine size={13} />Awaiting result</span>}</td>
                 <td className="placements-actions-cell"><div className="placements-actions">
                   {!t.placed && (!done ? <button className="placement-place-button is-result" onClick={() => setResultFor(t)}><FilePenLine size={14} />Enter result</button> : manager && <button className="placement-place-button" onClick={() => setPlacing(t)}>Place<ArrowRight size={14} /></button>)}
-                  {manager ? <button className="icon-button" aria-label={'Edit ' + t.student.name} title="Edit student and test" onClick={() => setEditFor(t)}><Pencil size={15} /></button> : done && !t.placed && <button className="icon-button" aria-label={'Edit result for ' + t.student.name} title="Edit result" onClick={() => setResultFor(t)}><Pencil size={15} /></button>}
+                  {manager || (creator && !t.placed) ? <button className="icon-button" aria-label={'Edit ' + t.student.name} title="Edit student and test" onClick={() => setEditFor(t)}><Pencil size={15} /></button> : done && !t.placed && <button className="icon-button" aria-label={'Edit result for ' + t.student.name} title="Edit result" onClick={() => setResultFor(t)}><Pencil size={15} /></button>}
                   {manager && !t.placed && <button className="icon-button danger" aria-label={'Delete test for ' + t.student.name} title="Delete test" onClick={() => setRemoving(t)}><Trash2 size={15} /></button>}
                 </div></td>
               </tr>;
@@ -335,7 +337,7 @@ function EditTestDialog({ test, levels, purposes, branches, max, onClose, onSave
       const student = test.student;
       if (form.name.trim() !== (student.name || '') || form.mobile.trim() !== (student.mobile || '') || form.registrationNumber.trim() !== (student.registrationNumber || ''))
         await axios.put('/students/' + student.id, { name: form.name.trim(), mobile: form.mobile.trim(), registrationNumber: form.registrationNumber.trim() });
-      await axios.put('/placements/' + test.id, { branch: form.branch, ...(anyResult ? { score: form.score, level: form.level, purpose: form.purpose } : {}) });
+      await axios.put('/placements/' + test.id, { ...(form.branch !== test.branch ? { branch: form.branch } : {}), ...(anyResult ? { score: form.score, level: form.level, purpose: form.purpose } : {}) });
       toast.success('Saved');
       onSaved();
     } catch (err) { setError(err.response?.data?.error || 'The changes could not be saved.'); }
@@ -350,7 +352,7 @@ function EditTestDialog({ test, levels, purposes, branches, max, onClose, onSave
         <div className="placement-fields placement-fields-2"><label>Phone<input className="input-field" inputMode="tel" value={form.mobile} onChange={e => set('mobile', cleanPhone(e.target.value))} /></label><label>Registration ID<input className="input-field" value={form.registrationNumber} onChange={e => set('registrationNumber', e.target.value)} /></label></div>
       </fieldset>
       <fieldset className="placement-edit-group"><legend>Test</legend>
-        <label>Branch<CustomFilterDropdown allowClear={false} value={form.branch} onChange={v => set('branch', v)} options={branches.map(b => ({ value: b, label: branchName(b) }))} /></label>
+        {branches.length > 1 && <label>Branch<CustomFilterDropdown allowClear={false} value={form.branch} onChange={v => set('branch', v)} options={branches.map(b => ({ value: b, label: branchName(b) }))} /></label>}
         <div className="placement-fields">
           <label>Score (out of {max})<span className="placement-score-input"><input className="input-field" type="number" step="any" min="0" max={max} value={form.score} onChange={e => set('score', cap(e.target.value))} /><b>/ {max}</b></span></label>
           <label>Recommended level<CustomFilterDropdown searchable allowClear={false} value={form.level} onChange={v => set('level', v)} options={levels.map(l => ({ value: l, label: l }))} placeholder="Choose level" /></label>

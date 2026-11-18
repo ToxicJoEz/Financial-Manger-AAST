@@ -49,7 +49,7 @@ try {
   // The main mod creates a test for a new student, then the same one again: told it already exists.
   const first = ok(await req('/placements', 'POST', { newStudent: { name: 'Placement Kid', mobile: '01099900011' }, branch: 'MIAMI' }, main));
   assert.equal(first.score, null);
-  const dup = await req('/placements', 'POST', { newStudent: { name: 'placement  kid', mobile: '+20 1099900011' }, branch: 'MIAMI' }, main);
+  const dup = await req('/placements', 'POST', { newStudent: { name: 'placement  kid', mobile: '0109 990 0011' }, branch: 'MIAMI' }, main);
   assert.equal(dup.status, 409);
   assert.equal(dup.data.existing.id, first.studentId);
   // A test for an existing student, and one in a branch Joe does not have.
@@ -80,7 +80,14 @@ try {
   const picker = ok(await req(`/placements/for-cycle/${cycle.id}`, 'GET', undefined, main)).rows;
   assert(picker.some(r => r.studentId === first.studentId));
   assert(!picker.some(r => r.id === fouadTest.id), 'tests without a result are not offered');
-  assert.equal(ok(await req(`/placements/for-cycle/${cycle.id}`, 'GET', undefined, fouad)).rows.length, 0);
+  // Branch mods don't place students: the tested-students picker is for admins and the main mod.
+  assert.equal((await req(`/placements/for-cycle/${cycle.id}`, 'GET', undefined, fouad)).status, 403);
+  // Branch mods see the Tests tab for their branch, create tests there (not elsewhere), enter and edit results.
+  assert.deepEqual(ok(await req('/placements?status=all', 'GET', undefined, fouad)).branches, ['FOUAD']);
+  assert.equal((await req('/placements', 'POST', { studentId: 'demo-student-4', branch: 'MIAMI' }, fouad)).status, 403);
+  const fouadOwn = ok(await req('/placements', 'POST', { studentId: 'demo-student-4', branch: 'FOUAD' }, fouad));
+  ok(await req(`/placements/${fouadOwn.id}`, 'PUT', { score: 20, level: 'KET', purpose: 'General English' }, fouad));
+  assert.equal((await req(`/placements/${fouadOwn.id}`, 'DELETE', undefined, fouad)).status, 403);
   // Placed the moment they join any cycle: then locked, and out of "Not placed yet".
   ok(await req(`/cycles/${cycle.id}/enrollments`, 'POST', { studentId: first.studentId, tuitionType: 'EXEMPT' }, main));
   list = ok(await req('/placements?status=unplaced', 'GET', undefined, joe));
@@ -110,12 +117,12 @@ try {
   const ketCycle = cycle;
   for (const r of ket.rows) ok(await req(`/cycles/${ketCycle.id}/enrollments`, 'POST', { studentId: r.student.id, tuitionType: 'FULL', recordPayment: true, amountPaid: Number(ketCycle.courseFee), paymentMethod: 'CASH' }, main));
   assert.equal(ok(await req('/placements?status=unplaced&level=KET', 'GET', undefined, main)).rows.length, 0);
-  // Phone numbers have at most 14 digits.
-  const longPhone = await req('/placements', 'POST', { newStudent: { name: 'Long Phone', mobile: '0101234567890123' }, branch: 'MIAMI' }, main);
+  // Phone numbers have at most 11 digits.
+  const longPhone = await req('/placements', 'POST', { newStudent: { name: 'Long Phone', mobile: '010123456789' }, branch: 'MIAMI' }, main);
   assert.equal(longPhone.status, 400);
-  assert.match(longPhone.data.error, /14 digits/);
-  assert.equal((await req('/students', 'POST', { name: 'Long Phone', mobile: '+20 101 234 567 890 12' }, main)).status, 400);
-  ok(await req('/students', 'POST', { name: 'Ok Phone', mobile: '+20 1012345678' }, main));
+  assert.match(longPhone.data.error, /11 digits/);
+  assert.equal((await req('/students', 'POST', { name: 'Long Phone', mobile: '+20 101 234 5678' }, main)).status, 400);
+  ok(await req('/students', 'POST', { name: 'Ok Phone', mobile: '010 1234 5678' }, main));
   // Full names: set on accounts, shown instead of usernames (usernames are only for signing in).
   const named = ok(await req('/auth/register', 'POST', { username: 'name-test', password: 'NameTest!123', role: 'user', firstName: 'Sara', lastName: 'Nabil' }, main));
   let names = ok(await req('/users/directory', 'GET', undefined, joe)).names;

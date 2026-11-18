@@ -3,7 +3,9 @@ import { cleanPhone } from '../utils/people';
 import PrivateBadge from './PrivateBadge';
 import { toast } from 'react-hot-toast';
 import PaymentFields from './PaymentFields';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '../context/AuthContext';
+import { canSeePayroll } from '../utils/access';
 import { UserCheck, X, ClipboardCheck } from 'lucide-react';
 import axios from 'axios';
 import Dialog from './Dialog';
@@ -28,6 +30,8 @@ function TestedStudentPicker({ courseId, selected, onSelect, disabled }) {
 }
 
 export default function EnrollmentDialog({ course, onClose, onSaved, initialStudent = null }) {
+  // Picking from tested students places them: admins and the main mod only.
+  const placesTested = canSeePayroll(useContext(AuthContext).user);
   // "existing" student, a "new" one, or one of the "tested" students waiting to be placed.
   const [mode, setMode] = useState(initialStudent ? 'tested' : 'existing'), [tested, setTested] = useState(initialStudent);
   const creating = mode === 'new', setCreating = on => setMode(on ? 'new' : 'existing');
@@ -52,7 +56,7 @@ export default function EnrollmentDialog({ course, onClose, onSaved, initialStud
   return <Dialog title="Enroll student" onClose={busy ? () => {} : onClose}><div className="modal-content card enrollment-dialog">
     <h3>Enroll a student</h3><p className="muted">{course.name}<PrivateBadge record={course}/> · Tuition: {Number(course.courseFee || 0).toLocaleString()} EGP</p>
     <form onSubmit={submit} className="enrollment-policy-form">
-      <div className="section-tabs"><button type="button" className={mode==='existing'?'active':''} onClick={()=>setMode('existing')}>Existing student</button><button type="button" className={mode==='tested'?'active':''} onClick={()=>setMode('tested')}>Tested students</button><button type="button" className={creating?'active':''} onClick={()=>setCreating(true)}>Create new student</button></div>
+      <div className="section-tabs"><button type="button" className={mode==='existing'?'active':''} onClick={()=>setMode('existing')}>Existing student</button>{placesTested&&<button type="button" className={mode==='tested'?'active':''} onClick={()=>setMode('tested')}>Tested students</button>}<button type="button" className={creating?'active':''} onClick={()=>setCreating(true)}>Create new student</button></div>
       {creating?<div className="management-choice"><label>Full name *<input className="input-field" required value={newStudent.name} onChange={e=>setNewStudent({...newStudent,name:e.target.value})}/></label><label>Registration ID (optional)<input className="input-field" value={newStudent.registrationNumber} onChange={e=>setNewStudent({...newStudent,registrationNumber:e.target.value})}/></label><label>Mobile<input className="input-field" value={newStudent.mobile} inputMode="tel" onChange={e=>setNewStudent({...newStudent,mobile:cleanPhone(e.target.value)})}/></label><StudentProfileFields prefix="inline-student" value={newStudent} onChange={setNewStudent}/></div>:mode==='tested'?<TestedStudentPicker courseId={course.id} selected={tested} onSelect={setTested} disabled={busy} />:<EnrollmentStudentPicker courseId={course.id} onChange={setStudentId} disabled={busy} />}
 
       <fieldset className="management-choice" disabled={busy}><legend>Tuition status *</legend>{[['FULL','Full payment'],['DISCOUNTED','Discounted'],['EXEMPT','Exempt']].map(([value,label])=><label className="policy-check" key={value}><input type="radio" name="enrollment-tuition-type" value={value} checked={tuitionType===value} disabled={value!=='EXEMPT'&&Number(course.courseFee||0)===0} onChange={()=>{setTuitionType(value);setError('');}}/>{label}{value==='FULL'?` · ${Number(course.courseFee||0).toLocaleString()} EGP`:value==='EXEMPT'?' · No tuition payment':''}</label>)}</fieldset>

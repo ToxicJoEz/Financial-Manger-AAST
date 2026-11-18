@@ -1,5 +1,5 @@
-// Phone numbers typed in by hand: digits (with spaces, dashes or a leading +), at most 14 digits.
-export const PHONE_MAX_DIGITS = 14;
+// Phone numbers typed in by hand: digits (with spaces, dashes or a leading +), at most 11 digits.
+export const PHONE_MAX_DIGITS = 11;
 export function cleanPhone(value) {
   let digits = 0;
   return String(value || '')

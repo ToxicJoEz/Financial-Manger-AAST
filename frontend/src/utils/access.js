@@ -18,4 +18,6 @@ export const modTitle = user => (user?.branchScope ? `${branchName(user.branchSc
 // Rebuilt from the live branch list each time it is read.
 export const modTitleOptions = () => [{ value: 'MAIN', label: 'Main mod' }, ...MOD_BRANCH_SCOPES.map(b => ({ value: b, label: `${branchName(b)} mod` }))];
 // Placement tests (the Tests tab): users with the toggle, admins and the main mod.
-export const canUsePlacements = user => canSeePayroll(user) || (user?.role === 'user' && Boolean(user.canPlacementTest));
+export const canUsePlacements = user => canSeePayroll(user) || Boolean(branchScopeOf(user)) || (user?.role === 'user' && Boolean(user.canPlacementTest));
+// Creating and editing tests: admins, the main mod and branch mods. Placing students stays with admins and the main mod.
+export const canCreateTests = user => canSeePayroll(user) || Boolean(branchScopeOf(user));
