@@ -51,7 +51,7 @@ export default function PlacementTests() {
   // Ticked students (admins and the main mod), to place several in one course together.
   const [picked, setPicked] = useState([]), [bulk, setBulk] = useState(null);
   const [data, setData] = useState(null), [refresh, setRefresh] = useState(0), [shownKey, setShownKey] = useState(''), [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false), [resultFor, setResultFor] = useState(null), [placing, setPlacing] = useState(null), [enrolling, setEnrolling] = useState(null), [removing, setRemoving] = useState(null), [regFor, setRegFor] = useState(null);
+  const [creating, setCreating] = useState(false), [editFor, setEditFor] = useState(null), [resultFor, setResultFor] = useState(null), [placing, setPlacing] = useState(null), [enrolling, setEnrolling] = useState(null), [removing, setRemoving] = useState(null), [regFor, setRegFor] = useState(null);
   useEffect(() => { const t = setTimeout(() => setQuery(search.trim()), 250); return () => clearTimeout(t); }, [search]);
   useEffect(() => {
     const controller = new AbortController();
@@ -102,17 +102,18 @@ export default function PlacementTests() {
                 {/* Score, recommended level and purpose together. */}
                 <td className="placements-result">{done ? <div className="placement-result"><Score test={t} max={max} /><span className="placement-level" title="Recommended level">{t.level}</span>{t.purpose && <span className="placement-purpose" title="Purpose">{t.purpose}</span>}</div> : <span className="muted">No result yet</span>}</td>
                 <td>{t.placed ? <span className="placement-status is-placed"><CircleCheck size={13} />In {t.placed.cycle.name}</span> : done ? <span className="placement-status is-waiting"><Hourglass size={13} />Not placed yet</span> : <span className="placement-status is-awaiting"><FilePenLine size={13} />Awaiting result</span>}</td>
-                <td className="placements-actions-cell">{!t.placed && <div className="placements-actions">
-                  {!done ? <button className="placement-place-button is-result" onClick={() => setResultFor(t)}><FilePenLine size={14} />Enter result</button> : manager && <button className="placement-place-button" onClick={() => setPlacing(t)}>Place<ArrowRight size={14} /></button>}
-                  {done && <button className="icon-button" aria-label={'Edit result for ' + t.student.name} title="Edit result" onClick={() => setResultFor(t)}><Pencil size={15} /></button>}
-                  {manager && <button className="icon-button danger" aria-label={'Delete test for ' + t.student.name} title="Delete test" onClick={() => setRemoving(t)}><Trash2 size={15} /></button>}
-                </div>}</td>
+                <td className="placements-actions-cell"><div className="placements-actions">
+                  {!t.placed && (!done ? <button className="placement-place-button is-result" onClick={() => setResultFor(t)}><FilePenLine size={14} />Enter result</button> : manager && <button className="placement-place-button" onClick={() => setPlacing(t)}>Place<ArrowRight size={14} /></button>)}
+                  {manager ? <button className="icon-button" aria-label={'Edit ' + t.student.name} title="Edit student and test" onClick={() => setEditFor(t)}><Pencil size={15} /></button> : done && !t.placed && <button className="icon-button" aria-label={'Edit result for ' + t.student.name} title="Edit result" onClick={() => setResultFor(t)}><Pencil size={15} /></button>}
+                  {manager && !t.placed && <button className="icon-button danger" aria-label={'Delete test for ' + t.student.name} title="Delete test" onClick={() => setRemoving(t)}><Trash2 size={15} /></button>}
+                </div></td>
               </tr>;
             })}</tbody>
           </table></div>}
       </SmoothRegion>
     </div>
     <AnimatePresence>{creating && <CreateTestDialog key="create" branches={data?.branches || []} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); if (status !== 'awaiting') setStatus('awaiting'); reload(); }} />}</AnimatePresence>
+    <AnimatePresence>{editFor && <EditTestDialog key="edit" test={editFor} levels={data?.levels || []} purposes={data?.purposes || []} branches={data?.branches || []} max={max} onClose={() => setEditFor(null)} onSaved={() => { setEditFor(null); reload(); }} />}</AnimatePresence>
     <AnimatePresence>{resultFor && <ResultDialog key="result" test={resultFor} levels={data?.levels || []} purposes={data?.purposes || []} max={max} onClose={() => setResultFor(null)} onSaved={() => { setResultFor(null); reload(); }} />}</AnimatePresence>
     <AnimatePresence>{removing && <Dialog key="remove" title="Delete test" onClose={() => setRemoving(null)}><div className="modal-content card placement-dialog"><h3><Trash2 size={18} />Delete <span dir="auto">{removing.student.name}</span>'s test?</h3><p className="muted">{removing.score != null ? `Score ${removing.score}/${max} · ${removing.level} · ` : 'No result yet · '}{branchName(removing.branch)}. The student stays; only this test is removed.</p><div className="payment-entry-actions"><button className="btn-secondary" onClick={() => setRemoving(null)}>Cancel</button><button className="btn-primary btn-danger-solid" onClick={() => remove(removing)}>Delete test</button></div></div></Dialog>}</AnimatePresence>
     <AnimatePresence>{regFor && <RegistrationDialog key="reg" test={regFor} onClose={() => setRegFor(null)} onSaved={() => { setRegFor(null); reload(); }} />}</AnimatePresence>
@@ -311,5 +312,53 @@ function BulkEnrollDialog({ cycle, tests, max, onClose, onDone }) {
       {results && failed.length > 0 && !busy && <p className="alert-error">{failed.length} could not be placed. They stay in “Not placed yet”.</p>}
       <div className="payment-entry-actions">{results && !busy ? <button type="button" className="btn-primary" onClick={onDone}>Done</button> : <><button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>Cancel</button><button type="button" className="btn-primary" disabled={busy} onClick={enrollAll}>{busy ? `Placing ${results?.length || 0} of ${tests.length}…` : `Place ${tests.length} students`}</button></>}</div>
     </div>
+  </Dialog>;
+}
+
+// Admins and the main mod: correct anything about a test at any time, placed or not: the student's name, phone and
+// registration ID, the branch, and the result (score out of 55, level, purpose).
+function EditTestDialog({ test, levels, purposes, branches, max, onClose, onSaved }) {
+  const cap = value => { if (value === '') return ''; const n = Number(value); return !Number.isFinite(n) ? '' : n > max ? String(max) : n < 0 ? '0' : value; };
+  const [form, setForm] = useState({
+    name: test.student.name || '', mobile: test.student.mobile || '', registrationNumber: test.student.registrationNumber || '',
+    branch: test.branch, score: test.score == null ? '' : cap(String(test.score)), level: test.level || '', purpose: test.purpose || ''
+  });
+  const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const set = (key, value) => setForm(f => ({ ...f, [key]: value }));
+  async function save(e) {
+    e.preventDefault(); setError('');
+    if (!form.name.trim()) return setError('Enter the student name.');
+    const anyResult = form.score !== '' || form.level || form.purpose;
+    if (anyResult && (form.score === '' || !form.level || !form.purpose)) return setError('Fill in the score, level and purpose together.');
+    setBusy(true);
+    try {
+      const student = test.student;
+      if (form.name.trim() !== (student.name || '') || form.mobile.trim() !== (student.mobile || '') || form.registrationNumber.trim() !== (student.registrationNumber || ''))
+        await axios.put('/students/' + student.id, { name: form.name.trim(), mobile: form.mobile.trim(), registrationNumber: form.registrationNumber.trim() });
+      await axios.put('/placements/' + test.id, { branch: form.branch, ...(anyResult ? { score: form.score, level: form.level, purpose: form.purpose } : {}) });
+      toast.success('Saved');
+      onSaved();
+    } catch (err) { setError(err.response?.data?.error || 'The changes could not be saved.'); }
+    finally { setBusy(false); }
+  }
+  return <Dialog title="Edit test" onClose={busy ? () => {} : onClose}>
+    <form className="modal-content card placement-dialog" onSubmit={save}>
+      <h3><Pencil size={18} />Edit <span dir="auto">{test.student.name}</span>'s test</h3>
+      <p className="muted">Created {day(test.testedAt)}{test.placed ? ` · placed in ${test.placed.cycle.name}` : ''}. Changes to the student apply everywhere they appear.</p>
+      <fieldset className="placement-edit-group"><legend>Student</legend>
+        <label>Full name *<input className="input-field" required value={form.name} onChange={e => set('name', e.target.value)} /></label>
+        <div className="placement-fields placement-fields-2"><label>Phone<input className="input-field" inputMode="tel" value={form.mobile} onChange={e => set('mobile', cleanPhone(e.target.value))} /></label><label>Registration ID<input className="input-field" value={form.registrationNumber} onChange={e => set('registrationNumber', e.target.value)} /></label></div>
+      </fieldset>
+      <fieldset className="placement-edit-group"><legend>Test</legend>
+        <label>Branch<CustomFilterDropdown allowClear={false} value={form.branch} onChange={v => set('branch', v)} options={branches.map(b => ({ value: b, label: branchName(b) }))} /></label>
+        <div className="placement-fields">
+          <label>Score (out of {max})<span className="placement-score-input"><input className="input-field" type="number" step="any" min="0" max={max} value={form.score} onChange={e => set('score', cap(e.target.value))} /><b>/ {max}</b></span></label>
+          <label>Recommended level<CustomFilterDropdown searchable allowClear={false} value={form.level} onChange={v => set('level', v)} options={levels.map(l => ({ value: l, label: l }))} placeholder="Choose level" /></label>
+          <label>Purpose<CustomFilterDropdown allowClear={false} value={form.purpose} onChange={v => set('purpose', v)} options={purposes.map(p => ({ value: p, label: p }))} placeholder="Choose purpose" /></label>
+        </div>
+      </fieldset>
+      {error && <p className="alert-error" role="alert">{error}</p>}
+      <div className="payment-entry-actions"><button type="button" className="btn-secondary" disabled={busy} onClick={onClose}>Cancel</button><button className="btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save changes'}</button></div>
+    </form>
   </Dialog>;
 }

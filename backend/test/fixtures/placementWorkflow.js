@@ -93,6 +93,9 @@ try {
   assert.deepEqual([details.placementTests[0].level, details.placementTests[0].purpose], ['PET', 'General English']);
   assert.equal(details.placementTests[0].placed.cycle.id, cycle.id);
   assert.equal((await req(`/placements/${first.id}`, 'PUT', { score: 1 }, joe)).status, 409);
+  // Admins and the main mod can still correct a placed student's test (testers can't).
+  ok(await req(`/placements/${first.id}`, 'PUT', { score: 44, level: 'PET', purpose: 'TOEFL' }, main));
+  assert.equal((await prisma.placementTest.findUnique({ where: { id: first.id } })).purpose, 'TOEFL');
   // Only admins and the main mod delete tests (while not placed).
   assert.equal((await req(`/placements/${second.id}`, 'DELETE', undefined, joe)).status, 403);
   assert.equal((await req(`/placements/${first.id}`, 'DELETE', undefined, main)).status, 409);

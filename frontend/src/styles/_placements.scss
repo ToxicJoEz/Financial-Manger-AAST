@@ -132,3 +132,8 @@
 }
 .placement-bulk-error { color: #b42318; font-size: 12px; font-weight: 600; }
 .placements-table .select-column { width: 36px; }
+// Edit test (admins and the main mod): student details and the test, in two groups.
+.placement-edit-group { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 12px 14px; border: 1px solid #e3e8f2; border-radius: 10px;
+  legend { padding: 0 6px; color: #6b7b95; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+}
+.placement-fields-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }

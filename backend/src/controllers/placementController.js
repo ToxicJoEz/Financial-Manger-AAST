@@ -205,6 +205,8 @@ async function openTest(req) {
   if (!test) fail('This test no longer exists.', 404);
   const allowed = placementBranches(req.user);
   if (allowed && !allowed.includes(test.branch)) fail('This test is for another branch.', 403);
+  // Admins and the main mod can correct a test at any time; for the testing office it locks once the student is placed.
+  if (canSeePayroll(req.user)) return test;
   const [checked] = await withPlacement([test]);
   if (checked.placed) fail(`${test.student.name} is already placed in ${checked.placed.cycle.name}, so this test is locked.`, 409);
   return test;
@@ -215,9 +217,14 @@ async function openTest(req) {
 export const updatePlacement = atomic(async (req, res) => {
   try {
     const test = await openTest(req);
-    const result = readResult({ score: test.score, level: test.level, purpose: test.purpose, ...req.body });
-    const data = { ...result, updatedBy: req.user.username };
-    if (!hasResult(test)) Object.assign(data, { resultBy: req.user.username, resultAt: new Date() });
+    // The result (all three fields) is checked whenever one is given, or the test already has one. Admins and the main
+    // mod may also change only the branch of a test still waiting for its result.
+    const givesResult = ['score', 'level', 'purpose'].some(k => req.body[k] !== undefined && req.body[k] !== '');
+    const data = { updatedBy: req.user.username };
+    if (givesResult || hasResult(test)) {
+      Object.assign(data, readResult({ score: test.score, level: test.level, purpose: test.purpose, ...req.body }));
+      if (!hasResult(test)) Object.assign(data, { resultBy: req.user.username, resultAt: new Date() });
+    } else if (!canSeePayroll(req.user)) readResult(req.body);
     if (req.body.branch !== undefined && req.body.branch !== test.branch) {
       if (!canSeePayroll(req.user)) fail('Only admins and the main mod can change the branch.', 403);
       data.branch = readBranch(req.body.branch);
@@ -225,7 +232,9 @@ export const updatePlacement = atomic(async (req, res) => {
     const updated = await prisma.placementTest.update({ where: { id: test.id }, data, include: { student: { select: studentBasics } } });
     await logAction(
       'UPDATE_PLACEMENT_TEST',
-      hasResult(test)
+      !hasResult(updated)
+        ? `Changed ${test.student.name}'s placement test: branch ${test.branch} → ${updated.branch}.`
+        : hasResult(test)
         ? `Changed ${test.student.name}'s placement result: ${test.score}/${MAX_SCORE} ${test.level} → ${updated.score}/${MAX_SCORE} ${updated.level} (${updated.purpose}).`
         : `Entered ${test.student.name}'s placement result: ${updated.score}/${MAX_SCORE}, recommended ${updated.level}, purpose ${updated.purpose}.`,
       req.user.username
@@ -241,6 +250,9 @@ export const deletePlacement = atomic(async (req, res) => {
   try {
     if (!canSeePayroll(req.user)) fail('Only admins and the main mod can delete placement tests.', 403);
     const test = await openTest(req);
+    // A placed student's test stays (it is their history); it can still be corrected.
+    const [checked] = await withPlacement([test]);
+    if (checked.placed) fail(`${test.student.name} is already placed in ${checked.placed.cycle.name}. Edit the test instead of deleting it.`, 409);
     await prisma.placementTest.delete({ where: { id: test.id } });
     await logAction('DELETE_PLACEMENT_TEST', `Deleted the placement test of ${test.student.name}${hasResult(test) ? ` (${test.score}/${MAX_SCORE}, ${test.level})` : ''}.`, req.user.username);
     res.json({ message: 'Test deleted.' });
