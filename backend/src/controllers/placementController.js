@@ -4,19 +4,24 @@ import { canSeePayroll, branchScopeOf, visibleBranchesOf } from '../utils/access
 import { EMPLOYEE_BRANCHES } from '../utils/employees.js';
 import { sameStudent, sharesPhone, sameName } from '../utils/studentIdentity.js';
 
-// Placement tests. The testing office (user accounts with the "Placement tests" toggle) picks or creates a student
-// and enters the score and the level they recommend. A student counts as placed the moment they are enrolled in any
-// cycle after their test, however that happened. Admins and the main mod see every branch and place students;
-// testers see and enter results for their own branches and can edit them until the student is placed.
+// Placement tests.
+// 1. Admins and the main mod create a test: they pick or create the student and choose the branch.
+// 2. The testing office (user accounts with the "Placement tests" toggle) fills in the result for tests in their
+//    branches: the score out of 55, the level they recommend and the test's purpose.
+// 3. Admins and the main mod place the student in a cycle. A student counts as placed the moment they join any cycle
+//    after the test, however that happened. Results can be changed until then.
 
+export const MAX_SCORE = 55;
+export const PURPOSES = ['General English', 'IELTS', 'TOEFL', 'PTE'];
 const fail = (message, status = 400) => {
   throw Object.assign(new Error(message), { status });
 };
 export const canUsePlacements = user => Boolean(user && (canSeePayroll(user) || (user.role === 'user' && user.canPlacementTest)));
-// Branches this person may record and see tests for (null: all).
+// Branches this person sees tests for (null: all).
 const placementBranches = user => (canSeePayroll(user) ? null : visibleBranchesOf(user) || []);
 // Basic student details only: testers never see courses or money.
 const studentBasics = { id: true, name: true, englishName: true, mobile: true, registrationNumber: true };
+const hasResult = t => t.score != null;
 
 // The levels to choose from: every umbrella name in use, once each (KET in Group and Private is one "KET").
 const ORDER = ['STARTERS', 'MOVERS', 'FLYERS', 'KET', 'PET', 'FCE', 'CAE', 'CPE', 'IELTS', 'TOEFL', 'PTE', 'CEPT'];
@@ -44,24 +49,37 @@ async function withPlacement(tests) {
     return { ...test, placed: joined ? { at: joined.enrolledAt, cycle: joined.course } : null };
   });
 }
-
-function readResult(body, user) {
-  const score = Number(body.score);
-  if (body.score === '' || body.score == null || !Number.isFinite(score) || score < 0 || score > 100000)
-    fail('Enter the score as a number.');
-  const level = typeof body.level === 'string' ? body.level.trim() : '';
-  if (!level) fail('Choose the recommended level.');
-  const branch = typeof body.branch === 'string' ? body.branch.trim().toUpperCase() : '';
-  if (!EMPLOYEE_BRANCHES.includes(branch)) fail('Choose the branch.');
-  const allowed = placementBranches(user);
-  if (allowed && !allowed.includes(branch)) fail(`You can only record tests for ${allowed.join(', ') || 'your branches'}.`, 403);
-  return { score, level, branch };
+// Splits tests into the tabs: waiting for a result, waiting to be placed (each student once, latest test), placed.
+function sortTests(rows) {
+  const seen = new Set();
+  const unplaced = rows.filter(r => !r.placed && hasResult(r) && !seen.has(r.studentId) && seen.add(r.studentId));
+  return {
+    awaiting: rows.filter(r => !r.placed && !hasResult(r)),
+    unplaced,
+    placed: rows.filter(r => r.placed)
+  };
 }
 
-// GET /placements?status=unplaced|placed|all&search=&branch=
+function readBranch(value) {
+  const branch = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (!EMPLOYEE_BRANCHES.includes(branch)) fail('Choose the branch.');
+  return branch;
+}
+function readResult(body) {
+  const score = Number(body.score);
+  if (body.score === '' || body.score == null || !Number.isFinite(score) || score < 0 || score > MAX_SCORE)
+    fail(`Enter the score: a number from 0 to ${MAX_SCORE}.`);
+  const level = typeof body.level === 'string' ? body.level.trim() : '';
+  if (!level) fail('Choose the recommended level.');
+  const purpose = typeof body.purpose === 'string' ? body.purpose.trim() : '';
+  if (!PURPOSES.includes(purpose)) fail(`Choose the purpose: ${PURPOSES.join(', ')}.`);
+  return { score, level, purpose };
+}
+
+// GET /placements?status=awaiting|unplaced|placed|all&search=&branch=
 export const listPlacements = async (req, res, next) => {
   try {
-    const status = ['unplaced', 'placed', 'all'].includes(req.query.status) ? req.query.status : 'unplaced';
+    const status = ['awaiting', 'unplaced', 'placed', 'all'].includes(req.query.status) ? req.query.status : 'unplaced';
     const allowed = placementBranches(req.user);
     const branch = typeof req.query.branch === 'string' && req.query.branch ? req.query.branch : null;
     const search = String(req.query.search || '').trim().slice(0, 100);
@@ -86,14 +104,13 @@ export const listPlacements = async (req, res, next) => {
       take: 3000
     });
     const rows = await withPlacement(tests);
-    // "Not placed yet" shows each student once, by their latest test.
-    const latest = new Set();
-    const unplaced = rows.filter(r => !r.placed && !latest.has(r.studentId) && latest.add(r.studentId));
-    const placed = rows.filter(r => r.placed);
+    const tabs = sortTests(rows);
     res.json({
-      rows: status === 'unplaced' ? unplaced : status === 'placed' ? placed : rows,
-      counts: { unplaced: unplaced.length, placed: placed.length, all: rows.length },
+      rows: status === 'all' ? rows : tabs[status],
+      counts: { awaiting: tabs.awaiting.length, unplaced: tabs.unplaced.length, placed: tabs.placed.length, all: rows.length },
       levels: await levelNames(),
+      purposes: PURPOSES,
+      maxScore: MAX_SCORE,
       branches: allowed || EMPLOYEE_BRANCHES
     });
   } catch (error) {
@@ -102,7 +119,7 @@ export const listPlacements = async (req, res, next) => {
   }
 };
 
-// GET /placements/students?search= : basic details only, for picking who took the test.
+// GET /placements/students?search= : basic details only, for picking who takes the test (admins and the main mod).
 export const searchStudents = async (req, res, next) => {
   try {
     const search = String(req.query.search || '').trim().slice(0, 100);
@@ -131,11 +148,13 @@ export const searchStudents = async (req, res, next) => {
   }
 };
 
-// POST /placements { studentId | newStudent: { name, mobile, registrationNumber }, branch, score, level }
+// POST /placements { studentId | newStudent: { name, mobile, registrationNumber }, branch } — admins and the main mod.
+// Creates the test; the result is filled in by the testing office.
 export const createPlacement = atomic(async (req, res) => {
   try {
-    const result = readResult(req.body, req.user);
+    const branch = readBranch(req.body.branch);
     let studentId = req.body.studentId;
+    let siblings = [];
     if (studentId) {
       const student = await prisma.student.findFirst({ where: { id: String(studentId), deletedAt: null } });
       if (!student) fail('That student no longer exists.', 404);
@@ -154,58 +173,54 @@ export const createPlacement = atomic(async (req, res) => {
       const existing =
         people.find(s => registrationNumber && s.registrationNumber === registrationNumber) ||
         (mobile ? people.find(s => sameStudent(s, { name, mobile })) : null);
-      if (existing && !req.body.createAnyway)
-        return res.status(409).json({ error: `${existing.name} already exists.`, existing });
+      if (existing && !req.body.createAnyway) return res.status(409).json({ error: `${existing.name} already exists.`, existing });
       if (registrationNumber && people.some(s => s.registrationNumber === registrationNumber))
         fail('That registration number belongs to another student.');
-      const siblings = mobile ? people.filter(s => sharesPhone(s, mobile) && !sameName(s, name)).map(s => s.name) : [];
+      siblings = mobile ? people.filter(s => sharesPhone(s, mobile) && !sameName(s, name)).map(s => s.name) : [];
       const created = await prisma.student.create({
         data: { name, mobile: mobile || null, registrationNumber: registrationNumber || null }
       });
       studentId = created.id;
-      if (siblings.length) res.locals.siblings = siblings;
     }
     const test = await prisma.placementTest.create({
-      data: { studentId, ...result, enteredById: req.user.id, enteredBy: req.user.username },
+      data: { studentId, branch, enteredById: req.user.id, enteredBy: req.user.username },
       include: { student: { select: studentBasics } }
     });
-    await logAction(
-      'ADD_PLACEMENT_TEST',
-      `Placement test for ${test.student.name} (${test.branch}): score ${test.score}, recommended ${test.level}.`,
-      req.user.username
-    );
-    res.status(201).json({ ...test, siblings: res.locals.siblings || [] });
+    await logAction('ADD_PLACEMENT_TEST', `Created a placement test for ${test.student.name} (${branch}); waiting for the result.`, req.user.username);
+    res.status(201).json({ ...test, siblings });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
 
-async function editableTest(req) {
-  const test = await prisma.placementTest.findUnique({
-    where: { id: req.params.id },
-    include: { student: { select: studentBasics } }
-  });
-  if (!test) fail('This test result no longer exists.', 404);
+async function openTest(req) {
+  const test = await prisma.placementTest.findUnique({ where: { id: req.params.id }, include: { student: { select: studentBasics } } });
+  if (!test) fail('This test no longer exists.', 404);
   const allowed = placementBranches(req.user);
-  if (allowed && !allowed.includes(test.branch)) fail('This test result is for another branch.', 403);
+  if (allowed && !allowed.includes(test.branch)) fail('This test is for another branch.', 403);
   const [checked] = await withPlacement([test]);
-  if (checked.placed) fail(`${test.student.name} is already placed in ${checked.placed.cycle.name}, so this result is locked.`, 409);
+  if (checked.placed) fail(`${test.student.name} is already placed in ${checked.placed.cycle.name}, so this test is locked.`, 409);
   return test;
 }
 
-// PUT /placements/:id: change score, level or branch while the student is not placed yet.
+// PUT /placements/:id { score, level, purpose, branch? } — the result (testers and managers), until the student is
+// placed. Only admins and the main mod change the branch.
 export const updatePlacement = atomic(async (req, res) => {
   try {
-    const test = await editableTest(req);
-    const result = readResult({ score: test.score, level: test.level, branch: test.branch, ...req.body }, req.user);
-    const updated = await prisma.placementTest.update({
-      where: { id: test.id },
-      data: { ...result, updatedBy: req.user.username },
-      include: { student: { select: studentBasics } }
-    });
+    const test = await openTest(req);
+    const result = readResult({ score: test.score, level: test.level, purpose: test.purpose, ...req.body });
+    const data = { ...result, updatedBy: req.user.username };
+    if (!hasResult(test)) Object.assign(data, { resultBy: req.user.username, resultAt: new Date() });
+    if (req.body.branch !== undefined && req.body.branch !== test.branch) {
+      if (!canSeePayroll(req.user)) fail('Only admins and the main mod can change the branch.', 403);
+      data.branch = readBranch(req.body.branch);
+    }
+    const updated = await prisma.placementTest.update({ where: { id: test.id }, data, include: { student: { select: studentBasics } } });
     await logAction(
       'UPDATE_PLACEMENT_TEST',
-      `Placement test for ${test.student.name}: score ${test.score} → ${updated.score}, level ${test.level} → ${updated.level}, branch ${updated.branch}.`,
+      hasResult(test)
+        ? `Changed ${test.student.name}'s placement result: ${test.score}/${MAX_SCORE} ${test.level} → ${updated.score}/${MAX_SCORE} ${updated.level} (${updated.purpose}).`
+        : `Entered ${test.student.name}'s placement result: ${updated.score}/${MAX_SCORE}, recommended ${updated.level}, purpose ${updated.purpose}.`,
       req.user.username
     );
     res.json(updated);
@@ -214,25 +229,26 @@ export const updatePlacement = atomic(async (req, res) => {
   }
 });
 
-// DELETE /placements/:id: remove a result entered by mistake, while the student is not placed yet.
+// DELETE /placements/:id — admins and the main mod, while the student is not placed yet.
 export const deletePlacement = atomic(async (req, res) => {
   try {
-    const test = await editableTest(req);
+    if (!canSeePayroll(req.user)) fail('Only admins and the main mod can delete placement tests.', 403);
+    const test = await openTest(req);
     await prisma.placementTest.delete({ where: { id: test.id } });
-    await logAction('DELETE_PLACEMENT_TEST', `Deleted the placement test of ${test.student.name} (score ${test.score}, ${test.level}).`, req.user.username);
-    res.json({ message: 'Test result deleted.' });
+    await logAction('DELETE_PLACEMENT_TEST', `Deleted the placement test of ${test.student.name}${hasResult(test) ? ` (${test.score}/${MAX_SCORE}, ${test.level})` : ''}.`, req.user.username);
+    res.json({ message: 'Test deleted.' });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
 
-// GET /placements/for-cycle/:cycleId : tested students not placed yet, for "Pick from tested students" when enrolling.
+// GET /placements/for-cycle/:cycleId : tested students with a result, not placed yet ("Pick from tested students").
 // Anyone who can enroll uses it; branch mods only see their own branch's tests.
 export const testedForCycle = async (req, res, next) => {
   try {
     const scope = branchScopeOf(req.user);
     const tests = await prisma.placementTest.findMany({
-      where: { ...(scope ? { branch: scope } : {}), student: { deletedAt: null } },
+      where: { ...(scope ? { branch: scope } : {}), score: { not: null }, student: { deletedAt: null } },
       include: { student: { select: studentBasics } },
       orderBy: { testedAt: 'desc' },
       take: 3000
@@ -240,24 +256,23 @@ export const testedForCycle = async (req, res, next) => {
     const already = new Set(
       (await prisma.enrollment.findMany({ where: { courseId: req.params.cycleId }, select: { studentId: true } })).map(e => e.studentId)
     );
-    const seen = new Set();
-    const rows = (await withPlacement(tests)).filter(r => !r.placed && !already.has(r.studentId) && !seen.has(r.studentId) && seen.add(r.studentId));
-    res.json({ rows });
+    const rows = sortTests(await withPlacement(tests)).unplaced.filter(r => !already.has(r.studentId));
+    res.json({ rows, maxScore: MAX_SCORE });
   } catch (error) {
     next(error);
   }
 };
 
-// How many tested students wait to be placed (sidebar badge).
+// Sidebar badge: testers see tests waiting for their result; admins and the main mod see students waiting to be placed.
 export async function unplacedCount(user) {
   if (!canUsePlacements(user)) return 0;
   const allowed = placementBranches(user);
   const tests = await prisma.placementTest.findMany({
     where: allowed ? { branch: { in: allowed } } : {},
-    select: { id: true, studentId: true, createdAt: true },
+    select: { id: true, studentId: true, createdAt: true, score: true },
     orderBy: { testedAt: 'desc' },
     take: 3000
   });
-  const seen = new Set();
-  return (await withPlacement(tests)).filter(r => !r.placed && !seen.has(r.studentId) && seen.add(r.studentId)).length;
+  const tabs = sortTests(await withPlacement(tests));
+  return canSeePayroll(user) ? tabs.unplaced.length : tabs.awaiting.length;
 }

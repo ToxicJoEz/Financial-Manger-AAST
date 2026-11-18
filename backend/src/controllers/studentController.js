@@ -307,7 +307,9 @@ export const getStudentDetails = async (req, res, next) => {
         testedAt: t.testedAt,
         branch: t.branch,
         score: t.score,
+        maxScore: 55,
         level: t.level,
+        purpose: t.purpose,
         enteredBy: t.enteredBy,
         placed: next ? { at: next.enrolledAt, cycle: next.course } : null
       };

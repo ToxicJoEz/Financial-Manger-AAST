@@ -44,9 +44,10 @@ export default function StudentDetailsDialog({ studentId, onClose }) {
         <div className="student-cycle-heading"><div><h3>Placement tests</h3><p>Scores and recommended levels from the testing office.</p></div><span>{(data.placementTests || []).length} {(data.placementTests || []).length === 1 ? 'test' : 'tests'}</span></div>
         {(data.placementTests || []).length ? <ul className="student-test-list">{data.placementTests.map(t => <li key={t.id}>
           <span className="student-test-when"><ClipboardCheck size={15} aria-hidden="true" /><span><strong>{date(t.testedAt)}</strong><small>{branchName(t.branch)} · by @{t.enteredBy}</small></span></span>
-          <span className="placement-score" title="Score">{t.score}</span>
-          <span className="placement-level" title="Recommended level">{t.level}</span>
-          {t.placed ? <span className="placement-status is-placed"><CircleCheck size={13} />Joined {t.placed.cycle.name}</span> : <span className="placement-status is-waiting"><Hourglass size={13} />Not placed yet</span>}
+          {t.score != null ? <span className="placement-score" title="Score">{t.score}<small>/{t.maxScore || 55}</small></span> : <span className="placement-status is-awaiting">Awaiting result</span>}
+          {t.level && <span className="placement-level" title="Recommended level">{t.level}</span>}
+          {t.purpose && <span className="placement-purpose" title="Purpose">{t.purpose}</span>}
+          {t.placed ? <span className="placement-status is-placed"><CircleCheck size={13} />Joined {t.placed.cycle.name}</span> : t.score != null && <span className="placement-status is-waiting"><Hourglass size={13} />Not placed yet</span>}
         </li>)}</ul> : <p className="student-tests-empty">No placement tests recorded for this student.</p>}
       </section>
       <div className="student-cycle-heading"><div><h3>Enrolled cycles</h3><p>Explore this student’s courses and enrollment history.</p></div><span>{all.length} {all.length===1?'cycle':'cycles'}</span></div>

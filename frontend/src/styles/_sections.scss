@@ -286,3 +286,7 @@ tr.just-added-label-row > td { padding: 10px 14px 6px; background: #fff; color: 
   svg { color: #ff7b8a; }
   &:hover { background: #b42335; border-color: #d43a4d; color: #fff; svg { color: #fff; } }
 }
+
+// Searchable dropdown lists float above their window (drawn in their own layer), so they never resize it.
+.employee-search-results.is-floating { z-index: 1200; margin-top: 0; overflow-y: auto; animation: dropdown-in .14s ease both; }
+@keyframes dropdown-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }

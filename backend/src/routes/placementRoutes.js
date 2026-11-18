@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect, modOrAbove } from '../middlewares/authMiddleware.js';
+import { protect, modOrAbove, managersOnly } from '../middlewares/authMiddleware.js';
 import {
   canUsePlacements,
   listPlacements,
@@ -21,8 +21,9 @@ router.use((req, res, next) =>
     : res.status(403).json({ error: 'Placement tests are for the testing office, admins and the main mod.' })
 );
 router.get('/', listPlacements);
-router.get('/students', searchStudents);
-router.post('/', createPlacement);
+// Creating a test (and picking or creating its student) is for admins and the main mod.
+router.get('/students', managersOnly('create placement tests'), searchStudents);
+router.post('/', managersOnly('create placement tests'), createPlacement);
 router.put('/:id', updatePlacement);
 router.delete('/:id', deletePlacement);
 

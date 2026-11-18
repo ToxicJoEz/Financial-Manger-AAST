@@ -43,9 +43,9 @@ export function safeAudit(value, depth = 0) {
 }
 // [method, path after /api/, action, how it reads in the log]. ':id' stands for any id.
 const ROUTE_ACTIONS = [
-  ['POST', 'placements', 'ADD_PLACEMENT_TEST', 'Add placement test result'],
-  ['PUT', 'placements/:id', 'UPDATE_PLACEMENT_TEST', 'Edit placement test result'],
-  ['DELETE', 'placements/:id', 'DELETE_PLACEMENT_TEST', 'Delete placement test result'],
+  ['POST', 'placements', 'ADD_PLACEMENT_TEST', 'Create placement test'],
+  ['PUT', 'placements/:id', 'UPDATE_PLACEMENT_TEST', 'Enter or edit placement test result'],
+  ['DELETE', 'placements/:id', 'DELETE_PLACEMENT_TEST', 'Delete placement test'],
   ['DELETE', 'users/:id', 'DELETE_USER', 'Permanently delete account'],
   ['POST', 'auth/login', 'LOGIN_LOCAL', 'Password sign-in'],
   ['POST', 'auth/sso', 'LOGIN_SSO', 'AAST SSO sign-in'],

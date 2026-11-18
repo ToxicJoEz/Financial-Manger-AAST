@@ -243,9 +243,15 @@ model PlacementTest {
   studentId   String
   student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   branch      String
-  score       Float
-  level       String
+  // Filled in by the testing office: the score (out of 55), the level they recommend and the test's purpose
+  // (General English, IELTS, TOEFL, PTE). Empty while the test waits for its result.
+  score       Float?
+  level       String?
+  purpose     String?
+  resultBy    String?
+  resultAt    DateTime?
   testedAt    DateTime @default(now())
+  // Who created the test (admins and the main mod).
   enteredById String?
   enteredBy   String
   updatedBy   String?
