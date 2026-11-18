@@ -287,7 +287,32 @@ export const getStudentDetails = async (req, res, next) => {
         req.user
       );
     });
-    res.json({ student, enrollments: enrichedEnrollments });
+    // Placement test history: score, recommended level, who recorded it, and the cycle the student joined after it.
+    const seen = visibleBranchesOf(req.user);
+    const [tests, joined] = await Promise.all([
+      prisma.placementTest.findMany({
+        where: { studentId: student.id, ...(seen ? { branch: { in: seen } } : {}) },
+        orderBy: { testedAt: 'desc' }
+      }),
+      prisma.enrollment.findMany({
+        where: { studentId: student.id, deletedAt: null },
+        select: { enrolledAt: true, course: { select: { id: true, name: true } } },
+        orderBy: { enrolledAt: 'asc' }
+      })
+    ]);
+    const placementTests = tests.map(t => {
+      const next = joined.find(e => e.enrolledAt >= t.createdAt);
+      return {
+        id: t.id,
+        testedAt: t.testedAt,
+        branch: t.branch,
+        score: t.score,
+        level: t.level,
+        enteredBy: t.enteredBy,
+        placed: next ? { at: next.enrolledAt, cycle: next.course } : null
+      };
+    });
+    res.json({ student, enrollments: enrichedEnrollments, placementTests });
   } catch (error) {
     next(error);
   }

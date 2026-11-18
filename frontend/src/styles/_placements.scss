@@ -78,3 +78,13 @@
 // The table only ever scrolls sideways; never a vertical scrollbar flashing during a transition.
 .placements-panel .table-scroll { overflow-y: hidden; }
 .smooth-region-inner { position: relative; }
+
+// Student details: placement test history.
+.student-tests { margin-bottom: 22px; }
+.student-test-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px;
+  li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 1px solid #e3e8f2; border-radius: 10px; background: #fbfcfe; }
+}
+.student-test-when { display: flex; align-items: center; gap: 8px; min-width: 170px; flex: 1;
+  svg { color: #f472b6; flex-shrink: 0; } > span { display: flex; flex-direction: column; } strong { color: #1d2c48; font-size: 13px; } small { color: #7b8aa3; font-size: 11px; }
+}
+.student-tests-empty { margin: 8px 0 0; color: #8a98ae; font-size: 13px; }

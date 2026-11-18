@@ -69,6 +69,11 @@ try {
   assert.equal(list.counts.unplaced, 1);
   const placed = ok(await req('/placements?status=placed', 'GET', undefined, joe)).rows.find(r => r.id === first.id);
   assert.equal(placed.placed.cycle.id, cycle.id);
+  // The student's details show their placement tests, and the cycle they joined after it.
+  const details = ok(await req(`/students/${first.studentId}`, 'GET', undefined, main));
+  assert.equal(details.placementTests.length, 1);
+  assert.equal(details.placementTests[0].level, 'PET');
+  assert.equal(details.placementTests[0].placed.cycle.id, cycle.id);
   assert.equal((await req(`/placements/${first.id}`, 'PUT', { score: 1 }, joe)).status, 409);
   assert.equal((await req(`/placements/${first.id}`, 'DELETE', undefined, joe)).status, 409);
   // Still unplaced: can be deleted.
